@@ -25,5 +25,5 @@ WORKDIR /workspace
 # Expose port for Flask or FastAPI if needed
 EXPOSE 5000
 
-# Default command (optional, devcontainer.json can override)
+# Default command 
 CMD [ "bash" ]
