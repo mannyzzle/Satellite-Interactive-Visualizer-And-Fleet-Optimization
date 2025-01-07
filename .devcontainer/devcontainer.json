@@ -1,0 +1,17 @@
+{
+    "name": "My ML Dev Container",
+    "dockerFile": "Dockerfile",
+    // If you don't want a Dockerfile, you could specify an image:
+    // "image": "mcr.microsoft.com/vscode/devcontainers/python:3.9-bullseye",
+    
+    "settings": {
+      "terminal.integrated.shell.linux": "/bin/bash"
+    },
+    "forwardPorts": [5000],
+    "extensions": [
+      "ms-python.python",
+      "ms-python.vscode-pylance"
+    ],
+    "postCreateCommand": "pip install -r requirements.txt"
+  }
+  
