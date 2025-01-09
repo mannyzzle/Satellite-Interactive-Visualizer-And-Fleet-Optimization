@@ -1,15 +1,21 @@
 {
-    "name": "My ML Dev Container",
-    "dockerFile": "Dockerfile",
-   
-    "settings": {
+  "name": "My ML Dev Container",
+  "dockerFile": "Dockerfile",
+ 
+  "settings": {
       "terminal.integrated.shell.linux": "/bin/bash"
-    },
-    "forwardPorts": [5000],
-    "extensions": [
+  },
+  "forwardPorts": [5000],
+  "extensions": [
       "ms-python.python",
       "ms-python.vscode-pylance"
-    ],
-    "postCreateCommand": "pip install -r requirements.txt"
-  }
-  
+  ],
+  "postCreateCommand": "pip install -r requirements.txt",
+  "remoteEnv": {
+      "DOTENV_FILE": "/workspaces/Cloud-ML-Pipeline/.devcontainer/devcontainer.env"
+  },
+  "runArgs": [
+      "--env-file",
+      ".devcontainer/devcontainer.env"
+  ]
+}
