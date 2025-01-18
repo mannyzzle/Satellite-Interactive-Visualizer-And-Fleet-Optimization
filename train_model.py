@@ -1,114 +1,99 @@
-import psycopg2
 import pandas as pd
+import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.metrics import accuracy_score, classification_report
-from sklearn.preprocessing import StandardScaler
-from imblearn.over_sampling import SMOTE
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.metrics import classification_report, accuracy_score
 from tqdm import tqdm
 import joblib
-from dotenv import load_dotenv
+import psycopg2
 import os
-import time
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-# Database credentials
-DB_HOST = os.getenv("DB_HOST")
-DB_PORT = os.getenv("DB_PORT")
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_NAME = os.getenv("DB_NAME")
-
+# Database connection and data fetching
 def fetch_data():
-    """
-    Fetch satellite data from the PostgreSQL database.
-    """
-    print("Fetching data from the database...")
+    print("Connecting to the database...")
     conn = psycopg2.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        dbname=DB_NAME
+        host=os.getenv("DB_HOST"),
+        database=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD")
     )
+    
     query = """
-        SELECT category, satellite_name, tle_line1, tle_line2
-        FROM satellites;
+    SELECT inclination, eccentricity, period, perigee, apogee, category
+    FROM satellites
     """
+    print("Fetching satellite data...")
     data = pd.read_sql_query(query, conn)
     conn.close()
+    print("Data fetched successfully!")
     return data
 
+# Preprocessing
 def preprocess_data(data):
-    """
-    Preprocess satellite data for machine learning.
-    """
     print("Preprocessing data...")
-    # Simulate a progress bar for preprocessing
-    for _ in tqdm(range(100), desc="Processing data"):
-        time.sleep(0.01)
+    scaler = StandardScaler()
+    le = LabelEncoder()
 
-    # Extract TLE line lengths as features
-    data['tle_length'] = data['tle_line1'].str.len() + data['tle_line2'].str.len()
-
-    # Add binary target variable (is_active)
-    data['is_active'] = (data['category'] == 'active').astype(int)
+    # Encode target variable
+    data['category'] = le.fit_transform(data['category'])
 
     # Normalize features
-    X = data[['tle_length']]
-    y = data['is_active']
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    X = scaler.fit_transform(data.drop(columns=['category']))
+    y = data['category']
 
-    return train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+    return X, y, scaler, le
 
-def train_and_tune_model(X_train, y_train):
-    """
-    Train and tune the RandomForestClassifier using GridSearchCV.
-    """
-    print("Training and tuning the model...")
+# Model training with loading bar
+def train_model(X, y):
+    print("Training the model...")
+    progress_bar = tqdm(total=100, desc="Training Progress", ncols=100)
+    
+    # Split data
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Model and hyperparameter tuning
     param_grid = {
-        'n_estimators': [50, 100, 200],
+        'n_estimators': [50, 100, 150],
         'max_depth': [None, 10, 20],
-        'min_samples_split': [2, 5, 10]
+        'min_samples_split': [2, 5]
     }
+    rf = RandomForestClassifier(random_state=42)
 
-    # Simulate a loading bar for training preparation
-    for _ in tqdm(range(50), desc="Preparing for training"):
-        time.sleep(0.01)
+    grid_search = GridSearchCV(estimator=rf, param_grid=param_grid, cv=3, verbose=1)
+    grid_search.fit(X_train, y_train)
 
-    # Train model with grid search
-    model = GridSearchCV(RandomForestClassifier(random_state=42), param_grid, cv=3, n_jobs=-1)
-    model.fit(X_train, y_train)
+    progress_bar.update(50)  # Simulate progress halfway through
 
-    print("Best hyperparameters:", model.best_params_)
-    return model.best_estimator_
+    # Best model evaluation
+    best_model = grid_search.best_estimator_
+    y_pred = best_model.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
 
-if __name__ == "__main__":
-    # Step 1: Fetch data
-    data = fetch_data()
-
-    # Step 2: Preprocess data
-    X_train, X_test, y_train, y_test = preprocess_data(data)
-
-    # Step 3: Handle class imbalance
-    print("Balancing data using SMOTE...")
-    smote = SMOTE(random_state=42)
-    X_train_balanced, y_train_balanced = smote.fit_resample(X_train, y_train)
-
-    # Step 4: Train and tune model
-    model = train_and_tune_model(X_train_balanced, y_train_balanced)
-
-    # Step 5: Evaluate model
-    print("Evaluating the model...")
-    y_pred = model.predict(X_test)
-    print("Accuracy:", accuracy_score(y_test, y_pred))
+    print(f"\nModel Accuracy: {accuracy:.2f}")
     print("Classification Report:")
     print(classification_report(y_test, y_pred))
 
-    # Step 6: Save the model
-    print("Saving the model to model.pkl...")
+    progress_bar.update(50)  # Complete progress bar
+    progress_bar.close()
+
+    return best_model
+
+# Save model
+def save_model(model, scaler, label_encoder):
+    print("Saving the model and preprocessors...")
     joblib.dump(model, 'model.pkl')
-    print("Model training complete and saved!")
+    joblib.dump(scaler, 'scaler.pkl')
+    joblib.dump(label_encoder, 'label_encoder.pkl')
+    print("Model and preprocessors saved!")
+
+# Main function
+if __name__ == "__main__":
+    data = fetch_data()
+    X, y, scaler, le = preprocess_data(data)
+    model = train_model(X, y)
+    save_model(model, scaler, le)
