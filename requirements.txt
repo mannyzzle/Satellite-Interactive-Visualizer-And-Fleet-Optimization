@@ -9,4 +9,7 @@ tqdm==4.65.0
 imbalanced-learn==0.10.1
 sgp4==2.22
 seaborn
-matplotlib.pyplot
+matplotlib
+skyfield
+math
+sqlalchemy
