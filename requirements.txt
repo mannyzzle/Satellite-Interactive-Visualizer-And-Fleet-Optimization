@@ -11,5 +11,5 @@ sgp4==2.22
 seaborn
 matplotlib
 skyfield
-math
 sqlalchemy
+scipy
