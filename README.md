@@ -1,246 +1,136 @@
-# **Satellite Fleet Optimization: Cloud-Based LLM Pipeline**
+# SATELLITE INTERACTIVE VISUALIZER
 
-This project demonstrates a cloud-based pipeline designed to analyze, optimize, and generate insights for satellite fleet operations. The pipeline integrates **PostgreSQL** for structured data management, geospatial analysis with **PostGIS**, predictive modeling for satellite operations, and **LLMs** for generating actionable business insights. Deployed on **AWS**, this project showcases cloud computing, geospatial analysis, and machine learning capabilities.
+## Project Overview
+The **Satellite Interactive Visualizer** is a dynamic, 3D web-based interface that enables users to explore and interact with active satellites orbiting Earth. The platform features real-time satellite data displayed on a 3D globe, providing insights into satellite characteristics and their orbital paths. Additionally, the system will incorporate LLM-powered query capabilities for enhanced user interactivity.
 
----
+## Features
+### Core Functionality:
+- **3D Satellite Visualization**: Display all active satellites on a 3D globe using real-time data.
+- **Satellite Information Panel**: Click on any satellite to view detailed information, including:
+  - Name
+  - Orbit Type (LEO, MEO, GEO, HEO)
+  - Orbital Parameters (inclination, perigee, apogee, velocity, etc.)
+  - Epoch and mean motion
+- **Search & Filter**: Search by satellite name, NORAD number, or filter by category and orbit type.
 
-## **Table of Contents**
-- [Overview](#overview)
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Setup](#setup)
-- [Usage](#usage)
-  - [Data Ingestion](#data-ingestion)
-  - [Analysis](#analysis)
-  - [API Endpoint](#api-endpoint)
-- [Project Structure](#project-structure)
-- [Deployment](#deployment)
-  - [Local Deployment](#local-deployment)
-  - [Cloud Deployment](#cloud-deployment)
-- [Future Work](#future-work)
-- [Contributing](#contributing)
-- [License](#license)
+### Backend:
+- RESTful API using Python (Flask or FastAPI) to serve satellite data from a PostgreSQL database.
+- Real-time updates with WebSocket integration.
 
----
+### Frontend:
+- 3D visualization powered by [Three.js](https://threejs.org/).
+- Front-end interactivity using React.js.
+- Stylish UI with Tailwind CSS or Material UI.
 
-## **Overview**
-This project focuses on building a pipeline that:
-- Ingests satellite data (e.g., orbital parameters, TLE data) into a PostgreSQL database hosted on **AWS RDS**.
-- Performs geospatial and predictive analysis to optimize satellite fleet coverage and reduce downtime.
-- Leverages **LLMs** to generate human-readable reports and actionable insights for business operations.
-- Provides an API for querying satellite status and recommendations.
+### Future Enhancements:
+- LLM Integration:
+  - Answer user questions about satellite operations, locations, and orbital dynamics.
+  - Provide suggestions for viewing satellites in specific areas.
+- Real-time satellite position updates using APIs such as CelesTrak.
 
 ---
 
-## **Features**
-- **PostgreSQL with PostGIS Integration**: Manage geospatial satellite data and analyze coverage zones.
-- **TLE Data Parsing**: Derive orbital parameters (e.g., inclination, eccentricity, RAAN, true anomaly) from TLE lines.
-- **LLM Integration**: Generate summaries, reports, and insights from satellite data.
-- **Predictive Modeling**: Forecast satellite downtime and identify high-risk coverage gaps.
-- **REST API**: Query satellite performance and recommendations via Flask.
-- **Cloud Deployment**: Fully hosted on AWS RDS, Elastic Beanstalk, and S3.
+## Repository Structure
+```
+SATELLITE-INTERACTIVE-VISUALIZER/
+├── backend/
+│   ├── app.py                  # API endpoints for satellite data
+│   ├── ingest_tle_from_source.py  # Script for TLE ingestion
+│   ├── load_data.py            # TLE parsing and database updates
+│   ├── setup_database.py       # Database setup
+│   ├── table_analysis.py       # TLE validation and analysis
+│   ├── remove_outliers.py      # Data cleanup and outlier detection
+├── frontend/
+│   ├── public/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Globe.js         # 3D visualization of Earth and satellites
+│   │   │   ├── Sidebar.js       # Sidebar for satellite search and filters
+│   │   │   └── SatelliteInfo.js # Information display panel
+│   │   ├── App.js              # Main React component
+│   │   ├── index.js            # React entry point
+│   └── package.json            # React project configuration
+├── data/                       # Satellite TLE and related data
+├── venv/                       # Python virtual environment
+├── requirements.txt            # Python dependencies
+├── README.md                   # Project documentation
+├── Dockerfile                  # Containerization for the application
+└── .devcontainer/              # Development container configuration
+```
 
 ---
 
-## **Tech Stack**
-- **Backend**: Python, Flask
-- **Database**: PostgreSQL with PostGIS (AWS RDS)
-- **Machine Learning**: scikit-learn, pandas, numpy
-- **LLMs**: Hugging Face Transformers
-- **Geospatial Analysis**: geopandas, rasterio
-- **DevOps**: Docker, AWS Elastic Beanstalk
-- **API Testing**: Postman or cURL
+## Installation
+### Prerequisites
+- Python 3.8+
+- Node.js (for front-end development)
+- PostgreSQL
 
----
-
-## **Getting Started**
-
-### **Prerequisites**
-- **Python** 3.8+ installed locally or in a virtual environment.
-- PostgreSQL Client (`psql`) installed.
-- Docker installed for containerization.
-- AWS account for RDS and deployment (optional for local setup).
-- GitHub Codespaces or local environment with necessary permissions.
-
----
-
-### **Setup**
-1. **Clone the Repository**:
+### Backend Setup
+1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/satellite-fleet-optimization.git
-   cd satellite-fleet-optimization
+   git clone https://github.com/yourusername/satellite-interactive-visualizer.git
+   cd satellite-interactive-visualizer
    ```
-
-2. **Install Dependencies**:
+2. Create a Python virtual environment:
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+3. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-
-3. **Set Up Environment Variables**:
-   Create a `.env` file in the project root:
+4. Set up the PostgreSQL database:
+   - Create a database named `satellites`.
+   - Update `.env` with your database credentials.
    ```
-   DB_HOST=<your-rds-endpoint>
-   DB_PORT=5432
-   DB_USER=<your-db-username>
-   DB_PASSWORD=<your-db-password>
-   DB_NAME=<your-db-name>
+   DB_HOST=localhost
+   DB_NAME=satellites
+   DB_USER=your_user
+   DB_PASSWORD=your_password
    ```
-
-4. **Run Database Setup**:
+5. Run the database setup:
    ```bash
-   python setup_database.py
+   python backend/setup_database.py
    ```
-
-5. **Run the Flask API**:
+6. Ingest TLE data:
    ```bash
-   python app.py
+   python backend/ingest_tle_from_source.py
    ```
-
----
-
-## **Usage**
-
-### **Data Ingestion**
-- **Satellite Data**: Ingest TLE (Two-Line Element) satellite data into the PostgreSQL database.
-
-Run the ingestion script:
-```bash
-python ingest_tle_from_source.py
-```
-
-### **Feature Calculation and Updates**
-Calculate derived satellite features, including:
-- Orbital parameters: inclination, eccentricity, RAAN, true anomaly, mean motion.
-- Derived metrics: orbital period, semi-major axis, velocity, orbit type.
-- Operational metrics: satellite age, stability, collision risk.
-
-Run the feature update script:
-```bash
-python load_data.py
-```
-
-### **Analysis**
-- Perform geospatial analysis on satellite coverage using **PostGIS**.
-- Predict satellite downtime and identify coverage gaps with machine learning models.
-
-Run the analysis scripts:
-```bash
-python train_model_period_predictions.py
-python visualizations.py
-```
-
-### **API Endpoint**
-The Flask API provides an endpoint to query satellite data and generate insights.
-
-- **POST `/fleet_status`**
-  - **Description**: Get satellite performance and recommendations.
-  - **Request Body** (JSON):
-    ```json
-    {
-      "region": "North America"
-    }
-    ```
-  - **Response** (JSON):
-    ```json
-    {
-      "satellites": [
-        {
-          "name": "Satellite A",
-          "status": "Active",
-          "coverage": "95%"
-        },
-        {
-          "name": "Satellite B",
-          "status": "Under Maintenance",
-          "coverage": "N/A"
-        }
-      ],
-      "recommendations": "Satellite B requires priority maintenance."
-    }
-    ```
-
-Example query with `cURL`:
-```bash
-curl -X POST http://127.0.0.1:5000/fleet_status \
-     -H "Content-Type: application/json" \
-     -d '{"region": "North America"}'
-```
-
----
-
-## **Project Structure**
-```
-satellite-fleet-optimization/
-├── app.py                 # Flask API
-├── ingest_tle_from_source.py # Ingest TLE satellite data
-├── load_data.py           # Calculate and update satellite features
-├── setup_database.py      # Database setup script
-├── train_model_period_predictions.py # Predict satellite orbital periods
-├── visualizations.py      # Generate visualizations
-├── requirements.txt       # Python dependencies
-├── Dockerfile             # Docker container config
-├── .env                   # Environment variables
-├── README.md              # Project documentation
-├── data/                  # (Optional) Local dataset storage
-└── plots/                 # Generated plots and figures
-```
-
----
-
-## **Deployment**
-
-### **Local Deployment**
-1. Run Flask Locally:
+7. Start the backend server:
    ```bash
-   python app.py
+   python backend/app.py
    ```
-2. Test the API at `http://127.0.0.1:5000`.
 
----
-
-### **Cloud Deployment**
-
-#### **1. Docker Deployment**
-1. Build the Docker image:
+### Frontend Setup
+1. Navigate to the `frontend/` directory:
    ```bash
-   docker build -t satellite-fleet-optimization .
+   cd frontend
    ```
-2. Run the container:
+2. Install dependencies:
    ```bash
-   docker run -p 5000:5000 --env-file .env satellite-fleet-optimization
+   npm install
    ```
-
-#### **2. AWS Deployment**
-1. Package the app with `Dockerfile` and `.env`.
-2. Deploy to **AWS Elastic Beanstalk**.
-
----
-
-## **Future Work**
-- Extend LLM functionality for detailed business insights.
-- Add real-time ingestion of satellite telemetry data.
-- Build advanced predictive models for satellite repositioning.
-- Integrate authentication for secure API access.
-
----
-
-## **Contributing**
-1. Fork the repository.
-2. Create a new branch:
+3. Start the development server:
    ```bash
-   git checkout -b feature/your-feature-name
+   npm start
    ```
-3. Commit your changes:
-   ```bash
-   git commit -m "Add your feature"
-   ```
-4. Push to the branch and create a pull request.
 
 ---
 
-## **License**
-This project is licensed under the MIT License. See the `LICENSE` file for details.
+## Usage
+1. Open the front-end application in your browser at `http://localhost:3000`.
+2. Interact with the 3D globe to explore active satellites.
+3. Use the sidebar to search for satellites or filter by orbit type.
+4. Click on a satellite to view its detailed information.
 
 ---
+
+## Contributing
+We welcome contributions! Please submit pull requests or open issues for suggestions and bug reports.
+
+---
+
+## License
+This project is licensed under the MIT License.
