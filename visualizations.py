@@ -161,3 +161,48 @@ plt.title('Feature Importances in Random Forest Model')
 plt.gca().invert_yaxis()  # To display the most important feature on top
 plt.savefig("plots/periods_predicted_features.png")
 plt.show()
+
+import psycopg2
+import pandas as pd
+from dotenv import load_dotenv
+import os
+
+# Load environment variables
+load_dotenv()
+
+# Connect to the database
+def connect_to_db():
+    conn = psycopg2.connect(
+        host=os.getenv("DB_HOST"),
+        database=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+    )
+    return conn
+
+# Fetch satellite data and calculate counts
+def fetch_and_analyze_data():
+    conn = connect_to_db()
+    query = "SELECT category, orbit_type FROM satellites"
+    
+    # Fetch data from the database
+    data = pd.read_sql_query(query, conn)
+    conn.close()
+    
+    # Group by category and orbit type
+    category_counts = data['category'].value_counts()
+    orbit_type_counts = data['orbit_type'].value_counts()
+    category_orbit_counts = data.groupby(['category', 'orbit_type']).size().reset_index(name='count')
+
+    # Print summaries
+    print("\nSatellite Count by Category:")
+    print(category_counts)
+
+    print("\nSatellite Count by Orbit Type:")
+    print(orbit_type_counts)
+
+    print("\nSatellite Count by Category and Orbit Type:")
+    print(category_orbit_counts)
+
+if __name__ == "__main__":
+    fetch_and_analyze_data()
