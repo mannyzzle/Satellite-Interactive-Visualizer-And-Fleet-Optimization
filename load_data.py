@@ -33,14 +33,10 @@ def update_schema(conn):
         "ADD COLUMN IF NOT EXISTS arg_perigee FLOAT",
         "ADD COLUMN IF NOT EXISTS mean_anomaly FLOAT",
         "ADD COLUMN IF NOT EXISTS mean_motion FLOAT",
-        "ADD COLUMN IF NOT EXISTS orbital_period FLOAT",
         "ADD COLUMN IF NOT EXISTS semi_major_axis FLOAT",
-        "ADD COLUMN IF NOT EXISTS true_anomaly FLOAT",
         "ADD COLUMN IF NOT EXISTS velocity FLOAT",
         "ADD COLUMN IF NOT EXISTS orbit_type VARCHAR(20)",
         "ADD COLUMN IF NOT EXISTS satellite_age FLOAT",
-        "ADD COLUMN IF NOT EXISTS stability FLOAT",
-        "ADD COLUMN IF NOT EXISTS collision_risk FLOAT",
         "ADD COLUMN IF NOT EXISTS bstar FLOAT",
         "ADD COLUMN IF NOT EXISTS rev_num INT"
     ]
@@ -85,12 +81,12 @@ def compute_orbital_params(tle_line1, tle_line2):
         satellite = EarthSatellite(tle_line1, tle_line2)
         inclination = satellite.model.inclo * (180 / pi)  # Inclination in degrees
         eccentricity = satellite.model.ecco  # Eccentricity
-        mean_motion = satellite.model.no_kozai  # Revolutions per day
+        mean_motion = float(tle_line2.split()[-1])  # Correctly extract mean motion from TLE
+        mean_anomaly = float(tle_line2.split()[-2])  # Mean anomaly, second-to-last field
         bstar = satellite.model.bstar  # Drag coefficient
         rev_num = satellite.model.revnum  # Revolution number
-        raan = satellite.model.nodeo * (180 / pi)  # Right Ascension of Ascending Node
+        raan = satellite.model.nodeo * (180 / pi)  # RAAN
         arg_perigee = satellite.model.argpo * (180 / pi)  # Argument of Perigee
-        mean_anomaly = satellite.model.mo * (180 / pi)  # Mean anomaly
 
         # Extract the epoch from TLE Line 1
         epoch = extract_epoch(tle_line1)
@@ -102,7 +98,6 @@ def compute_orbital_params(tle_line1, tle_line2):
         perigee = semi_major_axis * (1 - eccentricity) - 6378  # Subtract Earth's radius
         apogee = semi_major_axis * (1 + eccentricity) - 6378  # Subtract Earth's radius
         velocity = sqrt(mu * (2 / semi_major_axis - 1 / semi_major_axis))  # Orbital velocity in km/s
-        true_anomaly = satellite.model.mo * (180 / pi)  # Mean anomaly to degrees
         orbit_type = classify_orbit_type(perigee, apogee)
 
         return {
@@ -110,18 +105,17 @@ def compute_orbital_params(tle_line1, tle_line2):
             "inclination": inclination,
             "eccentricity": eccentricity,
             "mean_motion": mean_motion,
+            "mean_anomaly": mean_anomaly,
             "bstar": bstar,
             "rev_num": rev_num,
             "raan": raan,
             "arg_perigee": arg_perigee,
-            "mean_anomaly": mean_anomaly,
             "period": period,
             "semi_major_axis": semi_major_axis,
             "perigee": perigee,
             "apogee": apogee,
             "velocity": velocity,
-            "orbit_type": orbit_type,
-            "true_anomaly": true_anomaly
+            "orbit_type": orbit_type
         }
     except Exception as e:
         print(f"Error computing parameters: {e}")
@@ -154,7 +148,6 @@ def calculate_satellite_age(epoch):
         print(f"Error calculating satellite age: {e}")
         return None
 
-
 # Update satellite data
 def update_satellite_data(conn):
     cursor = conn.cursor()
@@ -168,21 +161,17 @@ def update_satellite_data(conn):
         if params:
             satellite_age = calculate_satellite_age(params["epoch"])
             params["satellite_age"] = satellite_age
-            params["stability"] = None  # Placeholder
-            params["collision_risk"] = None  # Placeholder
 
             cursor.execute("""
                 UPDATE satellites
                 SET epoch = %s, inclination = %s, eccentricity = %s, period = %s, perigee = %s, apogee = %s,
-                    raan = %s, arg_perigee = %s, mean_anomaly = %s, mean_motion = %s, orbital_period = %s,
-                    semi_major_axis = %s, true_anomaly = %s, velocity = %s, orbit_type = %s, satellite_age = %s,
-                    stability = %s, collision_risk = %s, bstar = %s, rev_num = %s
+                    raan = %s, arg_perigee = %s, mean_anomaly = %s, mean_motion = %s, semi_major_axis = %s,
+                    velocity = %s, orbit_type = %s, satellite_age = %s, bstar = %s, rev_num = %s
                 WHERE id = %s
             """, (
                 params["epoch"], params["inclination"], params["eccentricity"], params["period"], params["perigee"], params["apogee"],
-                params["raan"], params["arg_perigee"], params["mean_anomaly"], params["mean_motion"], params["period"],
-                params["semi_major_axis"], params["true_anomaly"], params["velocity"], params["orbit_type"], params["satellite_age"],
-                params["stability"], params["collision_risk"], params["bstar"], params["rev_num"], sat_id
+                params["raan"], params["arg_perigee"], params["mean_anomaly"], params["mean_motion"], params["semi_major_axis"],
+                params["velocity"], params["orbit_type"], params["satellite_age"], params["bstar"], params["rev_num"], sat_id
             ))
             conn.commit()
 
