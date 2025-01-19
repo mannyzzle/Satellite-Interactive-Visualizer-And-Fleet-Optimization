@@ -1,7 +1,3 @@
-Here’s the updated **README.md** tailored to your **Satellite Fleet Optimization** project. 
-
----
-
 # **Satellite Fleet Optimization: Cloud-Based LLM Pipeline**
 
 This project demonstrates a cloud-based pipeline designed to analyze, optimize, and generate insights for satellite fleet operations. The pipeline integrates **PostgreSQL** for structured data management, geospatial analysis with **PostGIS**, predictive modeling for satellite operations, and **LLMs** for generating actionable business insights. Deployed on **AWS**, this project showcases cloud computing, geospatial analysis, and machine learning capabilities.
@@ -31,7 +27,7 @@ This project demonstrates a cloud-based pipeline designed to analyze, optimize, 
 
 ## **Overview**
 This project focuses on building a pipeline that:
-- Ingests satellite data (e.g., orbital parameters, maintenance logs) into a PostgreSQL database hosted on **AWS RDS**.
+- Ingests satellite data (e.g., orbital parameters, TLE data) into a PostgreSQL database hosted on **AWS RDS**.
 - Performs geospatial and predictive analysis to optimize satellite fleet coverage and reduce downtime.
 - Leverages **LLMs** to generate human-readable reports and actionable insights for business operations.
 - Provides an API for querying satellite status and recommendations.
@@ -40,6 +36,7 @@ This project focuses on building a pipeline that:
 
 ## **Features**
 - **PostgreSQL with PostGIS Integration**: Manage geospatial satellite data and analyze coverage zones.
+- **TLE Data Parsing**: Derive orbital parameters (e.g., inclination, eccentricity, RAAN, true anomaly) from TLE lines.
 - **LLM Integration**: Generate summaries, reports, and insights from satellite data.
 - **Predictive Modeling**: Forecast satellite downtime and identify high-risk coverage gaps.
 - **REST API**: Query satellite performance and recommendations via Flask.
@@ -82,7 +79,7 @@ This project focuses on building a pipeline that:
    ```
 
 3. **Set Up Environment Variables**:
-   Create a `devcontainer.env` file in the `.devcontainer` folder:
+   Create a `.env` file in the project root:
    ```
    DB_HOST=<your-rds-endpoint>
    DB_PORT=5432
@@ -107,20 +104,32 @@ This project focuses on building a pipeline that:
 
 ### **Data Ingestion**
 - **Satellite Data**: Ingest TLE (Two-Line Element) satellite data into the PostgreSQL database.
-- **Maintenance Logs**: Add downtime and maintenance schedules to the database.
 
 Run the ingestion script:
 ```bash
-python ingest_data.py
+python ingest_tle_from_source.py
 ```
 
----
+### **Feature Calculation and Updates**
+Calculate derived satellite features, including:
+- Orbital parameters: inclination, eccentricity, RAAN, true anomaly, mean motion.
+- Derived metrics: orbital period, semi-major axis, velocity, orbit type.
+- Operational metrics: satellite age, stability, collision risk.
+
+Run the feature update script:
+```bash
+python load_data.py
+```
 
 ### **Analysis**
 - Perform geospatial analysis on satellite coverage using **PostGIS**.
 - Predict satellite downtime and identify coverage gaps with machine learning models.
 
----
+Run the analysis scripts:
+```bash
+python train_model_period_predictions.py
+python visualizations.py
+```
 
 ### **API Endpoint**
 The Flask API provides an endpoint to query satellite data and generate insights.
@@ -165,16 +174,17 @@ curl -X POST http://127.0.0.1:5000/fleet_status \
 ```
 satellite-fleet-optimization/
 ├── app.py                 # Flask API
-├── ingest_data.py         # Data ingestion script
+├── ingest_tle_from_source.py # Ingest TLE satellite data
+├── load_data.py           # Calculate and update satellite features
 ├── setup_database.py      # Database setup script
+├── train_model_period_predictions.py # Predict satellite orbital periods
+├── visualizations.py      # Generate visualizations
 ├── requirements.txt       # Python dependencies
 ├── Dockerfile             # Docker container config
-├── .devcontainer/
-│   ├── devcontainer.json  # Devcontainer configuration
-│   └── devcontainer.env   # Environment variables
+├── .env                   # Environment variables
 ├── README.md              # Project documentation
 ├── data/                  # (Optional) Local dataset storage
-└── notebooks/             # Jupyter Notebooks for EDA
+└── plots/                 # Generated plots and figures
 ```
 
 ---
@@ -199,11 +209,11 @@ satellite-fleet-optimization/
    ```
 2. Run the container:
    ```bash
-   docker run -p 5000:5000 --env-file .devcontainer/devcontainer.env satellite-fleet-optimization
+   docker run -p 5000:5000 --env-file .env satellite-fleet-optimization
    ```
 
 #### **2. AWS Deployment**
-1. Package the app with `Dockerfile` and `devcontainer.env`.
+1. Package the app with `Dockerfile` and `.env`.
 2. Deploy to **AWS Elastic Beanstalk**.
 
 ---
