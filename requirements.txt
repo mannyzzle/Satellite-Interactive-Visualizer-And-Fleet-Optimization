@@ -13,3 +13,5 @@ matplotlib
 skyfield
 sqlalchemy
 scipy
+fastapi
+uvicorn
