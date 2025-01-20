@@ -1,0 +1,11 @@
+INFO:     Started server process [155948]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+Database connection successful
+INFO:     10.240.2.23:0 - "GET /satellites?page=1&limit=10 HTTP/1.1" 200 OK
+INFO:     10.240.2.23:0 - "GET / HTTP/1.1" 200 OK
+INFO:     10.240.3.196:0 - "GET / HTTP/1.1" 200 OK
+Database connection successful
+INFO:     10.240.3.196:0 - "GET /satellites?page=1&limit=10 HTTP/1.1" 200 OK
+INFO:     10.240.0.199:0 - "GET / HTTP/1.1" 200 OK

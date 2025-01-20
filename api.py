@@ -5,8 +5,23 @@ import psycopg2
 import os
 from dotenv import load_dotenv
 from datetime import datetime
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+# Configure CORS
+origins = [
+    "http://localhost:3000",  # For local development
+    "https://ideal-space-waddle-x74qvwxr6q7c6j66-3000.app.github.dev",  # Your GitHub Codespaces frontend URL
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all HTTP methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allows all headers
+)
 
 # Utility function: Serialize satellite data
 def serialize_satellite(row):

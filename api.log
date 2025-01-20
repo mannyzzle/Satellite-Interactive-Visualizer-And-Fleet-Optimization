@@ -1,0 +1,3 @@
+nohup: ignoring input
+INFO:     Will watch for changes in these directories: ['/workspaces/Satellite-Fleet-Optimization-Cloud-Based-LLM-Pipeline']
+ERROR:    [Errno 98] Address in use
