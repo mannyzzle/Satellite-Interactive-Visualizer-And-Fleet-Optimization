@@ -1,18 +1,8 @@
 {
   "name": "Satellite Dev Container",
   "dockerFile": "Dockerfile",
-  "settings": {
-    "terminal.integrated.shell.linux": "/bin/bash"
-  },
   "forwardPorts": [5000, 3000],
-  "extensions": [
-    "ms-python.python",
-    "ms-python.vscode-pylance",
-    "dbaeumer.vscode-eslint",
-    "esbenp.prettier-vscode",
-    "ms-azuretools.vscode-docker"
-  ],
-  "postCreateCommand": "python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt",
+  "postCreateCommand": ". /workspace/venv/bin/activate || python3 -m venv /workspace/venv && source /workspace/venv/bin/activate && pip install -r requirements.txt",
   "runArgs": [
     "--env-file",
     ".env"
@@ -20,5 +10,25 @@
   "features": {
     "docker-in-docker": "latest"
   },
-  "remoteUser": "vscode"
+  "containerEnv": {
+    "DOCKER_BUILDKIT": "1",
+    "COMPOSE_DOCKER_CLI_BUILD": "1"
+  },
+  "remoteUser": "vscode",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.shell.linux": "/bin/bash",
+        "docker.host": "unix:///var/run/docker.sock",
+        "remote.containers.dockerPath": "/usr/bin/docker"
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  }
 }
