@@ -1,3 +1,8 @@
 nohup: ignoring input
-INFO:     Will watch for changes in these directories: ['/workspaces/Satellite-Fleet-Optimization-Cloud-Based-LLM-Pipeline']
-ERROR:    [Errno 98] Address in use
+INFO:     Will watch for changes in these directories: ['/workspaces/Satellite-Interactive-Visualizer-And-Fleet-Optimization']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [2717] using StatReload
+INFO:     Started server process [2740]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     10.240.0.199:0 - "GET / HTTP/1.1" 200 OK

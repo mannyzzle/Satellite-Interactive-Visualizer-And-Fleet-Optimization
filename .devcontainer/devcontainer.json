@@ -1,21 +1,24 @@
 {
-  "name": "My ML Dev Container",
+  "name": "Satellite Dev Container",
   "dockerFile": "Dockerfile",
- 
   "settings": {
-      "terminal.integrated.shell.linux": "/bin/bash"
+    "terminal.integrated.shell.linux": "/bin/bash"
   },
-  "forwardPorts": [5000],
+  "forwardPorts": [5000, 3000],
   "extensions": [
-      "ms-python.python",
-      "ms-python.vscode-pylance"
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "ms-azuretools.vscode-docker"
   ],
-  "postCreateCommand": "pip install -r requirements.txt",
-  "remoteEnv": {
-      "DOTENV_FILE": "/workspaces/Cloud-ML-Pipeline/.devcontainer/devcontainer.env"
-  },
+  "postCreateCommand": "python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt",
   "runArgs": [
-      "--env-file",
-      ".devcontainer/devcontainer.env"
-  ]
+    "--env-file",
+    ".env"
+  ],
+  "features": {
+    "docker-in-docker": "latest"
+  },
+  "remoteUser": "vscode"
 }
