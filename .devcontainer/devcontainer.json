@@ -2,10 +2,11 @@
   "name": "Satellite Dev Container",
   "dockerFile": "Dockerfile",
   "forwardPorts": [5000, 3000],
-  "postCreateCommand": ". /workspace/venv/bin/activate || python3 -m venv /workspace/venv && source /workspace/venv/bin/activate && pip install -r requirements.txt",
+  "postCreateCommand": ". /workspace/venv/bin/activate && pip install --no-cache-dir -r requirements.txt",
   "runArgs": [
     "--env-file",
-    ".env"
+    ".env",
+    "--privileged" // Required for Docker-in-Docker functionality
   ],
   "features": {
     "docker-in-docker": "latest"
@@ -18,7 +19,7 @@
   "customizations": {
     "vscode": {
       "settings": {
-        "terminal.integrated.shell.linux": "/bin/bash",
+        "terminal.integrated.defaultProfile.linux": "bash",
         "docker.host": "unix:///var/run/docker.sock",
         "remote.containers.dockerPath": "/usr/bin/docker"
       },
