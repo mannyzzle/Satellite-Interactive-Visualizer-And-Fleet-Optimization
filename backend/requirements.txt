@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+psycopg2-binary
+tqdm
+skyfield
+openai
+python-dotenv
+
