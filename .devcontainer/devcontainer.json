@@ -1,12 +1,12 @@
 {
-  "name": "Satellite Dev Container",
+  "name": "Satellite Explorer Dev Container",
   "dockerFile": "Dockerfile",
+  "context": "..",
   "forwardPorts": [5000, 3000],
-  "postCreateCommand": ". /workspace/venv/bin/activate && pip install --no-cache-dir -r requirements.txt",
+  "postCreateCommand": "bash .devcontainer/setup.sh",
   "runArgs": [
     "--env-file",
-    ".env",
-    "--privileged" // Required for Docker-in-Docker functionality
+    ".env"
   ],
   "features": {
     "docker-in-docker": "latest"
@@ -21,7 +21,8 @@
       "settings": {
         "terminal.integrated.defaultProfile.linux": "bash",
         "docker.host": "unix:///var/run/docker.sock",
-        "remote.containers.dockerPath": "/usr/bin/docker"
+        "remote.containers.dockerPath": "/usr/bin/docker",
+        "python.defaultInterpreterPath": "/workspace/.venv/bin/python"
       },
       "extensions": [
         "ms-python.python",
