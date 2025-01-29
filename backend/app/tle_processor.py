@@ -5,6 +5,29 @@ from math import sqrt, pi
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 import os
+import requests
+
+TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle"
+
+def fetch_tle_data():
+    """
+    Fetches TLE data from CelesTrak.
+    Returns a list of dictionaries containing TLE information.
+    """
+    response = requests.get(TLE_URL)
+    if response.status_code == 200:
+        tle_lines = response.text.strip().splitlines()
+        satellites = []
+        for i in range(0, len(tle_lines) - 2, 3):
+            satellites.append({
+                "name": tle_lines[i].strip(),
+                "line1": tle_lines[i + 1].strip(),
+                "line2": tle_lines[i + 2].strip(),
+            })
+        return satellites
+    else:
+        raise Exception(f"Failed to fetch TLE data: HTTP {response.status_code}")
+
 
 # Load environment variables
 load_dotenv()
@@ -40,12 +63,10 @@ def update_schema(conn):
         "ADD COLUMN IF NOT EXISTS epoch TIMESTAMP",
         "ADD COLUMN IF NOT EXISTS raan FLOAT",
         "ADD COLUMN IF NOT EXISTS arg_perigee FLOAT",
-        "ADD COLUMN IF NOT EXISTS mean_anomaly FLOAT",
         "ADD COLUMN IF NOT EXISTS mean_motion FLOAT",
         "ADD COLUMN IF NOT EXISTS semi_major_axis FLOAT",
         "ADD COLUMN IF NOT EXISTS velocity FLOAT",
         "ADD COLUMN IF NOT EXISTS orbit_type VARCHAR(20)",
-        "ADD COLUMN IF NOT EXISTS satellite_age FLOAT",
         "ADD COLUMN IF NOT EXISTS bstar FLOAT",
         "ADD COLUMN IF NOT EXISTS rev_num INT"
     ]
