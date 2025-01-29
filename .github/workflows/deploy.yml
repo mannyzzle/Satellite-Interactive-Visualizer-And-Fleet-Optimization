@@ -1,0 +1,44 @@
+name: Deploy Satellite Backend to AWS ECS
+
+on:
+  push:
+    branches:
+      - main  # Runs only when code is pushed to main branch
+  workflow_dispatch:  # Allows manual trigger from GitHub Actions
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest  # Runs on GitHub-hosted Ubuntu
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install --no-cache-dir -r backend/requirements.txt
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com
+
+      - name: Build and push Docker image
+        run: |
+          docker build -t satellite-backend ./backend
+          docker tag satellite-backend:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest
+
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service --cluster satellite-cluster --service satellite-backend-service --force-new-deployment
