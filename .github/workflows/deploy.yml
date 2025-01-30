@@ -64,7 +64,15 @@ jobs:
               \"memory\": 512,
               \"cpu\": 256,
               \"essential\": true,
-              \"portMappings\": [{\"containerPort\": 8000, \"hostPort\": 8000, \"protocol\": \"tcp\"}]
+              \"portMappings\": [{\"containerPort\": 8000, \"hostPort\": 8000, \"protocol\": \"tcp\"}],
+              \"logConfiguration\": {
+                \"logDriver\": \"awslogs\",
+                \"options\": {
+                  \"awslogs-group\": \"/aws/ecs/satellite-cluster\",
+                  \"awslogs-region\": \"us-east-2\",
+                  \"awslogs-stream-prefix\": \"ecs\"
+                }
+              }
             }]" --query "taskDefinition.taskDefinitionArn" --output text)
           echo "TASK_DEFINITION_ARN=${NEW_TASK_DEF}" >> $GITHUB_ENV
 
