@@ -57,6 +57,7 @@ jobs:
             --cpu "256" \
             --memory "512" \
             --execution-role-arn arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole \
+            --task-role-arn arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole \  # <-- Add this line!
             --container-definitions '[{
               "name": "satellite-backend",
               "image": "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest",
