@@ -57,23 +57,15 @@ jobs:
             --cpu "256" \
             --memory "512" \
             --execution-role-arn arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole \
-            --container-definitions '[{
-              "name": "satellite-backend",
-              "image": "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest",
-              "memory": 512,
-              "cpu": 256,
-              "essential": true,
-              "portMappings": [{"containerPort": 8000, "hostPort": 8000, "protocol": "tcp"}],
-              "logConfiguration": {
-                "logDriver": "awslogs",
-                "options": {
-                  "awslogs-group": "/aws/ecs/satellite-cluster",
-                  "awslogs-region": "us-east-2",
-                  "awslogs-stream-prefix": "ecs"
-                }
-              }
-            }]' --query "taskDefinition.taskDefinitionArn" --output text)
-
+            --task-role-arn arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole \
+            --container-definitions "[{
+              \"name\": \"satellite-backend\",
+              \"image\": \"${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest\",
+              \"memory\": 512,
+              \"cpu\": 256,
+              \"essential\": true,
+              \"portMappings\": [{\"containerPort\": 8000, \"hostPort\": 8000, \"protocol\": \"tcp\"}]
+            }]" --query "taskDefinition.taskDefinitionArn" --output text)
           echo "TASK_DEFINITION_ARN=${NEW_TASK_DEF}" >> $GITHUB_ENV
 
       # Step 8: Update ECS Service with New Task Definition
