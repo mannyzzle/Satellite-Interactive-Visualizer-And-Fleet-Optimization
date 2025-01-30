@@ -3,19 +3,19 @@ name: Deploy Satellite Backend to AWS ECS
 on:
   push:
     branches:
-      - main  # Trigger deployment only on pushes to main
-  workflow_dispatch:  # Allows manual triggers from the Actions tab
+      - main  # Triggers deployment on pushes to main
+  workflow_dispatch:  # Allows manual deployment trigger from GitHub Actions
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the code 1
+      # Step 1: Checkout the code
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Set up Python environment for dependency check (optional)
+      # Step 2: Set up Python (for verification only, optional)
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -34,7 +34,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-2
 
-      # Step 5: Authenticate Docker with AWS ECR ok
+      # Step 5: Authenticate Docker with AWS ECR
       - name: Log in to Amazon ECR
         run: |
           aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com
@@ -46,7 +46,50 @@ jobs:
           docker tag satellite-backend:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest
           docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest
 
-      # Step 7: Deploy Updated Image to ECS
-      - name: Deploy to ECS
+      # Step 7: Register New ECS Task Definition
+      - name: Register new task definition
+        id: register_task
         run: |
-          aws ecs update-service --cluster satellite-cluster --service satellite-backend-service --force-new-deployment
+          NEW_TASK_DEF=$(aws ecs register-task-definition \
+            --family satellite-backend-task \
+            --network-mode awsvpc \
+            --requires-compatibilities FARGATE \
+            --cpu "256" \
+            --memory "512" \
+            --execution-role-arn arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole \
+            --container-definitions '[{
+              "name": "satellite-backend",
+              "image": "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest",
+              "memory": 512,
+              "cpu": 256,
+              "essential": true,
+              "portMappings": [{"containerPort": 8000, "hostPort": 8000, "protocol": "tcp"}]
+            }]' --query "taskDefinition.taskDefinitionArn" --output text)
+          echo "TASK_DEFINITION_ARN=${NEW_TASK_DEF}" >> $GITHUB_ENV
+
+      # Step 8: Update ECS Service with New Task Definition
+      - name: Deploy new task definition to ECS
+        run: |
+          aws ecs update-service \
+            --cluster satellite-cluster \
+            --service satellite-backend-service \
+            --task-definition $TASK_DEFINITION_ARN \
+            --force-new-deployment
+
+      # Step 9: Wait for Deployment to Finish
+      - name: Wait for ECS Service to be Stable
+        run: |
+          for i in {1..30}; do
+            STATUS=$(aws ecs describe-services \
+              --cluster satellite-cluster \
+              --services satellite-backend-service \
+              --query "services[0].deployments[0].rolloutState" --output text)
+            echo "Deployment Status: $STATUS"
+            if [ "$STATUS" == "COMPLETED" ]; then
+              echo "✅ Deployment Successful!"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "❌ Deployment timed out!"
+          exit 1
