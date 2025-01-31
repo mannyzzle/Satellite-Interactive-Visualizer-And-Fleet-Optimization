@@ -42,7 +42,7 @@ jobs:
       # Step 6: Build and Push Docker Image to ECR (Fix: Correct build context)
       - name: Build and push Docker image
         run: |
-          docker build -t satellite-backend .  
+          docker build -t satellite-backend -f backend/Dockerfile ./backend 
           docker tag satellite-backend:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest
           docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest
 
