@@ -10,11 +10,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Configure AWS Credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -22,7 +20,6 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-2
 
-      # Step 3: Trigger the ECS Fargate task
       - name: Run Satellite Updater Task
         run: |
           aws ecs run-task \
@@ -31,15 +28,51 @@ jobs:
             --network-configuration "awsvpcConfiguration={subnets=['subnet-03ca2c44173fbf8d3','subnet-0593ff12f1ad4cd92','subnet-0e32111ad7d8d84ef'],securityGroups=['sg-0755968a8d3c86a81'],assignPublicIp='ENABLED'}" \
             --task-definition satellite-updater-task
 
-      # Step 4: Confirm Task Execution
       - name: Wait for task to start
         run: |
           sleep 30  # Wait for ECS to initialize the task
           TASK_STATUS=$(aws ecs list-tasks --cluster satellite-cluster --desired-status RUNNING --query "taskArns" --output text)
           echo "Running Task ARN: $TASK_STATUS"
-          if [ -z "$TASK_STATUS" ]; then
+
+          if [[ -z "$TASK_STATUS" ]]; then
             echo "❌ No running update task found!"
             exit 1
           else
             echo "✅ Satellite update task is running successfully!"
           fi
+
+          # Check if the correct task is running
+          TASK_NAME=$(aws ecs describe-tasks --cluster satellite-cluster --tasks $TASK_STATUS --query "tasks[0].group" --output text)
+          echo "Task Name: $TASK_NAME"
+
+          if [[ "$TASK_NAME" != "family:satellite-updater-task" ]]; then
+            echo "❌ Incorrect task is running! Expected 'satellite-updater-task' but found '$TASK_NAME'"
+            exit 1
+          fi
+
+          echo "✅ Confirmed that 'satellite-updater-task' is running."
+
+      - name: Fetch Satellite Updater Logs
+        run: |
+          LOG_STREAM_PREFIX="ecs/satellite-updater/"
+          LOG_GROUP="/aws/ecs/satellite-cluster"
+
+          # Find the latest log stream for the task
+          LOG_STREAM=$(aws logs describe-log-streams \
+            --log-group-name "$LOG_GROUP" \
+            --query "logStreams[?starts_with(logStreamName, '$LOG_STREAM_PREFIX')].logStreamName | [-1]" \
+            --region us-east-2 --output text)
+
+          if [[ -z "$LOG_STREAM" ]]; then
+            echo "❌ No log stream found for satellite-updater!"
+            exit 1
+          fi
+
+          echo "📜 Fetching logs from: $LOG_STREAM"
+
+          # Retrieve last 50 log entries
+          aws logs get-log-events \
+            --log-group-name "$LOG_GROUP" \
+            --log-stream-name "$LOG_STREAM" \
+            --limit 50 \
+            --region us-east-2 --query "events[*].message"
