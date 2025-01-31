@@ -2,13 +2,19 @@ import psycopg2
 from skyfield.api import EarthSatellite
 from tqdm import tqdm
 from math import sqrt, pi
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
 import requests
+from app.database import get_db_connection  # ✅ Use get_db_connection()
 
+# Load environment variables
+load_dotenv()
+
+# Define TLE URL
 TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle"
 
+# Fetch TLE data
 def fetch_tle_data():
     """
     Fetches TLE data from CelesTrak.
@@ -28,105 +34,34 @@ def fetch_tle_data():
     else:
         raise Exception(f"Failed to fetch TLE data: HTTP {response.status_code}")
 
-
-# Load environment variables
-load_dotenv()
-
-# Database connection
-def connect_to_db():
-    """
-    Connect to the PostgreSQL database using environment variables.
-    """
-    conn = psycopg2.connect(
-        host=os.getenv("DB_HOST"),
-        database=os.getenv("DB_NAME"),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"),
-    )
-    return conn
-
-# Update database schema
-def update_schema(conn):
-    """
-    Update the PostgreSQL schema for storing satellite data.
-    """
-    cursor = conn.cursor()
-    schema_updates = [
-        "ADD COLUMN IF NOT EXISTS norad_number INT",
-        "ADD COLUMN IF NOT EXISTS intl_designator VARCHAR(20)",
-        "ADD COLUMN IF NOT EXISTS ephemeris_type INT",
-        "ADD COLUMN IF NOT EXISTS inclination FLOAT",
-        "ADD COLUMN IF NOT EXISTS eccentricity FLOAT",
-        "ADD COLUMN IF NOT EXISTS period FLOAT",
-        "ADD COLUMN IF NOT EXISTS perigee FLOAT",
-        "ADD COLUMN IF NOT EXISTS apogee FLOAT",
-        "ADD COLUMN IF NOT EXISTS epoch TIMESTAMP",
-        "ADD COLUMN IF NOT EXISTS raan FLOAT",
-        "ADD COLUMN IF NOT EXISTS arg_perigee FLOAT",
-        "ADD COLUMN IF NOT EXISTS mean_motion FLOAT",
-        "ADD COLUMN IF NOT EXISTS semi_major_axis FLOAT",
-        "ADD COLUMN IF NOT EXISTS velocity FLOAT",
-        "ADD COLUMN IF NOT EXISTS orbit_type VARCHAR(20)",
-        "ADD COLUMN IF NOT EXISTS bstar FLOAT",
-        "ADD COLUMN IF NOT EXISTS rev_num INT"
-    ]
-    print("Updating database schema...")
-    for update in tqdm(schema_updates, desc="Schema Updates"):
-        try:
-            cursor.execute(f"ALTER TABLE satellites {update}")
-            conn.commit()
-        except Exception as e:
-            print(f"Error with schema update: {e}")
-    cursor.close()
-    print("Database schema updated successfully.")
-
 # Extract epoch from TLE Line 1
 def extract_epoch(tle_line1):
-    """
-    Extracts the epoch from the TLE Line 1 and converts it to a Python datetime object.
-    """
     try:
         year = int(tle_line1[18:20])
         day_of_year = float(tle_line1[20:32])
         year += 2000 if year < 57 else 1900
-        epoch_date = datetime(year, 1, 1) + timedelta(days=day_of_year - 1)
-        return epoch_date
+        return datetime(year, 1, 1) + timedelta(days=day_of_year - 1)
     except Exception as e:
         print(f"Error extracting epoch: {e}")
         return None
 
-# Parse TLE Line 2
-def parse_tle_line2(tle_line2):
-    """
-    Parses TLE Line 2 to extract mean motion and revolution number.
-    """
-    try:
-        mean_motion = float(tle_line2[52:63].strip())
-        rev_num = int(tle_line2[63:68].strip())
-        return mean_motion, rev_num
-    except Exception as e:
-        print(f"Error parsing TLE Line 2: {e}")
-        return None, None
-
-# Parse TLE Line 1
+# Parse TLE Lines
 def parse_tle_line1(tle_line1):
-    """
-    Parses TLE Line 1 to extract NORAD number, international designator, and ephemeris type.
-    """
     try:
-        norad_number = int(tle_line1[2:7].strip())
-        intl_designator = tle_line1[9:17].strip()
-        ephemeris_type = int(tle_line1[62:63].strip())
-        return norad_number, intl_designator, ephemeris_type
+        return int(tle_line1[2:7].strip()), tle_line1[9:17].strip(), int(tle_line1[62:63].strip())
     except Exception as e:
         print(f"Error parsing TLE Line 1: {e}")
         return None, None, None
 
+def parse_tle_line2(tle_line2):
+    try:
+        return float(tle_line2[52:63].strip()), int(tle_line2[63:68].strip())
+    except Exception as e:
+        print(f"Error parsing TLE Line 2: {e}")
+        return None, None
+
 # Compute orbital parameters
 def compute_orbital_params(tle_line1, tle_line2):
-    """
-    Compute various orbital parameters from TLE lines.
-    """
     try:
         satellite = EarthSatellite(tle_line1, tle_line2)
         norad_number, intl_designator, ephemeris_type = parse_tle_line1(tle_line1)
@@ -137,7 +72,6 @@ def compute_orbital_params(tle_line1, tle_line2):
         bstar = satellite.model.bstar
         raan = satellite.model.nodeo * (180 / pi)
         arg_perigee = satellite.model.argpo * (180 / pi)
-
         epoch = extract_epoch(tle_line1)
 
         # Derived parameters
@@ -184,14 +118,46 @@ def classify_orbit_type(perigee, apogee):
     else:
         return "HEO"
 
+# Update database schema
+def update_schema(conn):
+    cursor = conn.cursor()
+    schema_updates = [
+        "ADD COLUMN IF NOT EXISTS norad_number INT",
+        "ADD COLUMN IF NOT EXISTS intl_designator VARCHAR(20)",
+        "ADD COLUMN IF NOT EXISTS ephemeris_type INT",
+        "ADD COLUMN IF NOT EXISTS inclination FLOAT",
+        "ADD COLUMN IF NOT EXISTS eccentricity FLOAT",
+        "ADD COLUMN IF NOT EXISTS period FLOAT",
+        "ADD COLUMN IF NOT EXISTS perigee FLOAT",
+        "ADD COLUMN IF NOT EXISTS apogee FLOAT",
+        "ADD COLUMN IF NOT EXISTS epoch TIMESTAMP",
+        "ADD COLUMN IF NOT EXISTS raan FLOAT",
+        "ADD COLUMN IF NOT EXISTS arg_perigee FLOAT",
+        "ADD COLUMN IF NOT EXISTS mean_motion FLOAT",
+        "ADD COLUMN IF NOT EXISTS semi_major_axis FLOAT",
+        "ADD COLUMN IF NOT EXISTS velocity FLOAT",
+        "ADD COLUMN IF NOT EXISTS orbit_type VARCHAR(20)",
+        "ADD COLUMN IF NOT EXISTS bstar FLOAT",
+        "ADD COLUMN IF NOT EXISTS rev_num INT"
+    ]
+    print("Updating database schema...")
+    for update in tqdm(schema_updates, desc="Schema Updates"):
+        try:
+            cursor.execute(f"ALTER TABLE satellites {update}")
+            conn.commit()
+        except Exception as e:
+            print(f"Error with schema update: {e}")
+    cursor.close()
+    print("✅ Database schema updated successfully.")
+
 # Update satellite data
-def update_satellite_data(conn):
+def update_satellite_data():
     """
     Fetch TLE data, compute orbital parameters, and insert/update the database.
     """
+    conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Fetch latest satellite data
     satellites = fetch_tle_data()
     print(f"📡 Fetched {len(satellites)} satellites for processing.")
 
@@ -240,9 +206,4 @@ def update_satellite_data(conn):
 
 if __name__ == "__main__":
     print("Connecting to the database...")
-    conn = connect_to_db()
-    try:
-        update_schema(conn)
-        update_satellite_data(conn)
-    finally:
-        conn.close()
+    update_satellite_data()
