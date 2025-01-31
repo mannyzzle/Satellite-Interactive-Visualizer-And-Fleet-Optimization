@@ -7,11 +7,14 @@ WORKDIR /app
 # Copy the entire backend directory
 COPY . /app
 
-# Install dependencies
-RUN pip install --no-cache-dir -r /app/requirements.txt
-
 # Ensure logs are displayed in real-time
 ENV PYTHONUNBUFFERED=1
 
+# Install dependencies
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# Set permissions to avoid potential permission issues
+RUN chmod -R 755 /app
+
 # Run the satellite data updater on startup
-CMD ["python", "-c", "from app.tle_processor import connect_to_db, update_schema, update_satellite_data; conn = connect_to_db(); update_schema(conn); update_satellite_data(conn); conn.close()"]
+CMD ["python", "-c", "from app.database import get_db_connection; from app.tle_processor import update_schema, update_satellite_data; conn = get_db_connection(); update_schema(conn); update_satellite_data(); conn.close()"]
