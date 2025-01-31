@@ -1,18 +1,17 @@
-# Use a lightweight Python image
+# Use a minimal Python image
 FROM python:3.10-slim
 
-# Set working directory
+# Set working directory inside the container
 WORKDIR /app
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy the entire backend directory to the container
+COPY backend/ /app
 
-# Copy application files
-COPY app/ ./app
+# Install dependencies
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Expose API port
+# Expose the FastAPI port
 EXPOSE 8000
 
-# Run FastAPI app
+# Start FastAPI app
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

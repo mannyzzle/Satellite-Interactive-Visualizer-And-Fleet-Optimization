@@ -1,12 +1,17 @@
+# Use a minimal Python image
 FROM python:3.10-slim
 
+# Set working directory inside the container
 WORKDIR /app
 
+# Copy the entire backend directory
+COPY backend/ /app
+
 # Install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Copy app code
-COPY app/ ./app
+# Ensure logs are displayed in real-time
+ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "-c", "from app.tle_processor import update_satellite_data; update_satellite_data()"]
+# Run the satellite data updater on startup
+CMD ["python", "-c", "from app.tle_processor import connect_to_db, update_schema, update_satellite_data; conn = connect_to_db(); update_schema(conn); update_satellite_data(conn); conn.close()"]
