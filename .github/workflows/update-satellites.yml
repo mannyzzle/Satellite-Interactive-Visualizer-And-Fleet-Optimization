@@ -2,29 +2,44 @@ name: Update Satellite Data
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # Runs daily at midnight UTC
+    - cron: "0 6 * * *"  # Runs every day at 6 AM UTC
   workflow_dispatch:  # Allows manual trigger
 
 jobs:
-  update-satellites:
+  update_satellites:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      # Step 2: Configure AWS Credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-2  # Change if needed
+          aws-region: us-east-2
 
-      - name: Run update script on ECS Task
+      # Step 3: Trigger the ECS Fargate task
+      - name: Run Satellite Updater Task
         run: |
-          aws ecs execute-command \
+          aws ecs run-task \
             --cluster satellite-cluster \
-            --task $(aws ecs list-tasks --cluster satellite-cluster --desired-status RUNNING --query "taskArns[0]" --output text) \
-            --container satellite-backend \
-            --command "python -c 'from app.tle_processor import update_satellite_data; update_satellite_data()'" \
-            --interactive
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=['subnet-03ca2c44173fbf8d3','subnet-0593ff12f1ad4cd92','subnet-0e32111ad7d8d84ef'],securityGroups=['sg-0755968a8d3c86a81'],assignPublicIp='ENABLED'}" \
+            --task-definition satellite-updater-task
+
+      # Step 4: Confirm Task Execution
+      - name: Wait for task to start
+        run: |
+          sleep 30  # Wait for ECS to initialize the task
+          TASK_STATUS=$(aws ecs list-tasks --cluster satellite-cluster --desired-status RUNNING --query "taskArns" --output text)
+          echo "Running Task ARN: $TASK_STATUS"
+          if [ -z "$TASK_STATUS" ]; then
+            echo "❌ No running update task found!"
+            exit 1
+          else
+            echo "✅ Satellite update task is running successfully!"
+          fi
