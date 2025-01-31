@@ -31,7 +31,11 @@ jobs:
       - name: Wait for task to start
         run: |
           sleep 30  # Wait for ECS to initialize the task
-          TASK_STATUS=$(aws ecs list-tasks --cluster satellite-cluster --desired-status RUNNING --query "taskArns" --output text)
+          TASK_STATUS=$(aws ecs list-tasks --cluster satellite-cluster \
+            --desired-status RUNNING \
+            --family satellite-updater-task \
+            --query "taskArns" --output text)
+
           echo "Running Task ARN: $TASK_STATUS"
 
           if [[ -z "$TASK_STATUS" ]]; then
