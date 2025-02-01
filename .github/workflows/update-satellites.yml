@@ -5,7 +5,7 @@ on:
       - cron: "0 6 * * *"  # Runs every day at 6 AM UTC
     workflow_dispatch:  # Allows manual trigger
     workflow_run:
-      workflows: ["Deploy Satellite Backend to AWS ECS"]  # Make sure the name matches deploy.yml
+      workflows: ["Deploy Satellite Backend and Updater to AWS ECS"]  # Make sure the name matches deploy.yml
       types:
         - completed
 jobs:
