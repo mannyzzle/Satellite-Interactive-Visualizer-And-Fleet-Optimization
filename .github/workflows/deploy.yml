@@ -89,7 +89,7 @@ jobs:
             }]" --query "taskDefinition.taskDefinitionArn" --output text)
           echo "BACKEND_TASK_DEFINITION_ARN=${NEW_BACKEND_TASK_DEF}" >> $GITHUB_ENV
 
-      # Step 8: Register New ECS Task Definition for Satellite Updater
+            # Step 8: Register New ECS Task Definition for Satellite Updater
       - name: Register new ECS Task Definition for Updater
         id: register_updater_task
         run: |
@@ -107,6 +107,7 @@ jobs:
               \"memory\": 512,
               \"cpu\": 256,
               \"essential\": true,
+              \"command\": [\"python\", \"-c\", \"from app.database import get_db_connection; from app.tle_processor import update_schema, update_satellite_data; conn = get_db_connection(); update_schema(conn); update_satellite_data(); conn.close()\"],
               \"environment\": [
                 {\"name\": \"DB_HOST\", \"value\": \"${{ secrets.DB_HOST }}\"},
                 {\"name\": \"DB_NAME\", \"value\": \"${{ secrets.DB_NAME }}\"},
