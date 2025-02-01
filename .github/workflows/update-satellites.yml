@@ -64,20 +64,29 @@ jobs:
           LOG_STREAM_PREFIX="ecs/satellite-updater/"
           LOG_GROUP="/aws/ecs/satellite-cluster"
 
-          # Find the latest log stream for the task
-          LOG_STREAM=$(aws logs describe-log-streams \
-            --log-group-name "$LOG_GROUP" \
-            --query "logStreams[?starts_with(logStreamName, '$LOG_STREAM_PREFIX')].logStreamName | [-1]" \
-            --region us-east-2 --output text)
+          # Wait for logs to appear (max 60 seconds)
+          for i in {1..12}; do
+            LOG_STREAM=$(aws logs describe-log-streams \
+              --log-group-name "$LOG_GROUP" \
+              --query "logStreams[?starts_with(logStreamName, '$LOG_STREAM_PREFIX')].logStreamName | [-1]" \
+              --region us-east-2 --output text)
 
-          if [[ -z "$LOG_STREAM" ]]; then
+            if [[ -n "$LOG_STREAM" && "$LOG_STREAM" != "None" ]]; then
+              echo "📜 Found log stream: $LOG_STREAM"
+              break
+            fi
+
+            echo "⏳ Waiting for log stream to be available..."
+            sleep 5
+          done
+
+          if [[ -z "$LOG_STREAM" || "$LOG_STREAM" == "None" ]]; then
             echo "❌ No log stream found for satellite-updater!"
             exit 1
           fi
 
-          echo "📜 Fetching logs from: $LOG_STREAM"
-
           # Retrieve last 50 log entries
+          echo "📜 Fetching logs from: $LOG_STREAM"
           aws logs get-log-events \
             --log-group-name "$LOG_GROUP" \
             --log-stream-name "$LOG_STREAM" \
