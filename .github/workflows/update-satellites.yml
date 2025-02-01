@@ -42,8 +42,8 @@ jobs:
               --network-configuration "awsvpcConfiguration={subnets=['subnet-03ca2c44173fbf8d3','subnet-0593ff12f1ad4cd92','subnet-0e32111ad7d8d84ef'],securityGroups=['sg-0755968a8d3c86a81'],assignPublicIp='ENABLED'}" \
               --task-definition $TASK_ARN
         
-              - name: Fetch Satellite Updater Logs
-              run: |
+      - name: Fetch Satellite Updater Logs
+        run: |
                 LOG_STREAM_PREFIX="ecs/satellite-updater/"
                 LOG_GROUP="/aws/ecs/satellite-cluster"
             
