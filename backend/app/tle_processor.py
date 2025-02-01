@@ -176,7 +176,7 @@ def update_satellite_data():
                     %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s
                 )
-                ON CONFLICT (norad_number) DO UPDATE SET
+                ON CONFLICT (norad_number, name) DO UPDATE SET
                     tle_line1 = EXCLUDED.tle_line1,
                     tle_line2 = EXCLUDED.tle_line2,
                     epoch = EXCLUDED.epoch,
@@ -203,6 +203,7 @@ def update_satellite_data():
     cursor.close()
     conn.close()
     print("✅ All satellite data inserted and updated successfully!")
+
 
 if __name__ == "__main__":
     print("Connecting to the database...")
