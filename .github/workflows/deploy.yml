@@ -1,4 +1,4 @@
-name: Deploy Satellite Backend to AWS ECS
+name: Deploy Satellite Backend and Updater to AWS ECS
 
 on:
   push:
@@ -15,7 +15,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Set up Python (for verification only, optional)
+      # Step 2: Set up Python (optional for verification)
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -39,18 +39,24 @@ jobs:
         run: |
           aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com
 
-      # Step 6: Build and Push Docker Image to ECR (Fix: Correct build context)
-      - name: Build and push Docker image
+      # Step 6: Build and Push Docker Images for Backend and Updater
+      - name: Build and push Docker images
         run: |
+          # Build backend image
           docker build -t satellite-backend -f backend/Dockerfile ./backend 
           docker tag satellite-backend:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest
           docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest
 
-      # Step 7: Register New ECS Task Definition
-      - name: Register new ECS Task Definition
-        id: register_task
+          # Build updater image using dockerfile.update
+          docker build -t satellite-updater -f backend/dockerfile.update ./backend
+          docker tag satellite-updater:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-updater:latest
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-updater:latest
+
+      # Step 7: Register New ECS Task Definition for Backend
+      - name: Register new ECS Task Definition for Backend
+        id: register_backend_task
         run: |
-          NEW_TASK_DEF=$(aws ecs register-task-definition \
+          NEW_BACKEND_TASK_DEF=$(aws ecs register-task-definition \
             --family satellite-backend-task \
             --network-mode awsvpc \
             --requires-compatibilities FARGATE \
@@ -81,19 +87,64 @@ jobs:
                 }
               }
             }]" --query "taskDefinition.taskDefinitionArn" --output text)
-          echo "TASK_DEFINITION_ARN=${NEW_TASK_DEF}" >> $GITHUB_ENV
+          echo "BACKEND_TASK_DEFINITION_ARN=${NEW_BACKEND_TASK_DEF}" >> $GITHUB_ENV
 
-      # Step 8: Update ECS Service with New Task Definition
-      - name: Deploy new task definition to ECS
+      # Step 8: Register New ECS Task Definition for Satellite Updater
+      - name: Register new ECS Task Definition for Updater
+        id: register_updater_task
+        run: |
+          NEW_UPDATER_TASK_DEF=$(aws ecs register-task-definition \
+            --family satellite-updater-task \
+            --network-mode awsvpc \
+            --requires-compatibilities FARGATE \
+            --cpu "256" \
+            --memory "512" \
+            --execution-role-arn arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole \
+            --task-role-arn arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole \
+            --container-definitions "[{
+              \"name\": \"satellite-updater\",
+              \"image\": \"${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-updater:latest\",
+              \"memory\": 512,
+              \"cpu\": 256,
+              \"essential\": true,
+              \"environment\": [
+                {\"name\": \"DB_HOST\", \"value\": \"${{ secrets.DB_HOST }}\"},
+                {\"name\": \"DB_NAME\", \"value\": \"${{ secrets.DB_NAME }}\"},
+                {\"name\": \"DB_USER\", \"value\": \"${{ secrets.DB_USER }}\"},
+                {\"name\": \"DB_PASSWORD\", \"value\": \"${{ secrets.DB_PASSWORD }}\"},
+                {\"name\": \"DB_PORT\", \"value\": \"5432\"}
+              ],
+              \"logConfiguration\": {
+                \"logDriver\": \"awslogs\",
+                \"options\": {
+                  \"awslogs-group\": \"/aws/ecs/satellite-cluster\",
+                  \"awslogs-region\": \"us-east-2\",
+                  \"awslogs-stream-prefix\": \"ecs\"
+                }
+              }
+            }]" --query "taskDefinition.taskDefinitionArn" --output text)
+          echo "UPDATER_TASK_DEFINITION_ARN=${NEW_UPDATER_TASK_DEF}" >> $GITHUB_ENV
+
+      # Step 9: Update ECS Service with New Backend Task Definition
+      - name: Deploy new backend task definition to ECS
         run: |
           aws ecs update-service \
             --cluster satellite-cluster \
             --service satellite-backend-service \
-            --task-definition $TASK_DEFINITION_ARN \
+            --task-definition $BACKEND_TASK_DEFINITION_ARN \
             --force-new-deployment
 
-      # Step 9: Wait for Deployment to Finish
-      - name: Wait for ECS Service to be Stable
+      # Step 10: Deploy New Satellite Updater Task
+      - name: Run Satellite Updater Task
+        run: |
+          aws ecs run-task \
+            --cluster satellite-cluster \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=['subnet-03ca2c44173fbf8d3','subnet-0593ff12f1ad4cd92','subnet-0e32111ad7d8d84ef'],securityGroups=['sg-0755968a8d3c86a81'],assignPublicIp='ENABLED'}" \
+            --task-definition $UPDATER_TASK_DEFINITION_ARN
+
+      # Step 11: Wait for Backend Deployment to Finish
+      - name: Wait for ECS Backend Service to be Stable
         run: |
           for i in {1..30}; do
             STATUS=$(aws ecs describe-services \
@@ -102,10 +153,10 @@ jobs:
               --query "services[0].deployments[0].rolloutState" --output text)
             echo "Deployment Status: $STATUS"
             if [ "$STATUS" == "COMPLETED" ]; then
-              echo "✅ Deployment Successful!"
+              echo "✅ Backend Deployment Successful!"
               exit 0
             fi
             sleep 10
           done
-          echo "❌ Deployment timed out!"
+          echo "❌ Backend Deployment Timed Out!"
           exit 1
