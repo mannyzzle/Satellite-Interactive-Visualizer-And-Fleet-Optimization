@@ -1,6 +1,7 @@
 import sys
 import os
 
+# Ensure Python can find the 'backend/' directory
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import get_db_connection
@@ -16,7 +17,7 @@ def update_satellite_data():
     satellites = fetch_tle_data()
     print(f"📡 Fetched {len(satellites)} satellites for processing.")
 
-    for sat in satellites:  # ✅ Removed [:5] to load all satellites
+    for sat in satellites[:30]:  # ✅ Fetch all satellites
         params = compute_orbital_params(sat["line1"], sat["line2"])
         if params:
             cursor.execute("""
