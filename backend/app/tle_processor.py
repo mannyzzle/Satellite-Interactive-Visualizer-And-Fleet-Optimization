@@ -119,6 +119,39 @@ def classify_orbit_type(perigee, apogee):
         return "HEO"
 
 # Update database schema
+def update_schema(conn):
+    cursor = conn.cursor()
+    schema_updates = [
+        "ADD COLUMN IF NOT EXISTS norad_number INT",
+        "ADD COLUMN IF NOT EXISTS intl_designator VARCHAR(20)",
+        "ADD COLUMN IF NOT EXISTS ephemeris_type INT",
+        "ADD COLUMN IF NOT EXISTS inclination FLOAT",
+        "ADD COLUMN IF NOT EXISTS eccentricity FLOAT",
+        "ADD COLUMN IF NOT EXISTS period FLOAT",
+        "ADD COLUMN IF NOT EXISTS perigee FLOAT",
+        "ADD COLUMN IF NOT EXISTS apogee FLOAT",
+        "ADD COLUMN IF NOT EXISTS epoch TIMESTAMP",
+        "ADD COLUMN IF NOT EXISTS raan FLOAT",
+        "ADD COLUMN IF NOT EXISTS arg_perigee FLOAT",
+        "ADD COLUMN IF NOT EXISTS mean_motion FLOAT",
+        "ADD COLUMN IF NOT EXISTS semi_major_axis FLOAT",
+        "ADD COLUMN IF NOT EXISTS velocity FLOAT",
+        "ADD COLUMN IF NOT EXISTS orbit_type VARCHAR(20)",
+        "ADD COLUMN IF NOT EXISTS bstar FLOAT",
+        "ADD COLUMN IF NOT EXISTS rev_num INT"
+    ]
+    print("Updating database schema...")
+    for update in tqdm(schema_updates, desc="Schema Updates"):
+        try:
+            cursor.execute(f"ALTER TABLE satellites {update}")
+            conn.commit()
+        except Exception as e:
+            print(f"Error with schema update: {e}")
+    cursor.close()
+    print("✅ Database schema updated successfully.")
+
+
+# Update satellite data
 def update_satellite_data():
     """
     Fetch TLE data, compute orbital parameters, and insert/update the database.
