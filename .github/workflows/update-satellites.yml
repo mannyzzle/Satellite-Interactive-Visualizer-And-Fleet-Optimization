@@ -36,7 +36,7 @@ jobs:
           LOG_STREAM_PREFIX="ecs/satellite-updater/"
           LOG_GROUP="/aws/ecs/satellite-cluster"
 
-          # Wait for logs to be available (max 90 seconds)
+          # Wait for log stream to be available (max 90 seconds)
           for i in {1..18}; do
             LOG_STREAM=$(aws logs describe-log-streams \
               --log-group-name "$LOG_GROUP" \
@@ -57,7 +57,7 @@ jobs:
             exit 1
           fi
 
-          # Wait until log stream has events
+          # Wait until log stream has events (max 90 seconds)
           for i in {1..18}; do
             LOG_COUNT=$(aws logs get-log-events \
               --log-group-name "$LOG_GROUP" \
