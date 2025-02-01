@@ -107,7 +107,7 @@ jobs:
               \"memory\": 512,
               \"cpu\": 256,
               \"essential\": true,
-              \"command\": [\"python\", \"-c\", \"from app.database import get_db_connection; from app.tle_processor import update_schema, update_satellite_data; conn = get_db_connection(); update_schema(conn); update_satellite_data(); conn.close()\"],
+              \"command\": [\"python\", \"-c\", \"import sys; sys.path.append('/app'); from app.database import get_db_connection; from app.tle_processor import update_schema, update_satellite_data; conn = get_db_connection(); update_schema(conn); update_satellite_data(); conn.close()\"],
               \"environment\": [
                 {\"name\": \"DB_HOST\", \"value\": \"${{ secrets.DB_HOST }}\"},
                 {\"name\": \"DB_NAME\", \"value\": \"${{ secrets.DB_NAME }}\"},

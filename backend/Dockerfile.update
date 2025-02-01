@@ -16,5 +16,8 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # Set permissions to avoid potential permission issues
 RUN chmod -R 755 /app
 
-# Run the satellite data updater on startup
-CMD ["python", "-c", "from app.database import get_db_connection; from app.tle_processor import update_schema, update_satellite_data; conn = get_db_connection(); update_schema(conn); update_satellite_data(); conn.close()"]
+# Set PYTHONPATH for imports to work correctly
+ENV PYTHONPATH="/app"
+
+# Run the satellite updater script
+CMD ["python", "-c", "import sys; sys.path.append('/app'); from app.database import get_db_connection; from app.tle_processor import update_schema, update_satellite_data; conn = get_db_connection(); update_schema(conn); update_satellite_data(); conn.close()"]
