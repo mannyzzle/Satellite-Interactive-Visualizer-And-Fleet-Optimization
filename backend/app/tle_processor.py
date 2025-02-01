@@ -176,7 +176,7 @@ def update_satellite_data():
                     %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s
                 )
-                ON CONFLICT (norad_number, name) DO UPDATE SET
+                ON CONFLICT (norad_number) WHERE norad_number IS NOT NULL DO UPDATE SET
                     tle_line1 = EXCLUDED.tle_line1,
                     tle_line2 = EXCLUDED.tle_line2,
                     epoch = EXCLUDED.epoch,
