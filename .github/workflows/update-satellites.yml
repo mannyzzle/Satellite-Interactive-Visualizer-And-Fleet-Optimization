@@ -64,8 +64,8 @@ jobs:
           LOG_STREAM_PREFIX="ecs/satellite-updater/"
           LOG_GROUP="/aws/ecs/satellite-cluster"
 
-          # Wait for logs to appear (max 60 seconds)
-          for i in {1..12}; do
+          # Wait for logs to be available (max 90 seconds)
+          for i in {1..18}; do
             LOG_STREAM=$(aws logs describe-log-streams \
               --log-group-name "$LOG_GROUP" \
               --query "logStreams[?starts_with(logStreamName, '$LOG_STREAM_PREFIX')].logStreamName | [-1]" \
@@ -85,6 +85,28 @@ jobs:
             exit 1
           fi
 
+          # Wait until log stream has events
+          for i in {1..18}; do
+            LOG_COUNT=$(aws logs get-log-events \
+              --log-group-name "$LOG_GROUP" \
+              --log-stream-name "$LOG_STREAM" \
+              --limit 1 \
+              --region us-east-2 --query "events[*].message" --output text)
+
+            if [[ -n "$LOG_COUNT" && "$LOG_COUNT" != "None" ]]; then
+              echo "✅ Logs found! Fetching logs now."
+              break
+            fi
+
+            echo "⏳ Waiting for logs to be available in the stream..."
+            sleep 5
+          done
+
+          if [[ -z "$LOG_COUNT" || "$LOG_COUNT" == "None" ]]; then
+            echo "❌ No logs found in stream $LOG_STREAM!"
+            exit 1
+          fi
+
           # Retrieve last 50 log entries
           echo "📜 Fetching logs from: $LOG_STREAM"
           aws logs get-log-events \
@@ -92,3 +114,4 @@ jobs:
             --log-stream-name "$LOG_STREAM" \
             --limit 50 \
             --region us-east-2 --query "events[*].message"
+ 
