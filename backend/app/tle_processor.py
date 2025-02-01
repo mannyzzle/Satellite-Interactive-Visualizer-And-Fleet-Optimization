@@ -165,45 +165,70 @@ def update_satellite_data():
         params = compute_orbital_params(sat["line1"], sat["line2"])
         
         if params:
-            cursor.execute("""
-                INSERT INTO satellites (
-                    name, tle_line1, tle_line2, norad_number, intl_designator, ephemeris_type,
-                    inclination, eccentricity, period, perigee, apogee, epoch, raan, arg_perigee,
-                    mean_motion, semi_major_axis, velocity, orbit_type, bstar, rev_num
-                )
-                VALUES (
-                    %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s
-                )
-                ON CONFLICT (norad_number) WHERE norad_number IS NOT NULL DO UPDATE SET
-                    tle_line1 = EXCLUDED.tle_line1,
-                    tle_line2 = EXCLUDED.tle_line2,
-                    epoch = EXCLUDED.epoch,
-                    mean_motion = EXCLUDED.mean_motion,
-                    inclination = EXCLUDED.inclination,
-                    eccentricity = EXCLUDED.eccentricity,
-                    period = EXCLUDED.period,
-                    perigee = EXCLUDED.perigee,
-                    apogee = EXCLUDED.apogee,
-                    semi_major_axis = EXCLUDED.semi_major_axis,
-                    velocity = EXCLUDED.velocity,
-                    orbit_type = EXCLUDED.orbit_type,
-                    bstar = EXCLUDED.bstar,
-                    rev_num = EXCLUDED.rev_num;
-            """, (
-                sat["name"], sat["line1"], sat["line2"], params["norad_number"], params["intl_designator"],
-                params["ephemeris_type"], params["inclination"], params["eccentricity"], params["period"],
-                params["perigee"], params["apogee"], params["epoch"], params["raan"], params["arg_perigee"],
-                params["mean_motion"], params["semi_major_axis"], params["velocity"], params["orbit_type"],
-                params["bstar"], params["rev_num"]
-            ))
+            try:
+                # 🛠 Ensure norad_number is NOT NULL (set to -1 if missing)
+                norad = params["norad_number"] if params["norad_number"] is not None else -1
+
+                cursor.execute("""
+                    INSERT INTO satellites (
+                        name, tle_line1, tle_line2, norad_number, intl_designator, ephemeris_type,
+                        inclination, eccentricity, period, perigee, apogee, epoch, raan, arg_perigee,
+                        mean_motion, semi_major_axis, velocity, orbit_type, bstar, rev_num
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s
+                    )
+                    ON CONFLICT (norad_number) WHERE norad_number IS NOT NULL 
+                    DO UPDATE SET
+                        tle_line1 = EXCLUDED.tle_line1,
+                        tle_line2 = EXCLUDED.tle_line2,
+                        epoch = EXCLUDED.epoch,
+                        mean_motion = EXCLUDED.mean_motion,
+                        inclination = EXCLUDED.inclination,
+                        eccentricity = EXCLUDED.eccentricity,
+                        period = EXCLUDED.period,
+                        perigee = EXCLUDED.perigee,
+                        apogee = EXCLUDED.apogee,
+                        semi_major_axis = EXCLUDED.semi_major_axis,
+                        velocity = EXCLUDED.velocity,
+                        orbit_type = EXCLUDED.orbit_type,
+                        bstar = EXCLUDED.bstar,
+                        rev_num = EXCLUDED.rev_num;
+
+                    ON CONFLICT (name) WHERE name IS NOT NULL 
+                    DO UPDATE SET
+                        tle_line1 = EXCLUDED.tle_line1,
+                        tle_line2 = EXCLUDED.tle_line2,
+                        epoch = EXCLUDED.epoch,
+                        mean_motion = EXCLUDED.mean_motion,
+                        inclination = EXCLUDED.inclination,
+                        eccentricity = EXCLUDED.eccentricity,
+                        period = EXCLUDED.period,
+                        perigee = EXCLUDED.perigee,
+                        apogee = EXCLUDED.apogee,
+                        semi_major_axis = EXCLUDED.semi_major_axis,
+                        velocity = EXCLUDED.velocity,
+                        orbit_type = EXCLUDED.orbit_type,
+                        bstar = EXCLUDED.bstar,
+                        rev_num = EXCLUDED.rev_num;
+                """, (
+                    sat["name"], sat["line1"], sat["line2"], norad, params["intl_designator"],
+                    params["ephemeris_type"], params["inclination"], params["eccentricity"], params["period"],
+                    params["perigee"], params["apogee"], params["epoch"], params["raan"], params["arg_perigee"],
+                    params["mean_motion"], params["semi_major_axis"], params["velocity"], params["orbit_type"],
+                    params["bstar"], params["rev_num"]
+                ))
+
+            except psycopg2.errors.UniqueViolation as e:
+                print(f"❌ Duplicate detected: {sat['name']} ({norad}) → {e}")
+                conn.rollback()
 
     conn.commit()
     cursor.close()
     conn.close()
     print("✅ All satellite data inserted and updated successfully!")
-
 
 if __name__ == "__main__":
     print("Connecting to the database...")
