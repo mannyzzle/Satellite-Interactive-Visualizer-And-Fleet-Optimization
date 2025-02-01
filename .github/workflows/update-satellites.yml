@@ -23,66 +23,78 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-2
 
+      - name: Get latest task definition ARN
+        id: get_task_arn
+        run: |
+            TASK_ARN=$(aws ecs describe-task-definition \
+              --task-definition satellite-updater-task \
+              --region us-east-2 \
+              --query "taskDefinition.taskDefinitionArn" --output text)
+        
+            echo "Latest Task Definition: $TASK_ARN"
+            echo "TASK_ARN=$TASK_ARN" >> $GITHUB_ENV
+        
       - name: Run Satellite Updater Task
         run: |
-          aws ecs run-task \
-            --cluster satellite-cluster \
-            --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=['subnet-03ca2c44173fbf8d3','subnet-0593ff12f1ad4cd92','subnet-0e32111ad7d8d84ef'],securityGroups=['sg-0755968a8d3c86a81'],assignPublicIp='ENABLED'}" \
-            --task-definition satellite-updater-task
-
-      - name: Fetch Satellite Updater Logs
-        run: |
-          LOG_STREAM_PREFIX="ecs/satellite-updater/"
-          LOG_GROUP="/aws/ecs/satellite-cluster"
-
-          # Wait for log stream to be available (max 90 seconds)
-          for i in {1..18}; do
-            LOG_STREAM=$(aws logs describe-log-streams \
-              --log-group-name "$LOG_GROUP" \
-              --query "logStreams[?starts_with(logStreamName, '$LOG_STREAM_PREFIX')].logStreamName | [-1]" \
-              --region us-east-2 --output text)
-
-            if [[ -n "$LOG_STREAM" && "$LOG_STREAM" != "None" ]]; then
-              echo "📜 Found log stream: $LOG_STREAM"
-              break
-            fi
-
-            echo "⏳ Waiting for log stream to be available..."
-            sleep 5
-          done
-
-          if [[ -z "$LOG_STREAM" || "$LOG_STREAM" == "None" ]]; then
-            echo "❌ No log stream found for satellite-updater!"
-            exit 1
-          fi
-
-          # Wait until log stream has events (max 90 seconds)
-          for i in {1..18}; do
-            LOG_COUNT=$(aws logs get-log-events \
-              --log-group-name "$LOG_GROUP" \
-              --log-stream-name "$LOG_STREAM" \
-              --limit 1 \
-              --region us-east-2 --query "events[*].message" --output text)
-
-            if [[ -n "$LOG_COUNT" && "$LOG_COUNT" != "None" ]]; then
-              echo "✅ Logs found! Fetching logs now."
-              break
-            fi
-
-            echo "⏳ Waiting for logs to be available in the stream..."
-            sleep 5
-          done
-
-          if [[ -z "$LOG_COUNT" || "$LOG_COUNT" == "None" ]]; then
-            echo "❌ No logs found in stream $LOG_STREAM!"
-            exit 1
-          fi
-
-          # Retrieve last 50 log entries
-          echo "📜 Fetching logs from: $LOG_STREAM"
-          aws logs get-log-events \
-            --log-group-name "$LOG_GROUP" \
-            --log-stream-name "$LOG_STREAM" \
-            --limit 50 \
-            --region us-east-2 --query "events[*].message"
+            aws ecs run-task \
+              --cluster satellite-cluster \
+              --launch-type FARGATE \
+              --network-configuration "awsvpcConfiguration={subnets=['subnet-03ca2c44173fbf8d3','subnet-0593ff12f1ad4cd92','subnet-0e32111ad7d8d84ef'],securityGroups=['sg-0755968a8d3c86a81'],assignPublicIp='ENABLED'}" \
+              --task-definition $TASK_ARN
+        
+              - name: Fetch Satellite Updater Logs
+              run: |
+                LOG_STREAM_PREFIX="ecs/satellite-updater/"
+                LOG_GROUP="/aws/ecs/satellite-cluster"
+            
+                # Wait for log stream to be available (max 90 seconds)
+                for i in {1..18}; do
+                  LOG_STREAM=$(aws logs describe-log-streams \
+                    --log-group-name "$LOG_GROUP" \
+                    --query "logStreams[?starts_with(logStreamName, '$LOG_STREAM_PREFIX')].logStreamName | [-1]" \
+                    --region us-east-2 --output text)
+            
+                  if [[ -n "$LOG_STREAM" && "$LOG_STREAM" != "None" ]]; then
+                    echo "📜 Found log stream: $LOG_STREAM"
+                    break
+                  fi
+            
+                  echo "⏳ Waiting for log stream to be available..."
+                  sleep 5
+                done
+            
+                if [[ -z "$LOG_STREAM" || "$LOG_STREAM" == "None" ]]; then
+                  echo "❌ No log stream found for satellite-updater!"
+                  exit 1
+                fi
+            
+                # Wait until log stream has events (max 90 seconds)
+                for i in {1..18}; do
+                  LOG_COUNT=$(aws logs get-log-events \
+                    --log-group-name "$LOG_GROUP" \
+                    --log-stream-name "$LOG_STREAM" \
+                    --limit 1 \
+                    --region us-east-2 --query "events[*].message" --output text)
+            
+                  if [[ -n "$LOG_COUNT" && "$LOG_COUNT" != "None" ]]; then
+                    echo "✅ Logs found! Fetching logs now."
+                    break
+                  fi
+            
+                  echo "⏳ Waiting for logs to be available in the stream..."
+                  sleep 5
+                done
+            
+                if [[ -z "$LOG_COUNT" || "$LOG_COUNT" == "None" ]]; then
+                  echo "❌ No logs found in stream $LOG_STREAM!"
+                  exit 1
+                fi
+            
+                # Retrieve last 50 log entries
+                echo "📜 Fetching logs from: $LOG_STREAM"
+                aws logs get-log-events \
+                  --log-group-name "$LOG_GROUP" \
+                  --log-stream-name "$LOG_STREAM" \
+                  --limit 50 \
+                  --region us-east-2 --query "events[*].message"
+            

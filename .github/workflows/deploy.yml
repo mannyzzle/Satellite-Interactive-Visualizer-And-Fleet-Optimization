@@ -42,13 +42,13 @@ jobs:
       # Step 6: Build and Push Docker Images for Backend and Updater
       - name: Build and push Docker images
         run: |
-          # Build backend image
-          docker build -t satellite-backend -f backend/Dockerfile ./backend 
+          # Build backend image (without cache)
+          docker build --no-cache -t satellite-backend -f backend/Dockerfile ./backend 
           docker tag satellite-backend:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest
           docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest
 
-          # Build updater image using Dockerfile.update
-          docker build -t satellite-updater -f backend/Dockerfile.update ./backend
+          # Build updater image (without cache)
+          docker build --no-cache -t satellite-updater -f backend/Dockerfile.update ./backend
           docker tag satellite-updater:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-updater:latest
           docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-updater:latest
 
@@ -89,7 +89,7 @@ jobs:
             }]" --query "taskDefinition.taskDefinitionArn" --output text)
           echo "BACKEND_TASK_DEFINITION_ARN=${NEW_BACKEND_TASK_DEF}" >> $GITHUB_ENV
 
-            # Step 8: Register New ECS Task Definition for Satellite Updater
+        # Step 8: Register New ECS Task Definition for Satellite Updater
       - name: Register new ECS Task Definition for Updater
         id: register_updater_task
         run: |
