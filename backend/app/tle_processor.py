@@ -181,23 +181,7 @@ def update_satellite_data():
                         %s, %s, %s, %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s
                     )
-                    ON CONFLICT (norad_number) DO UPDATE SET
-                        tle_line1 = EXCLUDED.tle_line1,
-                        tle_line2 = EXCLUDED.tle_line2,
-                        epoch = EXCLUDED.epoch,
-                        mean_motion = EXCLUDED.mean_motion,
-                        inclination = EXCLUDED.inclination,
-                        eccentricity = EXCLUDED.eccentricity,
-                        period = EXCLUDED.period,
-                        perigee = EXCLUDED.perigee,
-                        apogee = EXCLUDED.apogee,
-                        semi_major_axis = EXCLUDED.semi_major_axis,
-                        velocity = EXCLUDED.velocity,
-                        orbit_type = EXCLUDED.orbit_type,
-                        bstar = EXCLUDED.bstar,
-                        rev_num = EXCLUDED.rev_num;
-
-                    ON CONFLICT (name) DO UPDATE SET
+                    ON CONFLICT (norad_number, name) DO UPDATE SET
                         tle_line1 = EXCLUDED.tle_line1,
                         tle_line2 = EXCLUDED.tle_line2,
                         epoch = EXCLUDED.epoch,
