@@ -46,50 +46,51 @@ jobs:
         run: |
                 LOG_STREAM_PREFIX="ecs/satellite-updater/"
                 LOG_GROUP="/aws/ecs/satellite-cluster"
-            
-                # Wait for log stream to be available (max 90 seconds)
-                for i in {1..18}; do
+      
+                # Wait for log stream to be available (max 3 minutes)
+                for i in {1..36}; do
                   LOG_STREAM=$(aws logs describe-log-streams \
                     --log-group-name "$LOG_GROUP" \
-                    --query "logStreams[?starts_with(logStreamName, '$LOG_STREAM_PREFIX')].logStreamName | [-1]" \
-                    --region us-east-2 --output text)
-            
+                    --region us-east-2 \
+                    --query "logStreams[?starts_with(logStreamName, '$LOG_STREAM_PREFIX')].[logStreamName, lastEventTimestamp] | sort_by(@, &[-1]) | [-1][0]" \
+                    --output text)
+      
                   if [[ -n "$LOG_STREAM" && "$LOG_STREAM" != "None" ]]; then
                     echo "📜 Found log stream: $LOG_STREAM"
                     break
                   fi
-            
+      
                   echo "⏳ Waiting for log stream to be available..."
                   sleep 5
                 done
-            
+      
                 if [[ -z "$LOG_STREAM" || "$LOG_STREAM" == "None" ]]; then
                   echo "❌ No log stream found for satellite-updater!"
                   exit 1
                 fi
-            
-                # Wait until log stream has events (max 90 seconds)
-                for i in {1..18}; do
+      
+                # Wait until log stream has events (max 3 minutes)
+                for i in {1..36}; do
                   LOG_COUNT=$(aws logs get-log-events \
                     --log-group-name "$LOG_GROUP" \
                     --log-stream-name "$LOG_STREAM" \
                     --limit 1 \
                     --region us-east-2 --query "events[*].message" --output text)
-            
+      
                   if [[ -n "$LOG_COUNT" && "$LOG_COUNT" != "None" ]]; then
                     echo "✅ Logs found! Fetching logs now."
                     break
                   fi
-            
+      
                   echo "⏳ Waiting for logs to be available in the stream..."
                   sleep 5
                 done
-            
+      
                 if [[ -z "$LOG_COUNT" || "$LOG_COUNT" == "None" ]]; then
                   echo "❌ No logs found in stream $LOG_STREAM!"
                   exit 1
                 fi
-            
+      
                 # Retrieve last 50 log entries
                 echo "📜 Fetching logs from: $LOG_STREAM"
                 aws logs get-log-events \
@@ -97,4 +98,4 @@ jobs:
                   --log-stream-name "$LOG_STREAM" \
                   --limit 50 \
                   --region us-east-2 --query "events[*].message"
-            
+      
