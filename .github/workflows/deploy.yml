@@ -47,8 +47,8 @@ jobs:
           docker tag satellite-backend:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest
           docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest
 
-          # Build updater image using dockerfile.update
-          docker build -t satellite-updater -f backend/dockerfile.update ./backend
+          # Build updater image using Dockerfile.update
+          docker build -t satellite-updater -f backend/Dockerfile.update ./backend
           docker tag satellite-updater:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-updater:latest
           docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-updater:latest
 
