@@ -1,163 +1,38 @@
-name: Deploy Satellite Backend and Updater to AWS ECS
+name: Deploy Satellite Backend (GitHub Actions + Docker)
 
 on:
   push:
     branches:
-      - main  # Triggers deployment on pushes to main
-  workflow_dispatch:  # Allows manual deployment trigger from GitHub Actions
+      - main
+  workflow_dispatch:  # Allows manual trigger from GitHub Actions
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the code
+      # Step 1: Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Set up Python (optional for verification)
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.10"
+      # Step 2: Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
-      # Step 3: Install dependencies (optional for verification)
-      - name: Install dependencies
+      # Step 3: Build and Run Backend (FastAPI) in Docker
+      - name: Build and Run Backend in Docker
         run: |
-          pip install --no-cache-dir -r backend/requirements.txt
+          docker build -t satellite-backend -f backend/Dockerfile ./backend
+          docker run -d -p 8000:8000 --name satellite-backend \
+            -e DB_HOST=${{ secrets.DB_HOST }} \
+            -e DB_NAME=${{ secrets.DB_NAME }} \
+            -e DB_USER=${{ secrets.DB_USER }} \
+            -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            -e DB_PORT=5432 \
+            satellite-backend
 
-      # Step 4: Configure AWS Credentials
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-2
-
-      # Step 5: Authenticate Docker with AWS ECR
-      - name: Log in to Amazon ECR
+      # Step 4: Test if API is running
+      - name: Test FastAPI API
         run: |
-          aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com
-
-      # Step 6: Build and Push Docker Images for Backend and Updater
-      - name: Build and push Docker images
-        run: |
-          # Build backend image (without cache)
-          docker build --no-cache -t satellite-backend -f backend/Dockerfile ./backend 
-          docker tag satellite-backend:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest
-          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest
-
-          # Build updater image (without cache)
-          docker build --no-cache -t satellite-updater -f backend/Dockerfile.update ./backend
-          docker tag satellite-updater:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-updater:latest
-          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-updater:latest
-
-      # Step 7: Register New ECS Task Definition for Backend
-      - name: Register new ECS Task Definition for Backend
-        id: register_backend_task
-        run: |
-          NEW_BACKEND_TASK_DEF=$(aws ecs register-task-definition \
-            --family satellite-backend-task \
-            --network-mode awsvpc \
-            --requires-compatibilities FARGATE \
-            --cpu "256" \
-            --memory "512" \
-            --execution-role-arn arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole \
-            --task-role-arn arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole \
-            --container-definitions "[{
-              \"name\": \"satellite-backend\",
-              \"image\": \"${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-backend:latest\",
-              \"memory\": 512,
-              \"cpu\": 256,
-              \"essential\": true,
-              \"portMappings\": [{\"containerPort\": 8000, \"hostPort\": 8000, \"protocol\": \"tcp\"}],
-              \"environment\": [
-                {\"name\": \"DB_HOST\", \"value\": \"${{ secrets.DB_HOST }}\"},
-                {\"name\": \"DB_NAME\", \"value\": \"${{ secrets.DB_NAME }}\"},
-                {\"name\": \"DB_USER\", \"value\": \"${{ secrets.DB_USER }}\"},
-                {\"name\": \"DB_PASSWORD\", \"value\": \"${{ secrets.DB_PASSWORD }}\"},
-                {\"name\": \"DB_PORT\", \"value\": \"5432\"}
-              ],
-              \"logConfiguration\": {
-                \"logDriver\": \"awslogs\",
-                \"options\": {
-                  \"awslogs-group\": \"/aws/ecs/satellite-cluster\",
-                  \"awslogs-region\": \"us-east-2\",
-                  \"awslogs-stream-prefix\": \"ecs\"
-                }
-              }
-            }]" --query "taskDefinition.taskDefinitionArn" --output text)
-          echo "BACKEND_TASK_DEFINITION_ARN=${NEW_BACKEND_TASK_DEF}" >> $GITHUB_ENV
-
-        # Step 8: Register New ECS Task Definition for Satellite Updater
-      - name: Register new ECS Task Definition for Updater
-        id: register_updater_task
-        run: |
-          NEW_UPDATER_TASK_DEF=$(aws ecs register-task-definition \
-            --family satellite-updater-task \
-            --network-mode awsvpc \
-            --requires-compatibilities FARGATE \
-            --cpu "256" \
-            --memory "512" \
-            --execution-role-arn arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole \
-            --task-role-arn arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole \
-            --container-definitions "[{
-              \"name\": \"satellite-updater\",
-              \"image\": \"${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/satellite-updater:latest\",
-              \"memory\": 512,
-              \"cpu\": 256,
-              \"essential\": true,
-              \"command\": [\"python\", \"-c\", \"import sys; sys.path.append('/app'); from app.database import get_db_connection; from app.tle_processor import update_schema, update_satellite_data; conn = get_db_connection(); update_schema(conn); update_satellite_data(); conn.close()\"],
-              \"environment\": [
-                {\"name\": \"DB_HOST\", \"value\": \"${{ secrets.DB_HOST }}\"},
-                {\"name\": \"DB_NAME\", \"value\": \"${{ secrets.DB_NAME }}\"},
-                {\"name\": \"DB_USER\", \"value\": \"${{ secrets.DB_USER }}\"},
-                {\"name\": \"DB_PASSWORD\", \"value\": \"${{ secrets.DB_PASSWORD }}\"},
-                {\"name\": \"DB_PORT\", \"value\": \"5432\"}
-              ],
-              \"logConfiguration\": {
-                \"logDriver\": \"awslogs\",
-                \"options\": {
-                  \"awslogs-group\": \"/aws/ecs/satellite-cluster\",
-                  \"awslogs-region\": \"us-east-2\",
-                  \"awslogs-stream-prefix\": \"ecs\"
-                }
-              }
-            }]" --query "taskDefinition.taskDefinitionArn" --output text)
-          echo "UPDATER_TASK_DEFINITION_ARN=${NEW_UPDATER_TASK_DEF}" >> $GITHUB_ENV
-
-      # Step 9: Update ECS Service with New Backend Task Definition
-      - name: Deploy new backend task definition to ECS
-        run: |
-          aws ecs update-service \
-            --cluster satellite-cluster \
-            --service satellite-backend-service \
-            --task-definition $BACKEND_TASK_DEFINITION_ARN \
-            --force-new-deployment
-
-      # Step 10: Deploy New Satellite Updater Task
-      - name: Run Satellite Updater Task
-        run: |
-          aws ecs run-task \
-            --cluster satellite-cluster \
-            --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=['subnet-03ca2c44173fbf8d3','subnet-0593ff12f1ad4cd92','subnet-0e32111ad7d8d84ef'],securityGroups=['sg-0755968a8d3c86a81'],assignPublicIp='ENABLED'}" \
-            --task-definition $UPDATER_TASK_DEFINITION_ARN
-
-      # Step 11: Wait for Backend Deployment to Finish
-      - name: Wait for ECS Backend Service to be Stable
-        run: |
-          for i in {1..30}; do
-            STATUS=$(aws ecs describe-services \
-              --cluster satellite-cluster \
-              --services satellite-backend-service \
-              --query "services[0].deployments[0].rolloutState" --output text)
-            echo "Deployment Status: $STATUS"
-            if [ "$STATUS" == "COMPLETED" ]; then
-              echo "✅ Backend Deployment Successful!"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "❌ Backend Deployment Timed Out!"
-          exit 1
+          sleep 5  # Wait for API to start
+          curl http://127.0.0.1:8000/ || exit 1  # Check if API responds

@@ -1,13 +1,10 @@
-name: Update Satellite Data
+name: Update Satellite Data (GitHub Actions + Docker)
 
 on:
     schedule:
       - cron: "0 6 * * *"  # Runs every day at 6 AM UTC
     workflow_dispatch:  # Allows manual trigger
-    workflow_run:
-      workflows: ["Deploy Satellite Backend and Updater to AWS ECS"]  # Make sure the name matches deploy.yml
-      types:
-        - completed
+
 jobs:
   update_satellites:
     runs-on: ubuntu-latest
@@ -16,86 +13,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
-      - name: Get latest task definition ARN
-        id: get_task_arn
+      # Build and Run Updater Inside Docker
+      - name: Build and Run Updater in Docker
         run: |
-            TASK_ARN=$(aws ecs describe-task-definition \
-              --task-definition satellite-updater-task \
-              --region us-east-2 \
-              --query "taskDefinition.taskDefinitionArn" --output text)
-        
-            echo "Latest Task Definition: $TASK_ARN"
-            echo "TASK_ARN=$TASK_ARN" >> $GITHUB_ENV
-        
-      - name: Run Satellite Updater Task
-        run: |
-            aws ecs run-task \
-              --cluster satellite-cluster \
-              --launch-type FARGATE \
-              --network-configuration "awsvpcConfiguration={subnets=['subnet-03ca2c44173fbf8d3','subnet-0593ff12f1ad4cd92','subnet-0e32111ad7d8d84ef'],securityGroups=['sg-0755968a8d3c86a81'],assignPublicIp='ENABLED'}" \
-              --task-definition $TASK_ARN
-        
-      - name: Fetch Satellite Updater Logs
-        run: |
-                LOG_STREAM_PREFIX="ecs/satellite-updater/"
-                LOG_GROUP="/aws/ecs/satellite-cluster"
-      
-                # Wait for log stream to be available (max 3 minutes)
-                for i in {1..36}; do
-                  LOG_STREAM=$(aws logs describe-log-streams \
-                    --log-group-name "$LOG_GROUP" \
-                    --region us-east-2 \
-                    --query "logStreams[?starts_with(logStreamName, '$LOG_STREAM_PREFIX')].[logStreamName, lastEventTimestamp] | sort_by(@, &[-1]) | [-1][0]" \
-                    --output text)
-      
-                  if [[ -n "$LOG_STREAM" && "$LOG_STREAM" != "None" ]]; then
-                    echo "📜 Found log stream: $LOG_STREAM"
-                    break
-                  fi
-      
-                  echo "⏳ Waiting for log stream to be available..."
-                  sleep 5
-                done
-      
-                if [[ -z "$LOG_STREAM" || "$LOG_STREAM" == "None" ]]; then
-                  echo "❌ No log stream found for satellite-updater!"
-                  exit 1
-                fi
-      
-                # Wait until log stream has events (max 3 minutes)
-                for i in {1..36}; do
-                  LOG_COUNT=$(aws logs get-log-events \
-                    --log-group-name "$LOG_GROUP" \
-                    --log-stream-name "$LOG_STREAM" \
-                    --limit 1 \
-                    --region us-east-2 --query "events[*].message" --output text)
-      
-                  if [[ -n "$LOG_COUNT" && "$LOG_COUNT" != "None" ]]; then
-                    echo "✅ Logs found! Fetching logs now."
-                    break
-                  fi
-      
-                  echo "⏳ Waiting for logs to be available in the stream..."
-                  sleep 5
-                done
-      
-                if [[ -z "$LOG_COUNT" || "$LOG_COUNT" == "None" ]]; then
-                  echo "❌ No logs found in stream $LOG_STREAM!"
-                  exit 1
-                fi
-      
-                # Retrieve last 50 log entries
-                echo "📜 Fetching logs from: $LOG_STREAM"
-                aws logs get-log-events \
-                  --log-group-name "$LOG_GROUP" \
-                  --log-stream-name "$LOG_STREAM" \
-                  --limit 50 \
-                  --region us-east-2 --query "events[*].message"
-      
+          docker build -t satellite-updater -f backend/Dockerfile.update ./backend
+          docker run --rm \
+            -e DB_HOST=${{ secrets.DB_HOST }} \
+            -e DB_NAME=${{ secrets.DB_NAME }} \
+            -e DB_USER=${{ secrets.DB_USER }} \
+            -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            -e DB_PORT=5432 \
+            satellite-updater
