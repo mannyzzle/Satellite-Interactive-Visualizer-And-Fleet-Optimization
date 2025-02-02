@@ -167,11 +167,19 @@ def update_satellite_data():
 
     for sat in tqdm(satellites, desc="Updating Satellite Data"):
         params = compute_orbital_params(sat["line1"], sat["line2"])
-        
+
         if params:
             try:
                 # 🛠 Ensure norad_number is NOT NULL (set to -1 if missing)
                 norad = params["norad_number"] if params["norad_number"] is not None else -1
+                unique_name = sat["name"]
+
+                # ✅ Check if the name already exists
+                cursor.execute("SELECT name FROM satellites WHERE name = %s;", (sat["name"],))
+                existing = cursor.fetchone()
+
+                if existing:
+                    unique_name = f"{sat['name']}-{norad}" if norad != -1 else f"{sat['name']}-untracked"
 
                 cursor.execute("""
                     INSERT INTO satellites (
@@ -200,45 +208,19 @@ def update_satellite_data():
                         bstar = EXCLUDED.bstar,
                         rev_num = EXCLUDED.rev_num;
                 """, (
-                    sat["name"], sat["line1"], sat["line2"], norad, params["intl_designator"],
+                    unique_name, sat["line1"], sat["line2"], norad, params["intl_designator"],
                     params["ephemeris_type"], params["inclination"], params["eccentricity"], params["period"],
                     params["perigee"], params["apogee"], params["epoch"], params["raan"], params["arg_perigee"],
                     params["mean_motion"], params["semi_major_axis"], params["velocity"], params["orbit_type"],
                     params["bstar"], params["rev_num"]
                 ))
+                
                 updated_count += 1  # Count successful updates
-
+                
             except psycopg2.errors.UniqueViolation as e:
-                if "satellites_name_key" in str(e):
-                    # 🛠 If name is the conflict, append a unique identifier
-                    unique_name = f"{sat['name']}-{norad}" if norad != -1 else f"{sat['name']}-untracked"
-                    try:
-                        cursor.execute("""
-                            INSERT INTO satellites (
-                                name, tle_line1, tle_line2, norad_number, intl_designator, ephemeris_type,
-                                inclination, eccentricity, period, perigee, apogee, epoch, raan, arg_perigee,
-                                mean_motion, semi_major_axis, velocity, orbit_type, bstar, rev_num
-                            )
-                            VALUES (
-                                %s, %s, %s, %s, %s, %s,
-                                %s, %s, %s, %s, %s, %s, %s, %s,
-                                %s, %s, %s, %s, %s, %s
-                            );
-                        """, (
-                            unique_name, sat["line1"], sat["line2"], norad, params["intl_designator"],
-                            params["ephemeris_type"], params["inclination"], params["eccentricity"], params["period"],
-                            params["perigee"], params["apogee"], params["epoch"], params["raan"], params["arg_perigee"],
-                            params["mean_motion"], params["semi_major_axis"], params["velocity"], params["orbit_type"],
-                            params["bstar"], params["rev_num"]
-                        ))
-                        updated_count += 1  # Count successful inserts
-                    except psycopg2.errors.UniqueViolation:
-                        skipped_count += 1
-                        print(f"⚠️ Skipping duplicate satellite: {sat['name']} (NORAD {norad})")
-                else:
-                    skipped_count += 1
-                    print(f"❌ Constraint error for {sat['name']} (NORAD {norad}): {e}")
-                    conn.rollback()
+                skipped_count += 1
+                print(f"⚠️ Skipping duplicate: {sat['name']} (NORAD {norad}) → {e}")
+                conn.rollback()
 
     conn.commit()
     cursor.close()
