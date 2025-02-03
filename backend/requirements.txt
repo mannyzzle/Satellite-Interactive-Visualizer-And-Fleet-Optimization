@@ -10,7 +10,7 @@ httpx==0.28.1
 idna==3.10
 jiter==0.8.2
 jplephem==2.22
-numpy==2.0.2
+numpy<2.0
 openai==1.60.2
 psycopg2-binary==2.9.10
 pydantic==2.10.6
