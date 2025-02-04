@@ -5,6 +5,11 @@ from app.database import get_db_connection
 
 router = APIRouter()
 
+from fastapi import APIRouter, HTTPException, Query
+from app.database import get_db_connection
+
+router = APIRouter()
+
 @router.get("/")
 def get_all_satellites(
     page: int = Query(1, ge=1),
@@ -27,9 +32,13 @@ def get_all_satellites(
         print(f"✅ Total satellites found: {total_count}")
         print(f"🔍 Fetching satellites with limit={limit} and offset={offset}...")
 
-        # ✅ Add latitude & longitude
+        # ✅ Retrieve all columns
         cursor.execute("""
-            SELECT id, name, norad_number, orbit_type, inclination, velocity, latitude, longitude
+            SELECT id, name, norad_number, orbit_type, inclination, velocity, 
+                   latitude, longitude, bstar, rev_num, ephemeris_type, 
+                   eccentricity, period, perigee, apogee, epoch, raan, 
+                   arg_perigee, mean_motion, semi_major_axis, tle_line1, 
+                   tle_line2, intl_designator
             FROM satellites 
             ORDER BY id
             LIMIT %s OFFSET %s
@@ -50,8 +59,23 @@ def get_all_satellites(
                     "orbit_type": sat["orbit_type"],
                     "inclination": sat["inclination"],
                     "velocity": sat["velocity"],
-                    "latitude": sat["latitude"],  # ✅ Now included
-                    "longitude": sat["longitude"],  # ✅ Now included
+                    "latitude": sat["latitude"],
+                    "longitude": sat["longitude"],
+                    "bstar": sat["bstar"],
+                    "rev_num": sat["rev_num"],
+                    "ephemeris_type": sat["ephemeris_type"],
+                    "eccentricity": sat["eccentricity"],
+                    "period": sat["period"],
+                    "perigee": sat["perigee"],
+                    "apogee": sat["apogee"],
+                    "epoch": sat["epoch"],
+                    "raan": sat["raan"],
+                    "arg_perigee": sat["arg_perigee"],
+                    "mean_motion": sat["mean_motion"],
+                    "semi_major_axis": sat["semi_major_axis"],
+                    "tle_line1": sat["tle_line1"],
+                    "tle_line2": sat["tle_line2"],
+                    "intl_designator": sat["intl_designator"]
                 }
                 for sat in satellites
             ]
@@ -66,7 +90,6 @@ def get_all_satellites(
         conn.close()
 
 
-
 @router.get("/{satellite_name}")
 def get_satellite_by_name(satellite_name: str):
     """
@@ -75,8 +98,15 @@ def get_satellite_by_name(satellite_name: str):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Fetch satellite by name
-    cursor.execute("SELECT * FROM satellites WHERE name = %s", (satellite_name,))
+    cursor.execute("""
+        SELECT id, name, norad_number, orbit_type, inclination, velocity, 
+               latitude, longitude, bstar, rev_num, ephemeris_type, 
+               eccentricity, period, perigee, apogee, epoch, raan, 
+               arg_perigee, mean_motion, semi_major_axis, tle_line1, 
+               tle_line2, intl_designator
+        FROM satellites WHERE name = %s
+    """, (satellite_name,))
+    
     satellite = cursor.fetchone()
 
     cursor.close()
@@ -92,6 +122,21 @@ def get_satellite_by_name(satellite_name: str):
         "orbit_type": satellite["orbit_type"],
         "inclination": satellite["inclination"],
         "velocity": satellite["velocity"],
-        "latitude": satellite["latitude"],  # ✅ Now included
-        "longitude": satellite["longitude"]
+        "latitude": satellite["latitude"],
+        "longitude": satellite["longitude"],
+        "bstar": satellite["bstar"],
+        "rev_num": satellite["rev_num"],
+        "ephemeris_type": satellite["ephemeris_type"],
+        "eccentricity": satellite["eccentricity"],
+        "period": satellite["period"],
+        "perigee": satellite["perigee"],
+        "apogee": satellite["apogee"],
+        "epoch": satellite["epoch"],
+        "raan": satellite["raan"],
+        "arg_perigee": satellite["arg_perigee"],
+        "mean_motion": satellite["mean_motion"],
+        "semi_major_axis": satellite["semi_major_axis"],
+        "tle_line1": satellite["tle_line1"],
+        "tle_line2": satellite["tle_line2"],
+        "intl_designator": satellite["intl_designator"]
     }

@@ -1,3 +1,6 @@
+/* src/index.css */
+
+
 /* Tailwind Directives */
 @tailwind base;
 @tailwind components;
@@ -17,6 +20,7 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
 a {
   font-weight: 500;
   color: #646cff;
@@ -28,10 +32,18 @@ a:hover {
 
 body {
   margin: 0;
+  width: 100vw; /* ✅ Fullscreen width */
+  height: 100vh; /* ✅ Fullscreen height */
   display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  flex-direction: column;
+  overflow: hidden; /* ✅ Prevents scrollbars */
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 h1 {
@@ -58,15 +70,26 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
+/* 🌍 Force Three.js Canvas to Stay Below Navbar */
+canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  position: absolute;
+  top: 50px; /* Ensures navbar isn't blocked */
+}
+
+/* 📌 Sidebar Styling */
+.sidebar {
+  background-color: rgba(25, 25, 25, 0.95);
+  padding: 10px;
+  overflow-y: auto;
+  z-index: 50; /* Ensure Sidebar is Above Canvas */
+}
+
+/* 📌 Responsive Sidebar */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 100% !important; /* 📱 Full Width on Mobile */
   }
 }
