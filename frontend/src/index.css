@@ -6,7 +6,6 @@
 @tailwind components;
 @tailwind utilities;
 
-
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -22,75 +21,105 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
 body {
   margin: 0;
-  width: 100vw; /* ✅ Fullscreen width */
-  height: 100vh; /* ✅ Fullscreen height */
+  width: 100vw;
+  min-height: 150vh; /* ✅ Increase height for more scrolling space */
   display: flex;
   flex-direction: column;
-  overflow: hidden; /* ✅ Prevents scrollbars */
+  overflow-x: hidden; /* ✅ Prevents horizontal scroll */
+  overflow-y: auto; /* ✅ Allows vertical scrolling */
 }
 
 #root {
   width: 100%;
-  height: 100%;
+  min-height: 150vh; /* ✅ Expand root container height */
   display: flex;
   flex-direction: column;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+/* 🌍 Fixed 3D UI at the Top */
+.canvas-container {
+  position: fixed;
+  top: 50px; /* ✅ Navbar height */
+  left: 0;
+  width: 100%;
+  height: 70vh; /* ✅ Limits height so text can scroll below */
+  z-index: 10;
+  background: transparent;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-/* 🌍 Force Three.js Canvas to Stay Below Navbar */
-canvas {
-  display: block;
-  width: 100% !important;
-  height: 100% !important;
-  position: absolute;
-  top: 50px; /* Ensures navbar isn't blocked */
-}
-
-/* 📌 Sidebar Styling */
+/* 📌 Sidebar - Fixed on the Left */
 .sidebar {
+  position: fixed;
+  top: 50px; /* ✅ Below navbar */
+  left: 0;
+  width: 300px;
+  height: calc(100vh - 50px); /* ✅ Full height minus navbar */
   background-color: rgba(25, 25, 25, 0.95);
   padding: 10px;
   overflow-y: auto;
-  z-index: 50; /* Ensure Sidebar is Above Canvas */
+  z-index: 50;
 }
 
-/* 📌 Responsive Sidebar */
+/* 📜 Scrollable Content Below the 3D UI */
+.scrollable-content {
+  margin-top: 75vh; /* ✅ Push it below the 3D UI */
+  padding: 20px;
+  width: 100%;
+  height: 100vh; /* ✅ Increase content area */
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+}
+
+/* 📌 Fixed Bottom Info Box */
+.info-box {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: rgba(0, 0, 0, 0.9);
+  color: yellow;
+  padding: 10px;
+  z-index: 50;
+}
+
+/* ✅ Keep Navbar on Top */
+nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 50px;
+  background-color: #1a1a1a;
+  color: white;
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  z-index: 100;
+}
+
+/* 📌 Sidebar Toggle Button */
+.sidebar-toggle {
+  position: absolute;
+  top: 50%;
+  left: 300px;
+  transform: translateY(-50%);
+  background: #333;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  z-index: 60;
+}
+
+/* ✅ Responsive Adjustments */
 @media (max-width: 768px) {
   .sidebar {
-    width: 100% !important; /* 📱 Full Width on Mobile */
+    width: 100% !important;
+  }
+  .sidebar-toggle {
+    left: auto;
+    right: 10px;
   }
 }

@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import Navbar from "../components/Navbar";  // ✅ Ensure correct path
+
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { fetchSatellites } from "../api/satelliteService";
@@ -11,6 +13,7 @@ const nightTexture = "/assets/earth_night.jpg";
 const satelliteModelPath = "/assets/satellite.glb";
 
 export default function Home() {
+  const orbitPathsRef = useRef([]); // 🛰 Track all orbit paths
   const sceneRef = useRef(null);  // ✅ Store scene reference
   const selectedPointerRef = useRef(null); // 🔼 Arrow Pointer
   const cameraRef = useRef(null);  // Stores camera
@@ -21,16 +24,8 @@ export default function Home() {
   const [selectedSatellite, setSelectedSatellite] = useState(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1); // 🚀 Current page of satellites
-  const satellitesPerPage = 50; // 🌍 Number of satellites per page
-
-
-
-  
-
-  // ✅ Add the missing state here
   const [searchQuery, setSearchQuery] = useState("");  // 🔍 For filtering satellites
   const [sidebarOpen, setSidebarOpen] = useState(true); // 📌 Sidebar toggle state
-
   useEffect(() => {
     console.log("📌 Sidebar State Updated:", sidebarOpen);
   }, [sidebarOpen]);
@@ -83,10 +78,36 @@ export default function Home() {
     return new THREE.Vector3(x / 1000, y / 1000, z / 1000); // Scale down for visualization
   }
 
+
+
+  function animateCameraToSatellite(targetPosition) {
+    if (!cameraRef.current) return;
+  
+    const startPos = cameraRef.current.position.clone();
+    const targetPos = targetPosition.clone().multiplyScalar(1.5); // Move slightly away for visibility
+  
+    let t = 0;
+    function moveCamera() {
+      t += 0.05; // Adjust speed here
+      cameraRef.current.position.lerpVectors(startPos, targetPos, t);
+      cameraRef.current.lookAt(targetPosition);
+  
+      if (t < 1) {
+        requestAnimationFrame(moveCamera);
+      }
+    }
+  
+    moveCamera();
+  }
+  
+
+
+
+
   function focusOnSatellite(sat) {
     if (!sat) return;
   
-    console.log('🚀 Focusing on satellite: ${sat.name} (NORAD: ${sat.norad_number})');
+    console.log(`🚀 Focusing on satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
   
     setSelectedSatellite(sat); // ✅ Store new selected satellite
     localStorage.setItem("selectedSatellite", JSON.stringify(sat)); // ✅ Persist selection across refresh
@@ -113,44 +134,30 @@ export default function Home() {
     }
   
     // ✅ Create a new marker for the selected satellite
-    const markerGeometry = new THREE.RingGeometry(0.2, 0.4, 32);
+    const markerGeometry = new THREE.RingGeometry(0.3, 0.35, 32);
     const markerMaterial = new THREE.MeshBasicMaterial({
-      color: 0xff0000, // 🔴 Red selection ring
+      color: 0xffff99, // LIGHT selection ring
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.5,
     });
   
     const marker = new THREE.Mesh(markerGeometry, markerMaterial);
     marker.position.copy(satModel.position);
     marker.lookAt(new THREE.Vector3(0, 0, 0));
   
-    // ✅ Add the marker to the scene (not as a child of the satellite)
+    // ✅ Store reference to marker & satellite
     scene.add(marker);
     selectedPointerRef.current = marker;
+    selectedPointerRef.current.userData.followingSatellite = sat.norad_number; // 🛰 Attach it to the satellite
   
     console.log("📍 New marker added at:", selectedPointerRef.current.position);
-    console.log("🛰️ Marker Parent Object:", selectedPointerRef.current.parent);
   
-    // ✅ Smooth Camera Centering
-    const targetPosition = satModel.position.clone();
-    cameraTargetRef.current = targetPosition.clone().multiplyScalar(1.2);
-  
-    function animateCamera() {
-      if (!cameraTargetRef.current) return;
-  
-      cameraRef.current.position.lerp(cameraTargetRef.current, 0.08);
-      cameraRef.current.lookAt(targetPosition);
-  
-      if (cameraRef.current.position.distanceTo(cameraTargetRef.current) > 0.1) {
-        requestAnimationFrame(animateCamera);
-      } else {
-        cameraTargetRef.current = null;
-      }
-    }
-  
-    animateCamera();
+    // ✅ Smoothly Move Camera to Satellite
+    animateCameraToSatellite(satModel.position);
   }
+  
+  
   
   
   
@@ -206,11 +213,45 @@ export default function Home() {
   
   
 
+// 🛰 Function to Generate Orbit Path
+const createOrbitPath = (satellite) => {
+  if (!satellite || !satellite.period) return null;
+
+  const numPoints = 100;
+  const orbitPoints = [];
+
+  for (let i = 0; i <= numPoints; i++) {
+    const timeOffset = (i / numPoints) * satellite.period * 60;
+    const position = computeSatellitePosition(satellite, Date.now() / 1000 + timeOffset);
+    
+    if (!position) continue; // Avoid errors with undefined positions
+
+    orbitPoints.push(new THREE.Vector3(position.x, position.y, position.z));
+  }
+
+  if (orbitPoints.length === 0) return null;
+
+  const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
+  const orbitMaterial = new THREE.LineBasicMaterial({ color: 0x89CFF0, opacity: 0.5, transparent: true });
+
+  const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
+
+  // ✅ Mark orbits as non-pickable
+  orbitLine.userData.ignoreRaycast = true;
+
+  return orbitLine;
+};
+
+
+  
+
+
+
 
 // 🛰 Function to Load Satellite Models
 const loadSatelliteModel = (satellite) => {
   const loader = new GLTFLoader();
-  
+
   loader.load(
     satelliteModelPath,
     (gltf) => {
@@ -229,14 +270,14 @@ const loadSatelliteModel = (satellite) => {
       // ✅ Attach metadata
       satelliteModel.userData = satellite;
 
-      // ✅ Store satellite model
+      // ✅ Store satellite model in reference
       satelliteObjectsRef.current[satellite.norad_number] = satelliteModel;
-      
-      // ✅ Add to scene (Make sure scene exists)
+
+      // ✅ Add satellite model to scene
       if (sceneRef.current) {
         sceneRef.current.add(satelliteModel);
       }
-      
+
       console.log(`📡 Satellite model added: ${satellite.name} (${satellite.norad_number})`);
     },
     undefined,
@@ -246,14 +287,20 @@ const loadSatelliteModel = (satellite) => {
   );
 };
 
+
+
+
+
+
 // ✅ 1️⃣ Fetch & Load Satellite Data (Reset Satellites & Marker)
 useEffect(() => {
   setLoading(true);
-  setSatellites([]); // 🚀 Reset satellites before fetching new batch
+  setSatellites([]); // 🚀 Reset satellites
   setSelectedSatellite(null); // 🔴 Reset selected satellite
   resetMarker(); // 🔄 Reset marker
+  resetOrbits(); // 🔄 Reset orbits
 
-  fetchSatellites(page, 50).then((data) => {
+  fetchSatellites(page, 100).then((data) => {
     if (data && data.satellites) {
       console.log("🛰️ Satellites loaded:", data.satellites.length);
       setSatellites(data.satellites);
@@ -261,6 +308,42 @@ useEffect(() => {
     setLoading(false);
   });
 }, [page]); // ✅ Runs when page changes
+
+
+// ✅ Remove all orbit paths before adding new ones
+const resetOrbits = () => {
+  if (orbitPathsRef.current.length > 0) {
+    orbitPathsRef.current.forEach((orbit) => {
+      if (sceneRef.current) {
+        sceneRef.current.remove(orbit);
+      }
+    });
+    orbitPathsRef.current = []; // Clear the reference
+    console.log("🗑️ Cleared previous orbits!");
+  }
+};
+
+
+
+const addOrbitPaths = () => {
+  resetOrbits(); // 🚀 Clear old orbits first
+
+  Object.values(satelliteObjectsRef.current).forEach((satelliteModel) => {
+    if (!satelliteModel.userData) return;
+
+    const orbitLine = createOrbitPath(satelliteModel.userData);
+    if (orbitLine) {
+      if (sceneRef.current) {
+        sceneRef.current.add(orbitLine);
+      }
+      orbitPathsRef.current.push(orbitLine); // ✅ Track this orbit
+    }
+  });
+
+  console.log(`🛰️ Added ${orbitPathsRef.current.length} orbit paths.`);
+};
+
+
 
 
 // ✅ 2️⃣ Function to Reset Marker
@@ -275,6 +358,7 @@ function resetMarker() {
 }
 
 // ✅ 3️⃣ Load Satellite Models (Remove Old Models & Reset Marker)
+
 useEffect(() => {
   if (satellites.length === 0) return;
 
@@ -291,8 +375,12 @@ useEffect(() => {
   resetMarker(); // 🔄 Ensure marker is removed
 
   satellites.forEach((sat) => loadSatelliteModel(sat));
-}, [satellites]); // ✅ Runs when satellites update
 
+  // 🔄 Wait for models to load, then add orbits
+  setTimeout(() => {
+    addOrbitPaths();
+  }, 1000);
+}, [satellites]); // ✅ Runs when satellites update
 
 
 // ✅ 4 Main Scene Setup
@@ -346,7 +434,7 @@ useEffect(() => {
   scene.add(globe);
 
   // 🌞 Lighting
-  const light = new THREE.DirectionalLight(0xffffff, 1.5);
+  const light = new THREE.DirectionalLight(0xffffff, 4.5);
   light.position.set(200, 50, 0);
   scene.add(light);
 
@@ -360,7 +448,7 @@ useEffect(() => {
   controls.dampingFactor = 0.1;
   controls.rotateSpeed = 0.8;
   controls.minDistance = 3;
-  controls.maxDistance = 1200;
+  controls.maxDistance = 100;
   camera.position.set(0, 3, 5);
 
   // 🎯 Click Detection for Satellites
@@ -370,23 +458,28 @@ useEffect(() => {
   window.addEventListener("click", (event) => {
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-    raycaster.setFromCamera(mouse, camera);
-
-    const intersects = raycaster.intersectObjects(scene.children, true);
-    const clickedSatellite = intersects.find((obj) => obj.object.userData)?.object.userData;
-
+    raycaster.setFromCamera(mouse, cameraRef.current);
+  
+    const intersects = raycaster.intersectObjects(sceneRef.current.children, true);
+  
+    const clickedSatellite = intersects.find((obj) => {
+      return obj.object.userData && !obj.object.userData.ignoreRaycast;
+    })?.object.userData;
+  
     if (clickedSatellite) {
+      console.log(`🛰 Satellite clicked: ${clickedSatellite.name} (NORAD: ${clickedSatellite.norad_number})`);
       setSelectedSatellite(clickedSatellite);
     }
   });
+  
 
   // 🔄 Animate Earth Rotation
   const animate = () => {
     requestAnimationFrame(animate);
     globe.rotation.y += 0.0002;
-
+  
     const time = Date.now() / 1000;
-
+  
     // 🔄 Update satellite positions
     Object.values(satelliteObjectsRef.current).forEach((satelliteModel) => {
       if (satelliteModel.userData) {
@@ -397,15 +490,26 @@ useEffect(() => {
         }
       }
     });
-
+  
+    // ✅ Move the marker with the satellite
+    if (selectedPointerRef.current && selectedPointerRef.current.userData.followingSatellite) {
+      const followedSat = satelliteObjectsRef.current[selectedPointerRef.current.userData.followingSatellite];
+  
+      if (followedSat) {
+        selectedPointerRef.current.position.copy(followedSat.position);
+        selectedPointerRef.current.lookAt(new THREE.Vector3(0, 0, 0));
+      }
+    }
+  
     // ✅ Ensure the camera always looks at the selected satellite
     if (selectedSatellite && satelliteObjectsRef.current[selectedSatellite.norad_number]) {
       cameraRef.current.lookAt(satelliteObjectsRef.current[selectedSatellite.norad_number].position);
     }
-
+  
     controls.update();
     renderer.render(scene, cameraRef.current);
   };
+  
 
   animate();
 
@@ -418,126 +522,149 @@ useEffect(() => {
 
 
 return (
-  <div className="flex h-screen w-screen">
-    
-    {/* 🌍 Sidebar Container */}
-    <div className="relative">
-      {/* 📌 Sidebar Panel */}
-      <div
-        className={`fixed top-0 left-0 h-full bg-gray-900 text-white p-4 overflow-y-auto shadow-lg transition-transform duration-300 ease-in-out w-64 md:w-1/4 z-50 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        {/* 📌 Sidebar Header */}
-        <h2 className="text-lg font-bold mb-2 text-center">Satellite List</h2>
+  <div className="flex flex-col min-h-screen w-screen overflow-hidden">
+    {/* 📌 Navbar - Stays Fixed at the Top */}
+    <Navbar />
 
-        {/* 🔍 Search Input */}
-        <input
-          type="text"
-          placeholder="Search satellite..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full p-2 mb-2 text-black rounded-md"
-        />
+    {/* 🌍 Main Layout - Sidebar + 3D Scene + Scrollable Content */}
+    <div className="flex flex-1">
+      
+      {/* 📌 Sidebar - Stays Fixed between Navbar & Bottom Info */}
+      <div className="relative">
+        <div
+          className={`fixed top-16 left-0 h-[calc(100vh-8rem)] bg-gray-900 text-white p-4 overflow-y-auto shadow-lg transition-transform duration-300 ease-in-out w-64 md:w-1/4 z-40 ${
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <h2 className="text-lg font-bold mb-2 text-center">Satellite List</h2>
 
-        {/* 🛰️ Satellite List */}
-        {loading ? (
-          <p className="text-center text-gray-400">Loading...</p>
-        ) : filteredSatellites.length > 0 ? (
-          <ul className="space-y-2">
-            {filteredSatellites.map((sat) => (
-              <li
-                key={sat.norad_number}
-                className={`cursor-pointer p-3 rounded-md text-center border border-gray-700 ${
-                  selectedSatellite?.norad_number === sat.norad_number
-                    ? "bg-blue-500 text-white border-blue-600"
-                    : "bg-gray-700 hover:bg-gray-600"
-                }`}
-                onClick={() => {
-                  console.log(`📡 Selecting satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
-                  focusOnSatellite(sat);
-                }}
-              >
-                <span className="block w-full">{sat.name}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-center text-gray-400">No satellites found.</p>
-        )}
+          {/* 🔍 Search Input */}
+          <input
+            type="text"
+            placeholder="Search satellites..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full p-2 mb-2 text-black rounded-md"
+          />
 
-        {/* 🚀 Satellite Navigation */}
-        <div className="flex justify-between items-center mt-4">
-          {/* ⬅️ Previous Page */}
-          <button
-            onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
-            disabled={page === 1}
-            className={`px-3 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-              page === 1 ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-          >
-            ← Prev
-          </button>
+          {/* 🛰️ Satellite List */}
+          {loading ? (
+            <p className="text-center text-gray-400">Loading...</p>
+          ) : filteredSatellites.length > 0 ? (
+            <ul className="space-y-2">
+              {filteredSatellites.map((sat) => (
+                <li
+                  key={sat.norad_number}
+                  className={`cursor-pointer p-3 rounded-md text-center border border-gray-700 ${
+                    selectedSatellite?.norad_number === sat.norad_number
+                      ? "bg-blue-500 text-white border-blue-600"
+                      : "bg-gray-700 hover:bg-gray-600"
+                  }`}
+                  onClick={() => {
+                    console.log(`📡 Selecting satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
+                    focusOnSatellite(sat);
+                  }}
+                >
+                  <span className="block w-full">{sat.name}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-center text-gray-400">No satellites found.</p>
+          )}
 
-          {/* 📄 Page Info */}
-          <span className="text-sm text-gray-300">Page {page}</span>
+          {/* 🚀 Satellite Navigation */}
+          <div className="flex justify-between items-center mt-4">
+            <button
+              onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+              disabled={page === 1}
+              className={`px-3 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
+                page === 1 ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+            >
+              ← Prev
+            </button>
 
-          {/* ➡️ Next Page */}
-          <button
-            onClick={() => setPage((prev) => prev + 1)}
-            className="px-3 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all"
-          >
-            Next →
-          </button>
+            <span className="text-sm text-gray-300">Page {page}</span>
+
+            <button
+              onClick={() => setPage((prev) => prev + 1)}
+              className="px-3 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all"
+            >
+              Next →
+            </button>
+          </div>
+        </div>
+
+        {/* 📌 Sidebar Toggle Button - Stays Attached to Sidebar */}
+        <button
+          onClick={() => setSidebarOpen((prev) => !prev)}
+          className={`fixed top-1/2 transform -translate-y-1/2 bg-gray-800 text-white px-3 py-2 rounded-r-md shadow-md hover:bg-gray-700 transition-all duration-300 z-50 ${
+            sidebarOpen ? "left-[16rem] md:left-1/4" : "left-0"
+          }`}
+        >
+          {sidebarOpen ? "←" : "→"}
+        </button>
+      </div>
+
+      {/* 🌍 Scrollable Content Wrapper (Includes 3D UI & Text Below) */}
+      <div className="relative flex-1 overflow-y-auto min-h-[200vh]">
+        
+        {/* 🛰️ 3D UI - NOT FIXED, ALLOWS SCROLLING */}
+        <div className="relative w-full h-[95vh]">
+          <div ref={mountRef} className="absolute top-0 left-0 w-full h-full" />
+        </div>
+
+        {/* 📜 Scrollable Content Below the 3D UI */}
+        <div className="relative z-20 mt-6 p-6 bg-gray-800 text-white rounded-lg shadow-lg mx-auto max-w-3xl">
+          <h2 className="text-2xl font-bold">About the Satellite Tracker</h2>
+          <p className="mt-4">
+            This satellite tracker allows you to visualize real-time satellite movements and orbital paths.
+          </p>
+        </div>
+
+        <div className="relative z-20 mt-8 p-6 bg-gray-800 text-white rounded-lg shadow-lg mx-auto max-w-3xl">
+          <h2 className="text-2xl font-bold">How It Works</h2>
+          <p className="mt-4">
+            The satellites update dynamically based on real-time orbital calculations, and the 3D visualization keeps
+            track of their motion using Three.js.
+          </p>
+        </div>
+
+        <div className="relative z-20 mt-8 p-6 bg-gray-800 text-white rounded-lg shadow-lg mx-auto max-w-3xl">
+          <h2 className="text-2xl font-bold">Future Enhancements</h2>
+          <p className="mt-4">
+            We are planning to integrate more advanced analytics, machine learning predictions for satellite trajectories,
+            and real-time weather data overlays.
+          </p>
         </div>
       </div>
 
-      {/* 📌 Toggle Button - Stays Attached to Sidebar */}
-      <button
-        onClick={() => {
-          console.log("🛠️ Toggling Sidebar...");
-          setSidebarOpen((prev) => !prev);
-        }}
-        className={`absolute top-1/2 transform -translate-y-1/2 bg-gray-800 text-white px-3 py-2 rounded-r-md shadow-md hover:bg-gray-700 transition-all duration-300 z-[70] ${
-          sidebarOpen ? "left-[16rem] md:left-1/4" : "left-0"
-        }`}
-      >
-        {sidebarOpen ? "←" : "→"}
-      </button>
     </div>
 
-    {/* 🌍 3D Scene */}
-    <div className="relative flex-1">
-      <div ref={mountRef} className="absolute top-0 left-0 w-full h-full z-10" />
-
-      {/* 🛰️ Satellite Details Box */}
-      {selectedSatellite && (
-        <div
-          className={`absolute bottom-0 bg-gray-900 text-yellow-300 p-3 shadow-lg text-xs border-t border-gray-700 flex flex-col items-center h-24 z-[60] transition-all duration-300 ease-in-out ${
-            sidebarOpen ? "left-64 md:left-1/4 w-[calc(100%-16rem)]" : "left-0 w-full"
-          }`}
-        >
-          {/* 🚀 Name & Epoch */}
-          <div className="flex flex-col items-center w-full text-center pb-1">
-            <span className="font-bold text-yellow-400 text-sm">{selectedSatellite.name}</span>
-            <span className="text-yellow-500 text-xs">
-              <strong>Epoch:</strong> {new Date(selectedSatellite.epoch).toLocaleString()}
-            </span>
-          </div>
-
-          {/* 📊 Satellite Info */}
-          <div className="flex flex-wrap justify-center items-center space-x-4 overflow-x-auto whitespace-nowrap w-full px-4 text-center">
-            <span><strong>NORAD:</strong> {selectedSatellite.norad_number}</span>
-            <span><strong>Orbit:</strong> {selectedSatellite.orbit_type}</span>
-            <span><strong>Velocity:</strong> {selectedSatellite.velocity} km/s</span>
-            <span><strong>Inclination:</strong> {selectedSatellite.inclination}°</span>
-            <span><strong>Latitude:</strong> {selectedSatellite.latitude?.toFixed(4)}°</span>
-            <span><strong>Longitude:</strong> {selectedSatellite.longitude?.toFixed(4)}°</span>
-            <span><strong>Apogee:</strong> {selectedSatellite.apogee} km</span>
-            <span><strong>Perigee:</strong> {selectedSatellite.perigee} km</span>
-          </div>
+    {/* 🛰️ Satellite Info Box - Stays Fixed at the Bottom */}
+    {selectedSatellite && (
+      <div className="fixed bottom-0 left-0 w-full bg-gray-900 text-yellow-300 p-3 shadow-lg text-xs border-t border-gray-700 flex flex-col items-center h-24 z-[60]">
+        <div className="flex flex-col items-center w-full text-center pb-1">
+          <span className="font-bold text-yellow-400 text-sm">{selectedSatellite.name}</span>
+          <span className="text-yellow-500 text-xs">
+            <strong>Last Update:</strong> {new Date(selectedSatellite.epoch).toLocaleString()}
+          </span>
         </div>
-      )}
-    </div>
+
+        <div className="flex flex-wrap justify-center items-center space-x-4 overflow-x-auto whitespace-nowrap w-full px-4 text-center">
+          <span><strong>NORAD:</strong> {selectedSatellite.norad_number}</span>
+          <span><strong>Orbit:</strong> {selectedSatellite.orbit_type}</span>
+          <span><strong>Velocity:</strong> {selectedSatellite.velocity} km/s</span>
+          <span><strong>Inclination:</strong> {selectedSatellite.inclination}°</span>
+          <span><strong>Latitude:</strong> {selectedSatellite.latitude?.toFixed(4)}°</span>
+          <span><strong>Longitude:</strong> {selectedSatellite.longitude?.toFixed(4)}°</span>
+          <span><strong>Apogee:</strong> {selectedSatellite.apogee} km</span>
+          <span><strong>Perigee:</strong> {selectedSatellite.perigee} km</span>
+        </div>
+      </div>
+    )}
   </div>
-);}
+);
+
+}
