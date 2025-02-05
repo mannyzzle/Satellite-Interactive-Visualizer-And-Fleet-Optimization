@@ -20,4 +20,4 @@ RUN chmod -R 755 /app
 ENV PYTHONPATH="/app"
 
 # Run the satellite updater script
-CMD ["python", "-c", "import sys; sys.path.append('/app'); from app.database import get_db_connection; from app.tle_processor import update_schema, update_satellite_data; conn = get_db_connection(); update_schema(conn); update_satellite_data(); conn.close()"]
+CMD ["python", "-c", "import sys; sys.path.append('/app'); from database import get_db_connection; from tle_processor import update_schema, update_satellite_data; conn = get_db_connection(); update_schema(conn); update_satellite_data(); conn.close()"]
