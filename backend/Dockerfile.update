@@ -16,8 +16,8 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # Set permissions to avoid potential permission issues
 RUN chmod -R 755 /app
 
-# ✅ Set PYTHONPATH to ensure modules can be imported
-ENV PYTHONPATH="/app:/app/app"
+# ✅ Set PYTHONPATH so Python can locate modules inside the "app" directory
+ENV PYTHONPATH="/app/app"
 
-# ✅ Change CMD to directly run Python script
-CMD ["python", "/app/tle_processor.py"]
+# ✅ Correct file path: Run the script from the correct directory
+CMD ["python", "/app/app/tle_processor.py"]
