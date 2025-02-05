@@ -1,3 +1,6 @@
+# /backend/app/tle_processor.py
+
+
 import psycopg2
 from skyfield.api import EarthSatellite, load
 from tqdm import tqdm
@@ -6,7 +9,7 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
 import requests
-from database import get_db_connection  # ✅ Use get_db_connection()
+from app.database import get_db_connection  # ✅ Use get_db_connection()
 
 # Load environment variables
 load_dotenv()
