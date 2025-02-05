@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
 import requests
-from app.database import get_db_connection  # ✅ Use get_db_connection()
+from database import get_db_connection  # ✅ Use get_db_connection()
 
 # Load environment variables
 load_dotenv()
