@@ -44,7 +44,7 @@ body {
   top: 50px; /* ✅ Navbar height */
   left: 0;
   width: 100%;
-  height: 70vh; /* ✅ Limits height so text can scroll below */
+  height: 100vh; /* ✅ Limits height so text can scroll below */
   z-index: 10;
   background: transparent;
 }

@@ -11,6 +11,7 @@ import { fetchSatellites } from "../api/satelliteService";
 const dayTexture = "/assets/earth_day.jpg";
 const nightTexture = "/assets/earth_night.jpg";
 const satelliteModelPath = "/assets/satellite.glb";
+const cloudTexture = "/assets/clouds.png";
 
 export default function Home() {
   const orbitPathsRef = useRef([]); // 🛰 Track all orbit paths
@@ -78,27 +79,39 @@ export default function Home() {
     return new THREE.Vector3(x / 1000, y / 1000, z / 1000); // Scale down for visualization
   }
 
+  
 
-
-  function animateCameraToSatellite(targetPosition) {
+  function smoothCameraTransition(targetPosition) {
     if (!cameraRef.current) return;
   
     const startPos = cameraRef.current.position.clone();
-    const targetPos = targetPosition.clone().multiplyScalar(1.5); // Move slightly away for visibility
+    const targetPos = targetPosition.clone().multiplyScalar(1.8); // Maintain zoom distance
   
     let t = 0;
     function moveCamera() {
-      t += 0.05; // Adjust speed here
-      cameraRef.current.position.lerpVectors(startPos, targetPos, t);
+      t += 2; // Speed factor
+  
+      // 🚀 Adjust speed dynamically based on distance
+      const distance = startPos.distanceTo(targetPos);
+      const speedFactor = distance > 50 ? 0.2 : distance > 20 ? 0.1 : 0.05;
+  
+      cameraRef.current.position.lerpVectors(startPos, targetPos, t * speedFactor);
       cameraRef.current.lookAt(targetPosition);
   
       if (t < 1) {
         requestAnimationFrame(moveCamera);
+      } else {
+        cameraRef.current.position.copy(targetPos);
+        cameraRef.current.lookAt(targetPosition);
+        console.log("✅ Camera transition complete!");
       }
     }
   
     moveCamera();
   }
+  
+  
+  
   
 
 
@@ -107,10 +120,10 @@ export default function Home() {
   function focusOnSatellite(sat) {
     if (!sat) return;
   
-    console.log(`🚀 Focusing on satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
+    console.log('🚀 Focusing on satellite: ${sat.name} (NORAD: ${sat.norad_number})');
   
-    setSelectedSatellite(sat); // ✅ Store new selected satellite
-    localStorage.setItem("selectedSatellite", JSON.stringify(sat)); // ✅ Persist selection across refresh
+    setSelectedSatellite(sat);
+    localStorage.setItem("selectedSatellite", JSON.stringify(sat));
   
     const scene = sceneRef.current;
     if (!scene) {
@@ -119,24 +132,20 @@ export default function Home() {
     }
   
     const satModel = satelliteObjectsRef.current[sat.norad_number];
+  
     if (!satModel) {
-      console.warn("⚠️ Satellite model not found:", sat.name);
+      console.warn('⚠️ Satellite model ${sat.name} not found, retrying...');
+      setTimeout(() => focusOnSatellite(sat), 500); // Retry after a short delay
       return;
     }
   
     // ✅ Remove previous marker properly
-    if (selectedPointerRef.current) {
-      console.log("🗑️ Removing old marker from scene...");
-      scene.remove(selectedPointerRef.current);
-      selectedPointerRef.current.geometry.dispose();
-      selectedPointerRef.current.material.dispose();
-      selectedPointerRef.current = null;
-    }
+    resetMarker();
   
     // ✅ Create a new marker for the selected satellite
     const markerGeometry = new THREE.RingGeometry(0.3, 0.35, 32);
     const markerMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffff99, // LIGHT selection ring
+      color: 0xffff99,
       side: THREE.DoubleSide,
       transparent: true,
       opacity: 0.5,
@@ -149,12 +158,12 @@ export default function Home() {
     // ✅ Store reference to marker & satellite
     scene.add(marker);
     selectedPointerRef.current = marker;
-    selectedPointerRef.current.userData.followingSatellite = sat.norad_number; // 🛰 Attach it to the satellite
+    selectedPointerRef.current.userData.followingSatellite = sat.norad_number;
   
     console.log("📍 New marker added at:", selectedPointerRef.current.position);
   
-    // ✅ Smoothly Move Camera to Satellite
-    animateCameraToSatellite(satModel.position);
+    // ✅ Move Camera Immediately After Satellite is Found
+    smoothCameraTransition(satModel.position);
   }
   
   
@@ -164,8 +173,9 @@ export default function Home() {
   
   
   
+  
 
-  function createStarField(scene, numStars = 2000) {
+  function createStarField(scene, numStars = 140000) {
     const starGeometry = new THREE.BufferGeometry();
     const starMaterial = new THREE.PointsMaterial({
       color: 0xffffff,
@@ -278,7 +288,7 @@ const loadSatelliteModel = (satellite) => {
         sceneRef.current.add(satelliteModel);
       }
 
-      console.log(`📡 Satellite model added: ${satellite.name} (${satellite.norad_number})`);
+      console.log('📡 Satellite model added: ${satellite.name} (${satellite.norad_number})');
     },
     undefined,
     (error) => {
@@ -290,24 +300,34 @@ const loadSatelliteModel = (satellite) => {
 
 
 
-
-
-// ✅ 1️⃣ Fetch & Load Satellite Data (Reset Satellites & Marker)
 useEffect(() => {
+  // ✅ Immediately clear the selected satellite & show loading state
+  setSelectedSatellite(null);
+  localStorage.removeItem("selectedSatellite"); // ❌ Remove saved selection to prevent restoring old data
   setLoading(true);
-  setSatellites([]); // 🚀 Reset satellites
-  setSelectedSatellite(null); // 🔴 Reset selected satellite
-  resetMarker(); // 🔄 Reset marker
-  resetOrbits(); // 🔄 Reset orbits
+  setSatellites([]); // 🚀 Clear satellite list before fetching
 
-  fetchSatellites(page, 100).then((data) => {
-    if (data && data.satellites) {
-      console.log("🛰️ Satellites loaded:", data.satellites.length);
-      setSatellites(data.satellites);
-    }
-    setLoading(false);
-  });
-}, [page]); // ✅ Runs when page changes
+  fetchSatellites(page, 100)
+    .then((data) => {
+      if (data && data.satellites) {
+        console.log("🛰️ Satellites loaded:", data.satellites.length);
+        setSatellites(data.satellites);
+      } else {
+        console.warn("⚠️ No satellites found!");
+      }
+      setLoading(false);
+    })
+    .catch((error) => {
+      console.error("❌ Error fetching satellites:", error);
+      setLoading(false);
+    });
+}, [page]); // ✅ Runs when the page changes
+
+
+
+
+  
+
 
 
 // ✅ Remove all orbit paths before adding new ones
@@ -325,6 +345,26 @@ const resetOrbits = () => {
 
 
 
+useEffect(() => {
+  const savedSatellite = localStorage.getItem("selectedSatellite");
+
+  // 🚀 Only restore if no satellite is currently selected AND it's NOT a new page load
+  if (!selectedSatellite && savedSatellite && page === 1) {
+    const parsedSat = JSON.parse(savedSatellite);
+    console.log("🔄 Restoring selected satellite from storage:", parsedSat.name);
+
+    setSelectedSatellite(parsedSat);
+    
+    // ✅ Only move camera if satellite model is available
+    setTimeout(() => {
+      if (satelliteObjectsRef.current[parsedSat.norad_number]) {
+        focusOnSatellite(parsedSat);
+      }
+    }, 500);
+  }
+}, [satellites, page]); // ✅ Runs when satellites or page updates
+
+
 const addOrbitPaths = () => {
   resetOrbits(); // 🚀 Clear old orbits first
 
@@ -340,9 +380,8 @@ const addOrbitPaths = () => {
     }
   });
 
-  console.log(`🛰️ Added ${orbitPathsRef.current.length} orbit paths.`);
+  console.log('🛰️ Added ${orbitPathsRef.current.length} orbit paths.');
 };
-
 
 
 
@@ -379,18 +418,15 @@ useEffect(() => {
   // 🔄 Wait for models to load, then add orbits
   setTimeout(() => {
     addOrbitPaths();
-  }, 1000);
+  }, 500);
 }, [satellites]); // ✅ Runs when satellites update
+
+
 
 
 // ✅ 4 Main Scene Setup
 useEffect(() => {
-  const savedSatellite = localStorage.getItem("selectedSatellite");
-  if (savedSatellite) {
-    const parsedSat = JSON.parse(savedSatellite);
-    setSelectedSatellite(parsedSat);
-    console.log("🔄 Restoring selected satellite from storage:", parsedSat.name);
-  }
+  
 
   if (!mountRef.current) {
     console.error("⚠️ mountRef is null! Three.js won't render.");
@@ -402,10 +438,10 @@ useEffect(() => {
   sceneRef.current = scene;
 
   const camera = new THREE.PerspectiveCamera(
-    60,
+    50,
     window.innerWidth / window.innerHeight,
-    0.1,
-    2000
+    .5,
+    9000
   );
   cameraRef.current = camera;
 
@@ -416,22 +452,74 @@ useEffect(() => {
   renderer.setPixelRatio(window.devicePixelRatio);
   mountRef.current.appendChild(renderer.domElement);
 
+
+// ✅ Resize Renderer on Window Resize
+const resizeRenderer = () => {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  // ✅ Update Camera Aspect Ratio
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+
+  // ✅ Resize Renderer
+  renderer.setSize(width, height);
+  renderer.setPixelRatio(window.devicePixelRatio);
+};
+
+// 🛠️ Add Resize Event Listener
+window.addEventListener("resize", resizeRenderer);
+
+  
   // 🌍 Load Earth Textures
   const textureLoader = new THREE.TextureLoader();
   const dayMap = textureLoader.load(dayTexture);
   const nightMap = textureLoader.load(nightTexture);
+  const clouds = textureLoader.load(cloudTexture);
+  
 
   // 🛰 Create Earth
-  const globe = new THREE.Mesh(
-    new THREE.SphereGeometry(2, 64, 64),
-    new THREE.MeshStandardMaterial({
-      map: dayMap,
-      emissiveMap: nightMap,
-      emissiveIntensity: 1.2,
-      emissive: new THREE.Color(0xffffff),
-    })
-  );
-  scene.add(globe);
+const globe = new THREE.Mesh(
+  new THREE.SphereGeometry(5, 64, 64), // Increased segments for smoother surface
+  new THREE.MeshStandardMaterial({
+    map: dayMap, // 🌞 Day texture
+    emissiveMap: nightMap, // 🌒 Night texture for city lights
+    emissiveIntensity: .1, // Glow effect for night-side
+    emissive: new THREE.Color(0xffffff), // White glow for night-side
+    bumpScale: 0.5, // Adjusted for a more natural relief
+    roughness: 1.5, // Less rough for smoother land areas
+    metalness: .7, // Slight reflectivity for oceans
+  })
+);
+
+// ☁️ Simulated Cloud Layer (Soft White Noise Effect)
+const cloudMaterial = new THREE.MeshStandardMaterial({
+  map: clouds,
+  transparent: true,  // Ensures the black background is removed
+  opacity: 0.8,       // Adjust for realism (0.4 - 0.7 works best)
+  depthWrite: false,  // Prevents z-fighting with the Earth sphere
+  side: THREE.DoubleSide, // Visible from both sides
+});
+
+// 🌫 Add a Subtle Atmosphere Glow Effect
+const atmosphere = new THREE.Mesh(
+  new THREE.SphereGeometry(5.03, 64, 64), // Slightly larger than Earth
+  new THREE.MeshBasicMaterial({
+    color: 0x3399ff, // Soft blue atmosphere
+    transparent: true,
+    opacity: .5, // Very light glow
+    side: THREE.BackSide, // Makes it appear like an aura
+  })
+);
+
+// 🌫️ Use a Sphere with Noise for Clouds
+const cloudGeometry = new THREE.SphereGeometry(5.025, 64, 64); // Slightly larger than Earth
+const cloudMesh = new THREE.Mesh(cloudGeometry, cloudMaterial);
+
+
+scene.add(cloudMesh);
+scene.add(globe);
+scene.add(atmosphere);
 
   // 🌞 Lighting
   const light = new THREE.DirectionalLight(0xffffff, 4.5);
@@ -447,51 +535,56 @@ useEffect(() => {
   controls.enableDamping = true;
   controls.dampingFactor = 0.1;
   controls.rotateSpeed = 0.8;
-  controls.minDistance = 3;
+  controls.minDistance = 7;
   controls.maxDistance = 100;
   camera.position.set(0, 3, 5);
 
-  // 🎯 Click Detection for Satellites
-  const raycaster = new THREE.Raycaster();
-  const mouse = new THREE.Vector2();
+  // 🎯 Click Detection for Satellites (Fix: Prevent Null Selection)
+window.addEventListener("click", (event) => {
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, cameraRef.current);
 
-  window.addEventListener("click", (event) => {
-    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-    raycaster.setFromCamera(mouse, cameraRef.current);
-  
-    const intersects = raycaster.intersectObjects(sceneRef.current.children, true);
-  
-    const clickedSatellite = intersects.find((obj) => {
-      return obj.object.userData && !obj.object.userData.ignoreRaycast;
-    })?.object.userData;
-  
-    if (clickedSatellite) {
-      console.log(`🛰 Satellite clicked: ${clickedSatellite.name} (NORAD: ${clickedSatellite.norad_number})`);
-      setSelectedSatellite(clickedSatellite);
-    }
-  });
+  const intersects = raycaster.intersectObjects(sceneRef.current.children, true);
+
+  const clickedSatellite = intersects.find((obj) => {
+    return obj.object.userData && !obj.object.userData.ignoreRaycast;
+  })?.object.userData;
+
+  if (clickedSatellite) {
+    console.log('🛰 Satellite clicked: ${clickedSatellite.name} (NORAD: ${clickedSatellite.norad_number})');
+    setSelectedSatellite(clickedSatellite);
+  } else {
+    console.warn("⚠️ Clicked empty space - Keeping previous satellite selection.");
+  }
+});
+
   
 
-  // 🔄 Animate Earth Rotation
+  // ANIMATION ZONE
+
   const animate = () => {
     requestAnimationFrame(animate);
-    globe.rotation.y += 0.0002;
   
+    // 🌍 Realistic Earth Rotation
+    globe.rotation.y += 0.0000727;
+    cloudMesh.rotation.y += 0.00009;
+  
+    const timeFactor = 30;
     const time = Date.now() / 1000;
   
-    // 🔄 Update satellite positions
+    // 🔄 Update Satellite Positions
     Object.values(satelliteObjectsRef.current).forEach((satelliteModel) => {
       if (satelliteModel.userData) {
-        const newPos = computeSatellitePosition(satelliteModel.userData, time);
+        const newPos = computeSatellitePosition(satelliteModel.userData, time * timeFactor);
         if (newPos) {
-          satelliteModel.position.lerp(newPos, 0.05);
+          satelliteModel.position.lerp(newPos, 0.2);
           satelliteModel.userData.latestPosition = newPos;
         }
       }
     });
   
-    // ✅ Move the marker with the satellite
+    // ✅ Keep Marker Following the Satellite
     if (selectedPointerRef.current && selectedPointerRef.current.userData.followingSatellite) {
       const followedSat = satelliteObjectsRef.current[selectedPointerRef.current.userData.followingSatellite];
   
@@ -501,24 +594,29 @@ useEffect(() => {
       }
     }
   
-    // ✅ Ensure the camera always looks at the selected satellite
+    // ✅ Keep Camera Focused on Last Selected Satellite (Even After Refresh)
     if (selectedSatellite && satelliteObjectsRef.current[selectedSatellite.norad_number]) {
-      cameraRef.current.lookAt(satelliteObjectsRef.current[selectedSatellite.norad_number].position);
+      const satPosition = satelliteObjectsRef.current[selectedSatellite.norad_number].position;
+      cameraRef.current.position.lerp(satPosition.clone().multiplyScalar(1.5), 0.05);
+      cameraRef.current.lookAt(satPosition);
     }
   
     controls.update();
     renderer.render(scene, cameraRef.current);
   };
   
-
+  
   animate();
+  
 
   return () => {
+    window.removeEventListener("resize", resizeRenderer);
     if (mountRef.current && mountRef.current.contains(renderer.domElement)) {
       mountRef.current.removeChild(renderer.domElement);
     }
   };
-}, []); // ✅ Runs only once when component mounts
+
+}, []);
 
 
 return (
@@ -526,13 +624,13 @@ return (
     {/* 📌 Navbar - Stays Fixed at the Top */}
     <Navbar />
 
-    {/* 🌍 Main Layout - Sidebar + 3D Scene + Scrollable Content */}
-    <div className="flex flex-1">
+    {/* 🌍 Main Layout - Sidebar + 3D UI + Bottom Info Box (Fixed Together) */}
+    <div className="relative flex flex-1">
       
-      {/* 📌 Sidebar - Stays Fixed between Navbar & Bottom Info */}
-      <div className="relative">
+      {/* 📌 Sidebar - Stays Fixed with 3D UI */}
+      <div className="relative flex flex-col h-[89vh]">
         <div
-          className={`fixed top-16 left-0 h-[calc(100vh-8rem)] bg-gray-900 text-white p-4 overflow-y-auto shadow-lg transition-transform duration-300 ease-in-out w-64 md:w-1/4 z-40 ${
+          className={`absolute top-0 left-0 h-full bg-gray-900 text-white p-4 overflow-y-auto shadow-lg transition-transform duration-300 ease-in-out w-64 md:w-1/8 z-40 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
@@ -547,124 +645,202 @@ return (
             className="w-full p-2 mb-2 text-black rounded-md"
           />
 
-          {/* 🛰️ Satellite List */}
-          {loading ? (
-            <p className="text-center text-gray-400">Loading...</p>
-          ) : filteredSatellites.length > 0 ? (
-            <ul className="space-y-2">
-              {filteredSatellites.map((sat) => (
-                <li
-                  key={sat.norad_number}
-                  className={`cursor-pointer p-3 rounded-md text-center border border-gray-700 ${
-                    selectedSatellite?.norad_number === sat.norad_number
-                      ? "bg-blue-500 text-white border-blue-600"
-                      : "bg-gray-700 hover:bg-gray-600"
-                  }`}
-                  onClick={() => {
-                    console.log(`📡 Selecting satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
-                    focusOnSatellite(sat);
-                  }}
-                >
-                  <span className="block w-full">{sat.name}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-center text-gray-400">No satellites found.</p>
-          )}
+          {/* Sidebar Satellite List */}
+{loading ? (
+  <p className="text-center text-gray-400">Loading...</p>
+) : satellites.length === 0 ? (  // ✅ Show "No satellites found" when list is empty
+  <p className="text-center text-yellow-400 font-semibold">⚠️ No satellites available</p>
+) : (
+  <ul className="space-y-2">
+    {satellites.map((sat) => (
+      <li
+        key={sat.norad_number}
+        className={`cursor-pointer p-3 rounded-md text-center border border-gray-700 ${
+          selectedSatellite?.norad_number === sat.norad_number
+            ? "bg-blue-500 text-white border-blue-600"
+            : "bg-gray-700 hover:bg-gray-600"
+        }`}
+        onClick={() => {
+          console.log(`📡 Selecting satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
+          focusOnSatellite(sat);
+        }}
+      >
+        <span className="block w-full">{sat.name}</span>
+      </li>
+    ))}
+  </ul>
+)}
 
           {/* 🚀 Satellite Navigation */}
-          <div className="flex justify-between items-center mt-4">
-            <button
-              onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
-              disabled={page === 1}
-              className={`px-3 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-                page === 1 ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-            >
-              ← Prev
-            </button>
+<div className="flex justify-between items-center mt-4">
+  <button
+    onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+    disabled={page === 1 || loading} // ✅ Disable if loading or at first page
+    className={`px-3 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
+      page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
+    }`}
+  >
+    ← Prev
+  </button>
 
-            <span className="text-sm text-gray-300">Page {page}</span>
+  <span className="text-sm text-gray-300">Page {page}</span>
 
-            <button
-              onClick={() => setPage((prev) => prev + 1)}
-              className="px-3 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all"
-            >
-              Next →
-            </button>
-          </div>
+  <button
+    onClick={() => setPage((prev) => prev + 1)}
+    disabled={loading} // ✅ Disable if loading
+    className={`px-3 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
+      loading ? "opacity-50 cursor-not-allowed" : ""
+    }`}
+  >
+    Next →
+  </button>
+</div>
+
         </div>
 
-        {/* 📌 Sidebar Toggle Button - Stays Attached to Sidebar */}
+        {/* 📌 Sidebar Toggle Button - Moves with Sidebar */}
         <button
           onClick={() => setSidebarOpen((prev) => !prev)}
-          className={`fixed top-1/2 transform -translate-y-1/2 bg-gray-800 text-white px-3 py-2 rounded-r-md shadow-md hover:bg-gray-700 transition-all duration-300 z-50 ${
-            sidebarOpen ? "left-[16rem] md:left-1/4" : "left-0"
+          className={`absolute top-1/2 transform -translate-y-1/2 bg-gray-800 text-white px-3 py-2 rounded-r-md shadow-md hover:bg-gray-700 transition-all duration-300 z-50 ${
+            sidebarOpen ? "left-[16rem] md:left-1/8" : "left-0"
           }`}
         >
           {sidebarOpen ? "←" : "→"}
         </button>
       </div>
 
-      {/* 🌍 Scrollable Content Wrapper (Includes 3D UI & Text Below) */}
-      <div className="relative flex-1 overflow-y-auto min-h-[200vh]">
+      {/* 🌍 3D UI + Sidebar + Bottom Info Box Sticking Together */}
+      <div className="relative flex-1 flex flex-col">
         
-        {/* 🛰️ 3D UI - NOT FIXED, ALLOWS SCROLLING */}
-        <div className="relative w-full h-[95vh]">
+        {/* 🛰️ 3D UI - Stays Fixed with Sidebar & Info Box */}
+        <div className="relative w-full h-[100vh]">
           <div ref={mountRef} className="absolute top-0 left-0 w-full h-full" />
         </div>
 
-        {/* 📜 Scrollable Content Below the 3D UI */}
-        <div className="relative z-20 mt-6 p-6 bg-gray-800 text-white rounded-lg shadow-lg mx-auto max-w-3xl">
-          <h2 className="text-2xl font-bold">About the Satellite Tracker</h2>
-          <p className="mt-4">
-            This satellite tracker allows you to visualize real-time satellite movements and orbital paths.
-          </p>
-        </div>
-
-        <div className="relative z-20 mt-8 p-6 bg-gray-800 text-white rounded-lg shadow-lg mx-auto max-w-3xl">
-          <h2 className="text-2xl font-bold">How It Works</h2>
-          <p className="mt-4">
-            The satellites update dynamically based on real-time orbital calculations, and the 3D visualization keeps
-            track of their motion using Three.js.
-          </p>
-        </div>
-
-        <div className="relative z-20 mt-8 p-6 bg-gray-800 text-white rounded-lg shadow-lg mx-auto max-w-3xl">
-          <h2 className="text-2xl font-bold">Future Enhancements</h2>
-          <p className="mt-4">
-            We are planning to integrate more advanced analytics, machine learning predictions for satellite trajectories,
-            and real-time weather data overlays.
-          </p>
-        </div>
+        {/* 🛰️ Satellite Info Box - STAYS WITH THE 3D UI */}
+<div
+  className={`absolute bottom-0 bg-gray-900 text-yellow-300 p-3 shadow-lg text-xs border-t border-gray-700 flex flex-col items-center h-24 w-full z-[60] transition-all duration-300 ease-in-out`}
+>
+  {loading ? (
+    // 🌀 Show Loading Animation
+    <div className="flex items-center justify-center h-full">
+      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-yellow-300 border-opacity-75"></div>
+    </div>
+  ) : !selectedSatellite ? (
+    // ✨ Show "Make a Selection" Message
+    <div className="flex items-center justify-center h-full text-yellow-400 font-semibold">
+      <p>🔍 Make a selection to view details</p>
+    </div>
+  ) : (
+    // ✅ Show Satellite Info Once Selected
+    <>
+      <div className="flex flex-col items-center w-full text-center pb-1">
+        <span className="font-bold text-yellow-400 text-sm">{selectedSatellite.name}</span>
+        <span className="text-yellow-500 text-xs">
+          <strong>Last Update:</strong> {new Date(selectedSatellite.epoch).toLocaleString()}
+        </span>
       </div>
 
+      <div className="flex flex-wrap justify-center items-center space-x-4 overflow-x-auto whitespace-nowrap w-full px-4 text-center">
+        <span><strong>NORAD:</strong> {selectedSatellite.norad_number}</span>
+        <span><strong>Orbit:</strong> {selectedSatellite.orbit_type}</span>
+        <span><strong>Velocity:</strong> {selectedSatellite.velocity} km/s</span>
+        <span><strong>Inclination:</strong> {selectedSatellite.inclination}°</span>
+        <span><strong>Latitude:</strong> {selectedSatellite.latitude?.toFixed(4)}°</span>
+        <span><strong>Longitude:</strong> {selectedSatellite.longitude?.toFixed(4)}°</span>
+        <span><strong>Apogee:</strong> {selectedSatellite.apogee} km</span>
+        <span><strong>Perigee:</strong> {selectedSatellite.perigee} km</span>
+      </div>
+    </>
+  )}
+</div>
+
+
+      </div>
     </div>
 
-    {/* 🛰️ Satellite Info Box - Stays Fixed at the Bottom */}
-    {selectedSatellite && (
-      <div className="fixed bottom-0 left-0 w-full bg-gray-900 text-yellow-300 p-3 shadow-lg text-xs border-t border-gray-700 flex flex-col items-center h-24 z-[60]">
-        <div className="flex flex-col items-center w-full text-center pb-1">
-          <span className="font-bold text-yellow-400 text-sm">{selectedSatellite.name}</span>
-          <span className="text-yellow-500 text-xs">
-            <strong>Last Update:</strong> {new Date(selectedSatellite.epoch).toLocaleString()}
-          </span>
-        </div>
+    {/* 📜 Scrollable Content Below Everything (Responsive for Mobile & Desktop) */}
+<div className="overflow-y-auto min-h-[200vh] bg-gray-800 text-white px-4 sm:px-6 lg:px-12 py-6 z-60">
+  
+  {/* 🛰️ About the Satellite Tracker */}
+  <div className="max-w-full md:max-w-3xl mx-auto">
+    <h2 className="text-xl sm:text-2xl font-bold">About the Satellite Tracker</h2>
+    <p className="mt-4 text-sm sm:text-base">
+      This satellite tracker allows you to visualize real-time satellite movements and orbital paths. 
+      It provides a dynamic 3D visualization of Earth and its orbiting satellites, updating in real-time
+      using precise orbital mechanics calculations.
+    </p>
+  </div>
 
-        <div className="flex flex-wrap justify-center items-center space-x-4 overflow-x-auto whitespace-nowrap w-full px-4 text-center">
-          <span><strong>NORAD:</strong> {selectedSatellite.norad_number}</span>
-          <span><strong>Orbit:</strong> {selectedSatellite.orbit_type}</span>
-          <span><strong>Velocity:</strong> {selectedSatellite.velocity} km/s</span>
-          <span><strong>Inclination:</strong> {selectedSatellite.inclination}°</span>
-          <span><strong>Latitude:</strong> {selectedSatellite.latitude?.toFixed(4)}°</span>
-          <span><strong>Longitude:</strong> {selectedSatellite.longitude?.toFixed(4)}°</span>
-          <span><strong>Apogee:</strong> {selectedSatellite.apogee} km</span>
-          <span><strong>Perigee:</strong> {selectedSatellite.perigee} km</span>
-        </div>
-      </div>
-    )}
+  {/* 🛰️ How It Works */}
+  <div className="max-w-full md:max-w-3xl mx-auto mt-8">
+    <h2 className="text-xl sm:text-2xl font-bold">How It Works</h2>
+    <p className="mt-4 text-sm sm:text-base">
+      The satellites update dynamically based on real-time orbital calculations, and the 3D visualization keeps
+      track of their motion using <strong>Three.js</strong> and <strong>TLE (Two-Line Element) propagation</strong>. 
+      Each satellite's trajectory is calculated using **Keplerian orbital mechanics** to ensure accuracy.
+    </p>
+  </div>
+
+  {/* 🌎 Real-World Applications */}
+  <div className="max-w-full md:max-w-3xl mx-auto mt-8">
+    <h2 className="text-xl sm:text-2xl font-bold">Real-World Applications</h2>
+    <ul className="mt-4 list-disc pl-6 space-y-2 text-sm sm:text-base">
+      <li><strong>Space Situational Awareness:</strong> Monitors space debris and ensures safe satellite operations.</li>
+      <li><strong>Weather Monitoring:</strong> Tracks satellites like NOAA and GOES that provide weather updates.</li>
+      <li><strong>GPS Navigation:</strong> Keeps track of positioning satellites like those in the GPS, Galileo, and GLONASS systems.</li>
+      <li><strong>Telecommunications:</strong> Monitors satellites providing internet, TV, and radio signals.</li>
+      <li><strong>Defense & Security:</strong> Tracks classified and military satellites for national security.</li>
+    </ul>
+  </div>
+
+  {/* 📡 Technical Features */}
+  <div className="max-w-full md:max-w-3xl mx-auto mt-8">
+    <h2 className="text-xl sm:text-2xl font-bold">Technical Features</h2>
+    <ul className="mt-4 list-disc pl-6 space-y-2 text-sm sm:text-base">
+      <li><strong>Real-time Data Updates:</strong> Fetches and updates satellite positions every few seconds.</li>
+      <li><strong>Interactive 3D Visualization:</strong> Uses <strong>Three.js</strong> for rendering Earth and satellites.</li>
+      <li><strong>Orbit Path Calculation:</strong> Draws satellite orbits using **Keplerian elements**.</li>
+      <li><strong>Click & Track:</strong> Select a satellite to focus the camera and display its live data.</li>
+      <li><strong>Sidebar Filtering:</strong> Allows searching and filtering satellites by category.</li>
+    </ul>
+  </div>
+
+  {/* 🚀 Future Enhancements */}
+  <div className="max-w-full md:max-w-3xl mx-auto mt-8">
+    <h2 className="text-xl sm:text-2xl font-bold">Future Enhancements</h2>
+    <ul className="mt-4 list-disc pl-6 space-y-2 text-sm sm:text-base">
+      <li><strong>AI-Powered Anomaly Detection:</strong> Identifies unexpected orbital changes.</li>
+      <li><strong>Space Weather Integration:</strong> Shows solar activity that may affect satellites.</li>
+      <li><strong>Historical Data Replay:</strong> Allows users to replay satellite movements over time.</li>
+      <li><strong>Enhanced UI Controls:</strong> Improved filtering and data visualization for different satellite categories.</li>
+    </ul>
+  </div>
+
+  {/* 🌌 Space Exploration & New Missions */}
+  <div className="max-w-full md:max-w-3xl mx-auto mt-8">
+    <h2 className="text-xl sm:text-2xl font-bold">Exploring the Future of Space</h2>
+    <p className="mt-4 text-sm sm:text-base">
+      The rise of **mega-constellations** like Starlink and OneWeb, as well as missions to the Moon and Mars, 
+      highlights the growing importance of satellite tracking. This platform could be expanded to support 
+      real-time tracking of **deep space probes**, **lunar gateways**, and **interplanetary missions**.
+    </p>
+  </div>
+
+  {/* 📜 Additional Resources */}
+  <div className="max-w-full md:max-w-3xl mx-auto mt-8">
+    <h2 className="text-xl sm:text-2xl font-bold">Additional Resources</h2>
+    <ul className="mt-4 list-disc pl-6 space-y-2 text-sm sm:text-base">
+      <li><a href="https://www.celestrak.com/" className="text-blue-400 hover:underline" target="_blank">CelesTrak - Satellite Data & TLE</a></li>
+      <li><a href="https://www.n2yo.com/" className="text-blue-400 hover:underline" target="_blank">N2YO - Live Satellite Tracking</a></li>
+      <li><a href="https://spaceweather.com/" className="text-blue-400 hover:underline" target="_blank">Space Weather Updates</a></li>
+      <li><a href="https://www.nasa.gov/" className="text-blue-400 hover:underline" target="_blank">NASA Official Website</a></li>
+    </ul>
+  </div>
+
+</div>
+
+
   </div>
 );
-
 }

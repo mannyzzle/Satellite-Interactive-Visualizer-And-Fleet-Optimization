@@ -7,7 +7,7 @@ export default function Navbar({ onSearch, toggleLiveTracking, isLiveTracking })
   const [searchQuery, setSearchQuery] = useState("");
 
   return (
-    <nav className="w-full bg-gray-900 text-white p-4 flex justify-between items-center fixed top-0 left-0 z-50 shadow-lg">
+    <nav className="w-full bg-gray-900 text-white p-4 flex justify-between items-center fixed top-0 left-0 z-80 shadow-lg">
       {/* 🌍 App Title */}
       <h1 className="text-xl font-bold">🛰️ Satellite Tracker</h1>
 
