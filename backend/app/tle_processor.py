@@ -19,6 +19,7 @@ ts = load.timescale()
 
 # Define TLE URL
 TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle"
+SATCAT_URL = "https://celestrak.org/satcat/records.php?CATNR={norad_id}&FORMAT=JSON"
 
 # Fetch TLE data
 def fetch_tle_data():
@@ -129,15 +130,32 @@ def update_schema(conn):
     cursor.close()
     print("✅ Database schema updated successfully.")
 
-# Update satellite data
+
+
+
+# ✅ Fetch CelesTrak SATCAT Metadata (Non-TLE)
+def fetch_satcat_data(norad_id):
+    response = requests.get(SATCAT_URL.format(norad_id=norad_id))
+    if response.status_code == 200 and response.json():
+        metadata = response.json()[0]  # First (and only) entry
+        return {
+            "object_type": metadata.get("OBJECT_TYPE"),
+            "ops_status_code": metadata.get("OPS_STATUS_CODE"),
+            "owner": metadata.get("OWNER"),
+            "launch_date": metadata.get("LAUNCH_DATE"),
+            "launch_site": metadata.get("LAUNCH_SITE"),
+            "decay_date": metadata.get("DECAY_DATE"),
+            "rcs": metadata.get("RCS"),
+            "purpose": metadata.get("OBJECT_NAME")  # Purpose inferred from name
+        }
+    return {}
+
+
+
+# ✅ Update Satellite Data (Using compute_orbital_params)
 def update_satellite_data():
-    """
-    Fetch TLE data, compute orbital parameters, and insert/update the database.
-    """
     conn = get_db_connection()
     cursor = conn.cursor()
-
-    update_schema(conn)  # Ensure schema is updated before inserting new data
 
     satellites = fetch_tle_data()
     print(f"📡 Fetched {len(satellites)} satellites for processing.")
@@ -146,23 +164,26 @@ def update_satellite_data():
     skipped_count = 0
 
     for sat in tqdm(satellites, desc="Updating Satellite Data"):
-        params = compute_orbital_params(sat["line1"], sat["line2"])
+        params = compute_orbital_params(sat["line1"], sat["line2"])  # ✅ Keeping your function
 
         if params:
             try:
                 norad = params["norad_number"] if params["norad_number"] is not None else -1
-                unique_name = sat["name"]
+
+                # Fetch additional metadata from SATCAT
+                satcat_data = fetch_satcat_data(norad)
 
                 cursor.execute("""
                     INSERT INTO satellites (
                         name, tle_line1, tle_line2, norad_number, intl_designator, ephemeris_type,
                         inclination, eccentricity, mean_motion, raan, arg_perigee, epoch,
-                        velocity, latitude, longitude  -- ✅ Added latitude & longitude
-                    )
-                    VALUES (
+                        velocity, latitude, longitude, object_type, ops_status_code, owner, 
+                        launch_date, launch_site, decay_date, rcs, purpose
+                    ) VALUES (
                         %s, %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s
+                        %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s
                     )
                     ON CONFLICT (norad_number) DO UPDATE SET
                         tle_line1 = EXCLUDED.tle_line1,
@@ -174,26 +195,38 @@ def update_satellite_data():
                         raan = EXCLUDED.raan,
                         arg_perigee = EXCLUDED.arg_perigee,
                         velocity = EXCLUDED.velocity,
-                        latitude = EXCLUDED.latitude,   -- ✅ Update latitude
-                        longitude = EXCLUDED.longitude  -- ✅ Update longitude
+                        latitude = EXCLUDED.latitude,
+                        longitude = EXCLUDED.longitude,
+                        object_type = EXCLUDED.object_type,
+                        ops_status_code = EXCLUDED.ops_status_code,
+                        owner = EXCLUDED.owner,
+                        launch_date = EXCLUDED.launch_date,
+                        launch_site = EXCLUDED.launch_site,
+                        decay_date = EXCLUDED.decay_date,
+                        rcs = EXCLUDED.rcs,
+                        purpose = EXCLUDED.purpose;
                 """, (
-                    unique_name, sat["line1"], sat["line2"], norad, params["intl_designator"],
+                    sat["name"], sat["line1"], sat["line2"], norad, params["intl_designator"],
                     params["ephemeris_type"], params["inclination"], params["eccentricity"], params["mean_motion"],
                     params["raan"], params["arg_perigee"], params["epoch"],
-                    params["velocity"], params["latitude"], params["longitude"]
+                    params["velocity"], params["latitude"], params["longitude"],
+                    satcat_data.get("object_type"), satcat_data.get("ops_status_code"),
+                    satcat_data.get("owner"), satcat_data.get("launch_date"),
+                    satcat_data.get("launch_site"), satcat_data.get("decay_date"),
+                    satcat_data.get("rcs"), satcat_data.get("purpose")
                 ))
 
                 updated_count += 1
                 
-            except psycopg2.errors.UniqueViolation as e:
+            except Exception as e:
                 skipped_count += 1
-                print(f"⚠️ Skipping duplicate: {sat['name']} (NORAD {norad}) → {e}")
+                print(f"⚠️ Skipping {sat['name']} (NORAD {norad}): {e}")
                 conn.rollback()
 
     conn.commit()
     cursor.close()
     conn.close()
-    print(f"✅ {updated_count} satellites inserted/updated successfully. 🚀 {skipped_count} entries skipped.")
+    print(f"✅ {updated_count} satellites updated. 🚀 {skipped_count} skipped.")
 
 if __name__ == "__main__":
     print("Connecting to the database...")

@@ -255,39 +255,40 @@ function animateMoon() {
 
   const applyFilter = async (filterType) => {
     console.log(`🔍 Applying filter: ${filterType}`);
-
+  
     if (!filterType) {
       console.warn("⚠️ No filter type provided!");
       return;
     }
-
-    // 🚀 Reset the marker before changing the filter
+  
     resetMarker();
-
     setActiveFilter(filterType);
     setLoading(true);
     setPage(1); // ✅ Reset pagination when a new filter is applied
-
+  
     try {
-      let data = await fetchSatellites(1, 11000, filterType);
-
+      let data = await fetchSatellites(1, 11000, filterType); // ✅ Fetch only first 100
+      
       if (!data.satellites || data.satellites.length === 0) {
         console.warn("⚠️ No satellites found for this filter.");
         setFilteredSatellites([]);
+        setSatellites([]);
         return;
       }
-
+  
       console.log(`✅ Filtered ${data.satellites.length} satellites.`);
-
-      setFilteredSatellites(data.satellites);
-      updateSceneWithFilteredSatellites(data.satellites);
+  
+      setFilteredSatellites(data.satellites); // ✅ Store full filtered dataset
+      setSatellites(data.satellites.slice(0, limit)); // ✅ Load only first page for rendering
+      updateSceneWithFilteredSatellites(data.satellites.slice(0, limit)); // ✅ Render only first 100
     } catch (error) {
       console.error("❌ Error fetching filtered satellites:", error);
       setFilteredSatellites([]);
     } finally {
       setLoading(false);
     }
-};
+  };
+  
 
   
   
@@ -365,12 +366,12 @@ function animateMoon() {
 
 
 
-  const updateSceneWithFilteredSatellites = (filteredSatellites) => {
-    console.log(`🛰️ Updating scene with ${filteredSatellites.length} satellites...`);
+  const updateSceneWithFilteredSatellites = (satellites) => {
+    console.log(`🛰️ Updating scene with ${satellites.length} satellites...`);
   
-    const newSatelliteIds = new Set(filteredSatellites.map((s) => s.norad_number));
+    const newSatelliteIds = new Set(satellites.map((s) => s.norad_number));
   
-    // 🚨 Remove satellites that are not in the current filtered list
+    // 🚨 Remove satellites NOT in the new list
     Object.keys(satelliteObjectsRef.current).forEach((norad_number) => {
       if (!newSatelliteIds.has(Number(norad_number))) {
         console.log(`🗑️ Removing satellite: ${norad_number}`);
@@ -383,25 +384,14 @@ function animateMoon() {
       }
     });
   
-    // 🚨 Remove Old Orbit Paths
-    orbitPathsRef.current.forEach((orbit) => {
-      if (sceneRef.current) {
-        sceneRef.current.remove(orbit);
-      }
-    });
-    orbitPathsRef.current = []; // ✅ Clear stored orbits
-  
-    resetMarker(); // 🔄 Ensure marker is removed
-  
-    // 🚀 Load Only Missing Satellites
+    // 🚀 Load only the current page of satellites
     setTimeout(() => {
-      filteredSatellites.forEach((sat) => {
+      satellites.forEach((sat) => {
         if (!satelliteObjectsRef.current[sat.norad_number]) {
           loadSatelliteModel(sat);
         }
       });
   
-      // ✅ Ensure orbit paths are updated AFTER satellites are loaded
       setTimeout(() => {
         console.log("🛰️ Adding new orbit paths...");
         addOrbitPaths();
@@ -409,7 +399,6 @@ function animateMoon() {
     }, 100);
   };
   
-
 
 
 
@@ -516,7 +505,7 @@ function animateMoon() {
 
 
 
-console.log("🔍 Tracking useEffect dependencies: ", { page, limit, activeFilter });
+//console.log("🔍 Tracking useEffect dependencies: ", { page, limit, activeFilter });
 
 
 
@@ -579,6 +568,7 @@ useEffect(() => {
 
 
 
+
 const changePage = async (newPage) => {
   if (newPage < 1 || loading) return;
 
@@ -587,24 +577,34 @@ const changePage = async (newPage) => {
   setPage(newPage);
 
   try {
-    // 🚀 Reset the marker before loading new satellites
-    resetMarker();  
+    resetMarker(); // ✅ Remove previous marker
 
-    const data = await fetchSatellites(newPage, limit, activeFilter);
+    if (activeFilter) {
+      // ✅ Get next page from already filtered results
+      const startIndex = (newPage - 1) * limit;
+      const endIndex = startIndex + limit;
+      const newPageSatellites = filteredSatellites.slice(startIndex, endIndex);
 
-    if (!data.satellites || data.satellites.length === 0) {
-      console.warn("⚠️ No satellites found for this page.");
-      return;
+      if (!newPageSatellites.length) {
+        console.warn("⚠️ No more satellites found for this page.");
+        return;
+      }
+
+      setSatellites(newPageSatellites); // ✅ Update list for UI
+      updateSceneWithFilteredSatellites(newPageSatellites); // ✅ Update 3D scene
+    } else {
+      // ✅ Fetch next page from API for unfiltered data
+      const data = await fetchSatellites(newPage, limit, null);
+      setSatellites(data.satellites);
+      updateSceneWithFilteredSatellites(data.satellites);
     }
-
-    setSatellites(data.satellites);
-    updateSceneWithFilteredSatellites(data.satellites);
   } catch (error) {
     console.error("❌ Error fetching new page:", error);
   } finally {
     setLoading(false);
   }
 };
+
 
 
 

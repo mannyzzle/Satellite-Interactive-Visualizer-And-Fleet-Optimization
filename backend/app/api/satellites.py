@@ -85,7 +85,7 @@ def get_all_satellites(
                     "semi_major_axis": sanitize_value(sat["semi_major_axis"]),
                     "tle_line1": sat["tle_line1"],
                     "tle_line2": sat["tle_line2"],
-                    "intl_designator": sat["intl_designator"]
+                    "intl_designator": sanitize_value(sat["intl_designator"])
                 }
                 for sat in satellites
             ]
