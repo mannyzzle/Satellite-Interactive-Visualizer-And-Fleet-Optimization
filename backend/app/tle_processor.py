@@ -134,22 +134,27 @@ def update_schema(conn):
 
 
 # ✅ Fetch CelesTrak SATCAT Metadata (Non-TLE)
+
 def fetch_satcat_data(norad_id):
     response = requests.get(SATCAT_URL.format(norad_id=norad_id))
     if response.status_code == 200 and response.json():
         metadata = response.json()[0]  # First (and only) entry
+
+        # ✅ Convert empty strings to None
+        def sanitize_date(date_str):
+            return date_str if date_str and date_str.strip() else None
+
         return {
             "object_type": metadata.get("OBJECT_TYPE"),
             "ops_status_code": metadata.get("OPS_STATUS_CODE"),
             "owner": metadata.get("OWNER"),
-            "launch_date": metadata.get("LAUNCH_DATE"),
+            "launch_date": sanitize_date(metadata.get("LAUNCH_DATE")),
             "launch_site": metadata.get("LAUNCH_SITE"),
-            "decay_date": metadata.get("DECAY_DATE"),
+            "decay_date": sanitize_date(metadata.get("DECAY_DATE")),
             "rcs": metadata.get("RCS"),
             "purpose": metadata.get("OBJECT_NAME")  # Purpose inferred from name
         }
     return {}
-
 
 
 # ✅ Update Satellite Data (Using compute_orbital_params)
@@ -174,46 +179,46 @@ def update_satellite_data():
                 satcat_data = fetch_satcat_data(norad)
 
                 cursor.execute("""
-                    INSERT INTO satellites (
-                        name, tle_line1, tle_line2, norad_number, intl_designator, ephemeris_type,
-                        inclination, eccentricity, mean_motion, raan, arg_perigee, epoch,
-                        velocity, latitude, longitude, object_type, ops_status_code, owner, 
-                        launch_date, launch_site, decay_date, rcs, purpose
-                    ) VALUES (
-                        %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s
-                    )
-                    ON CONFLICT (norad_number) DO UPDATE SET
-                        tle_line1 = EXCLUDED.tle_line1,
-                        tle_line2 = EXCLUDED.tle_line2,
-                        epoch = EXCLUDED.epoch,
-                        mean_motion = EXCLUDED.mean_motion,
-                        inclination = EXCLUDED.inclination,
-                        eccentricity = EXCLUDED.eccentricity,
-                        raan = EXCLUDED.raan,
-                        arg_perigee = EXCLUDED.arg_perigee,
-                        velocity = EXCLUDED.velocity,
-                        latitude = EXCLUDED.latitude,
-                        longitude = EXCLUDED.longitude,
-                        object_type = EXCLUDED.object_type,
-                        ops_status_code = EXCLUDED.ops_status_code,
-                        owner = EXCLUDED.owner,
-                        launch_date = EXCLUDED.launch_date,
-                        launch_site = EXCLUDED.launch_site,
-                        decay_date = EXCLUDED.decay_date,
-                        rcs = EXCLUDED.rcs,
-                        purpose = EXCLUDED.purpose;
-                """, (
-                    sat["name"], sat["line1"], sat["line2"], norad, params["intl_designator"],
-                    params["ephemeris_type"], params["inclination"], params["eccentricity"], params["mean_motion"],
-                    params["raan"], params["arg_perigee"], params["epoch"],
-                    params["velocity"], params["latitude"], params["longitude"],
-                    satcat_data.get("object_type"), satcat_data.get("ops_status_code"),
-                    satcat_data.get("owner"), satcat_data.get("launch_date"),
-                    satcat_data.get("launch_site"), satcat_data.get("decay_date"),
-                    satcat_data.get("rcs"), satcat_data.get("purpose")
+    INSERT INTO satellites (
+        name, tle_line1, tle_line2, norad_number, intl_designator, ephemeris_type,
+        inclination, eccentricity, mean_motion, raan, arg_perigee, epoch,
+        velocity, latitude, longitude, object_type, ops_status_code, owner, 
+        launch_date, launch_site, decay_date, rcs, purpose
+    ) VALUES (
+        %s, %s, %s, %s, %s, %s,
+        %s, %s, %s, %s, %s, %s,
+        %s, %s, %s, %s, %s, %s,
+        %s, %s, %s, %s, %s
+    )
+    ON CONFLICT (norad_number) DO UPDATE SET
+        tle_line1 = EXCLUDED.tle_line1,
+        tle_line2 = EXCLUDED.tle_line2,
+        epoch = EXCLUDED.epoch,
+        mean_motion = EXCLUDED.mean_motion,
+        inclination = EXCLUDED.inclination,
+        eccentricity = EXCLUDED.eccentricity,
+        raan = EXCLUDED.raan,
+        arg_perigee = EXCLUDED.arg_perigee,
+        velocity = EXCLUDED.velocity,
+        latitude = EXCLUDED.latitude,
+        longitude = EXCLUDED.longitude,
+        object_type = EXCLUDED.object_type,
+        ops_status_code = EXCLUDED.ops_status_code,
+        owner = EXCLUDED.owner,
+        launch_date = COALESCE(EXCLUDED.launch_date, satellites.launch_date),
+        launch_site = EXCLUDED.launch_site,
+        decay_date = COALESCE(EXCLUDED.decay_date, satellites.decay_date),
+        rcs = EXCLUDED.rcs,
+        purpose = EXCLUDED.purpose;
+        """, (
+            sat["name"], sat["line1"], sat["line2"], norad, params["intl_designator"],
+            params["ephemeris_type"], params["inclination"], params["eccentricity"], params["mean_motion"],
+            params["raan"], params["arg_perigee"], params["epoch"],
+            params["velocity"], params["latitude"], params["longitude"],
+            satcat_data.get("object_type"), satcat_data.get("ops_status_code"),
+            satcat_data.get("owner"), satcat_data.get("launch_date"),
+            satcat_data.get("launch_site"), satcat_data.get("decay_date"),
+            satcat_data.get("rcs"), satcat_data.get("purpose")
                 ))
 
                 updated_count += 1
