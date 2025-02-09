@@ -4,12 +4,18 @@ import axios from "axios";
 
 const API_BASE_URL = "http://127.0.0.1:8000/api/satellites";
 
-export async function fetchSatellites(page = 1, limit = 50) {
+export async function fetchSatellites(page = 1, limit = 100, filter = null) {
   try {
-    console.log(`📡 Fetching satellites (page: ${page}, limit: ${limit})...`);
-    const response = await axios.get(`${API_BASE_URL}?page=${page}&limit=${limit}`);
+    let url = `${API_BASE_URL}?page=${page}&limit=${limit}`;
+
+    if (filter) {
+      url += `&filter=${encodeURIComponent(filter)}`; // ✅ Pass filter param
+    }
+
+    console.log(`📡 Fetching satellites from: ${url}`);
+    const response = await axios.get(url);
     
-    console.log("📌 API Response:", response.data);  // 🔍 Check if pagination works
+    console.log("📌 API Response:", response.data);
     
     return response.data;
   } catch (error) {
@@ -17,6 +23,7 @@ export async function fetchSatellites(page = 1, limit = 50) {
     return { satellites: [] };
   }
 }
+
 
 
 export async function fetchSatelliteByName(name) {

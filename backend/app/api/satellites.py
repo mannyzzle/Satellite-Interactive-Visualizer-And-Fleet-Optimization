@@ -2,18 +2,26 @@
 
 from fastapi import APIRouter, HTTPException, Query
 from app.database import get_db_connection
+import math
+
+
 
 router = APIRouter()
 
-from fastapi import APIRouter, HTTPException, Query
-from app.database import get_db_connection
 
-router = APIRouter()
+
+def sanitize_value(value):
+    """Replace NaN and Infinity with None for JSON serialization"""
+    if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+        return None
+    return value
+
 
 @router.get("/")
 def get_all_satellites(
     page: int = Query(1, ge=1),
-    limit: int = Query(20, le=100)
+    limit: int = Query(100, ge=1, le=11000),
+    filter: str = Query(None)
 ):
     offset = (page - 1) * limit
     conn = get_db_connection()
@@ -21,31 +29,33 @@ def get_all_satellites(
 
     try:
         print("🔍 Fetching total satellite count...")
-        cursor.execute("SELECT COUNT(*) AS count FROM satellites")
-        result = cursor.fetchone()
+        if filter:
+            cursor.execute(f"SELECT COUNT(*) AS count FROM satellites WHERE {get_filter_condition(filter)}")
+        else:
+            cursor.execute("SELECT COUNT(*) AS count FROM satellites")
 
+        result = cursor.fetchone()
         if not result or "count" not in result:
             raise HTTPException(status_code=500, detail="Failed to fetch satellite count")
-
+        
         total_count = result["count"]
-
         print(f"✅ Total satellites found: {total_count}")
-        print(f"🔍 Fetching satellites with limit={limit} and offset={offset}...")
 
-        # ✅ Retrieve all columns
-        cursor.execute("""
+        query = """
             SELECT id, name, norad_number, orbit_type, inclination, velocity, 
                    latitude, longitude, bstar, rev_num, ephemeris_type, 
                    eccentricity, period, perigee, apogee, epoch, raan, 
                    arg_perigee, mean_motion, semi_major_axis, tle_line1, 
                    tle_line2, intl_designator
-            FROM satellites 
-            ORDER BY id
-            LIMIT %s OFFSET %s
-        """, (limit, offset))
+            FROM satellites
+        """
 
+        if filter:
+            query += f" WHERE {get_filter_condition(filter)}"
+
+        query += " ORDER BY id LIMIT %s OFFSET %s"
+        cursor.execute(query, (limit, offset))
         satellites = cursor.fetchall()
-        print(f"✅ Retrieved {len(satellites)} satellites")
 
         return {
             "total": total_count,
@@ -57,22 +67,22 @@ def get_all_satellites(
                     "name": sat["name"],
                     "norad_number": sat["norad_number"],
                     "orbit_type": sat["orbit_type"],
-                    "inclination": sat["inclination"],
-                    "velocity": sat["velocity"],
-                    "latitude": sat["latitude"],
-                    "longitude": sat["longitude"],
-                    "bstar": sat["bstar"],
+                    "inclination": sanitize_value(sat["inclination"]),
+                    "velocity": sanitize_value(sat["velocity"]),
+                    "latitude": sanitize_value(sat["latitude"]),
+                    "longitude": sanitize_value(sat["longitude"]),
+                    "bstar": sanitize_value(sat["bstar"]),
                     "rev_num": sat["rev_num"],
                     "ephemeris_type": sat["ephemeris_type"],
-                    "eccentricity": sat["eccentricity"],
-                    "period": sat["period"],
-                    "perigee": sat["perigee"],
-                    "apogee": sat["apogee"],
+                    "eccentricity": sanitize_value(sat["eccentricity"]),
+                    "period": sanitize_value(sat["period"]),
+                    "perigee": sanitize_value(sat["perigee"]),
+                    "apogee": sanitize_value(sat["apogee"]),
                     "epoch": sat["epoch"],
-                    "raan": sat["raan"],
-                    "arg_perigee": sat["arg_perigee"],
-                    "mean_motion": sat["mean_motion"],
-                    "semi_major_axis": sat["semi_major_axis"],
+                    "raan": sanitize_value(sat["raan"]),
+                    "arg_perigee": sanitize_value(sat["arg_perigee"]),
+                    "mean_motion": sanitize_value(sat["mean_motion"]),
+                    "semi_major_axis": sanitize_value(sat["semi_major_axis"]),
                     "tle_line1": sat["tle_line1"],
                     "tle_line2": sat["tle_line2"],
                     "intl_designator": sat["intl_designator"]
@@ -88,6 +98,35 @@ def get_all_satellites(
     finally:
         cursor.close()
         conn.close()
+
+
+
+
+def get_filter_condition(filter):
+    filter_conditions = {
+        "LEO": "orbit_type = 'LEO'",
+        "MEO": "orbit_type = 'MEO'",
+        "GEO": "orbit_type = 'GEO'",
+        "High Velocity": "velocity > 7.8",
+        "Low Velocity": "velocity <= 7.8",
+        "Perigee < 500 km": "perigee < 500",
+        "Apogee > 35,000 km": "apogee > 35000",
+        "Recent Launches": "epoch > NOW() - INTERVAL '30 days'",
+        "Eccentricity > 0.1": "eccentricity > 0.1",
+        "B* Drag Term > 0.0001": "bstar > 0.0001"
+    }
+    
+    # ✅ Support multiple filters
+    if filter:
+        filters = filter.split(",")  # Assume filters are passed as CSV string
+        conditions = [filter_conditions[f] for f in filters if f in filter_conditions]
+        return " AND ".join(conditions) if conditions else "1=1"
+
+    return "1=1"  # Default to no filter
+
+
+
+
 
 
 @router.get("/{satellite_name}")
