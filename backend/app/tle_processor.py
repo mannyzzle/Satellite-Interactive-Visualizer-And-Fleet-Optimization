@@ -19,7 +19,7 @@ ts = load.timescale()
 
 # Define TLE URL
 TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle"
-SATCAT_URL = "https://celestrak.org/satcat/records.php?CATNR={norad_id}&FORMAT=JSON"
+
 
 # Fetch TLE data
 def fetch_tle_data():
@@ -133,106 +133,186 @@ def update_schema(conn):
 
 
 
-# ✅ Fetch CelesTrak SATCAT Metadata (Non-TLE)
+def infer_purpose(metadata):
+    """
+    Infers the purpose of the satellite based on its name, type, and operational status.
+    """
+    name = metadata.get("OBJECT_NAME", "").upper()
+    object_type = metadata.get("OBJECT_TYPE", "").upper()
+    ops_status = metadata.get("OPS_STATUS_CODE", "").upper()
 
-def fetch_satcat_data(norad_id):
-    response = requests.get(SATCAT_URL.format(norad_id=norad_id))
+    if "STARLINK" in name or "IRIDIUM" in name:
+        return "Communications"
+    if "GPS" in name or "GLONASS" in name or "GALILEO" in name or "BEIDOU" in name:
+        return "Navigation"
+    if "WEATHER" in name or "METEOR" in name or "NOAA" in name:
+        return "Weather Monitoring"
+    if "SPY" in name or "NROL" in name or "RECON" in name or "USA" in name:
+        return "Military/Reconnaissance"
+    if "EARTH" in name or "SENTINEL" in name or "LANDSAT" in name or "TERRA" in name:
+        return "Earth Observation"
+    if "SCIENCE" in name or "HUBBLE" in name or "JWST" in name or "X-RAY" in name:
+        return "Scientific Research"
+    if "EXPERIMENT" in name or "TEST" in name:
+        return "Technology Demonstration"
+    if "ISS" in name or "CREW" in name:
+        return "Human Spaceflight"
+    
+    # Default classification based on type
+    if object_type == "PAYLOAD":
+        return "Unknown Payload"
+    if object_type == "R/B":
+        return "Rocket Body (Debris)"
+    if object_type == "DEB":
+        return "Space Debris"
+
+    return "Unknown"
+
+
+
+
+
+SPACETRACK_USER = os.getenv("SPACETRACK_USER")
+SPACETRACK_PASS = os.getenv("SPACETRACK_PASS")
+
+def get_spacetrack_session():
+    """
+    Logs in to SpaceTrack and returns a session with authentication cookies.
+    """
+    login_url = "https://www.space-track.org/ajaxauth/login"
+    session = requests.Session()
+    
+    # Attempt login
+    response = session.post(login_url, data={"identity": SPACETRACK_USER, "password": SPACETRACK_PASS})
+    
+    if response.status_code == 200 and "You are now logged in" in response.text:
+        print("✅ SpaceTrack login successful.")
+        return session
+    else:
+        print(f"❌ SpaceTrack login failed! Response: {response.text}")
+        return None
+
+
+
+
+def fetch_spacetrack_data(norad_id):
+    """
+    Fetch satellite metadata from SpaceTrack API using an authenticated session.
+    """
+    session = get_spacetrack_session()
+    if not session:
+        return {}
+
+    spacetrack_url = f"https://www.space-track.org/basicspacedata/query/class/satcat/NORAD_CAT_ID/{norad_id}/format/json"
+    
+    response = session.get(spacetrack_url)
     if response.status_code == 200 and response.json():
         metadata = response.json()[0]  # First (and only) entry
 
-        # ✅ Convert empty strings to None
-        def sanitize_date(date_str):
-            return date_str if date_str and date_str.strip() else None
+        def clean(value, data_type=str):
+            """Convert empty strings to None and handle types correctly."""
+            if value in ["", "null", None]:
+                return None
+            return data_type(value) if data_type != str else value.strip()
 
         return {
-            "object_type": metadata.get("OBJECT_TYPE"),
-            "ops_status_code": metadata.get("OPS_STATUS_CODE"),
-            "owner": metadata.get("OWNER"),
-            "launch_date": sanitize_date(metadata.get("LAUNCH_DATE")),
-            "launch_site": metadata.get("LAUNCH_SITE"),
-            "decay_date": sanitize_date(metadata.get("DECAY_DATE")),
-            "rcs": metadata.get("RCS"),
-            "purpose": metadata.get("OBJECT_NAME")  # Purpose inferred from name
+            "country": clean(metadata.get("COUNTRY")),
+            "purpose": infer_purpose(metadata),  # ✅ Infer purpose
+            "decay_date": clean(metadata.get("DECAY"), str),
+            "object_type": clean(metadata.get("OBJECT_TYPE")),
+            "ops_status_code": clean(metadata.get("OPS_STATUS_CODE")),
+            "launch_date": clean(metadata.get("LAUNCH"), str),
+            "launch_site": clean(metadata.get("SITE")),
+            "rcs": clean(metadata.get("RCS"), float),
         }
-    return {}
+    else:
+        print(f"⚠️ Failed to fetch metadata for NORAD {norad_id}")
+        return {}
 
 
-# ✅ Update Satellite Data (Using compute_orbital_params)
+
+
+
 def update_satellite_data():
+    """
+    Fetch TLE data from CelesTrak, compute orbital parameters, fetch SpaceTrack metadata,
+    and insert/update the database.
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    satellites = fetch_tle_data()
+    update_schema(conn)  # Ensure schema is updated before inserting new data
+
+    satellites = fetch_tle_data()  # Fetch TLE data from CelesTrak
     print(f"📡 Fetched {len(satellites)} satellites for processing.")
 
     updated_count = 0
     skipped_count = 0
 
     for sat in tqdm(satellites, desc="Updating Satellite Data"):
-        params = compute_orbital_params(sat["line1"], sat["line2"])  # ✅ Keeping your function
+        params = compute_orbital_params(sat["line1"], sat["line2"])  # Using your function to compute orbital params
 
         if params:
+            norad = params["norad_number"] if params["norad_number"] is not None else -1
+
+            # Fetch SpaceTrack metadata (country, purpose, etc.)
+            spacetrack_data = fetch_spacetrack_data(norad)
+
             try:
-                norad = params["norad_number"] if params["norad_number"] is not None else -1
-
-                # Fetch additional metadata from SATCAT
-                satcat_data = fetch_satcat_data(norad)
-
+                # Insert/update data into the database
                 cursor.execute("""
     INSERT INTO satellites (
         name, tle_line1, tle_line2, norad_number, intl_designator, ephemeris_type,
         inclination, eccentricity, mean_motion, raan, arg_perigee, epoch,
         velocity, latitude, longitude, object_type, ops_status_code, owner, 
-        launch_date, launch_site, decay_date, rcs, purpose
+        launch_date, launch_site, decay_date, rcs, purpose, country
     ) VALUES (
         %s, %s, %s, %s, %s, %s,
         %s, %s, %s, %s, %s, %s,
         %s, %s, %s, %s, %s, %s,
-        %s, %s, %s, %s, %s
+        %s, %s, %s, %s, %s, %s
     )
     ON CONFLICT (norad_number) DO UPDATE SET
-        tle_line1 = EXCLUDED.tle_line1,
-        tle_line2 = EXCLUDED.tle_line2,
-        epoch = EXCLUDED.epoch,
-        mean_motion = EXCLUDED.mean_motion,
-        inclination = EXCLUDED.inclination,
-        eccentricity = EXCLUDED.eccentricity,
-        raan = EXCLUDED.raan,
-        arg_perigee = EXCLUDED.arg_perigee,
-        velocity = EXCLUDED.velocity,
-        latitude = EXCLUDED.latitude,
-        longitude = EXCLUDED.longitude,
-        object_type = EXCLUDED.object_type,
-        ops_status_code = EXCLUDED.ops_status_code,
-        owner = EXCLUDED.owner,
+        tle_line1 = COALESCE(EXCLUDED.tle_line1, satellites.tle_line1),
+        tle_line2 = COALESCE(EXCLUDED.tle_line2, satellites.tle_line2),
+        epoch = COALESCE(EXCLUDED.epoch, satellites.epoch),
+        mean_motion = COALESCE(EXCLUDED.mean_motion, satellites.mean_motion),
+        inclination = COALESCE(EXCLUDED.inclination, satellites.inclination),
+        eccentricity = COALESCE(EXCLUDED.eccentricity, satellites.eccentricity),
+        raan = COALESCE(EXCLUDED.raan, satellites.raan),
+        arg_perigee = COALESCE(EXCLUDED.arg_perigee, satellites.arg_perigee),
+        velocity = COALESCE(EXCLUDED.velocity, satellites.velocity),
+        latitude = COALESCE(EXCLUDED.latitude, satellites.latitude),
+        longitude = COALESCE(EXCLUDED.longitude, satellites.longitude),
+        object_type = COALESCE(EXCLUDED.object_type, satellites.object_type),
+        ops_status_code = COALESCE(EXCLUDED.ops_status_code, satellites.ops_status_code),
+        owner = COALESCE(EXCLUDED.owner, satellites.owner),
         launch_date = COALESCE(EXCLUDED.launch_date, satellites.launch_date),
-        launch_site = EXCLUDED.launch_site,
+        launch_site = COALESCE(EXCLUDED.launch_site, satellites.launch_site),
         decay_date = COALESCE(EXCLUDED.decay_date, satellites.decay_date),
-        rcs = EXCLUDED.rcs,
-        purpose = EXCLUDED.purpose;
+        rcs = COALESCE(EXCLUDED.rcs, satellites.rcs),
+        purpose = COALESCE(EXCLUDED.purpose, satellites.purpose),
+        country = COALESCE(EXCLUDED.country, satellites.country);
         """, (
-            sat["name"], sat["line1"], sat["line2"], norad, params["intl_designator"],
-            params["ephemeris_type"], params["inclination"], params["eccentricity"], params["mean_motion"],
-            params["raan"], params["arg_perigee"], params["epoch"],
-            params["velocity"], params["latitude"], params["longitude"],
-            satcat_data.get("object_type"), satcat_data.get("ops_status_code"),
-            satcat_data.get("owner"), satcat_data.get("launch_date"),
-            satcat_data.get("launch_site"), satcat_data.get("decay_date"),
-            satcat_data.get("rcs"), satcat_data.get("purpose")
-                ))
+          sat["name"], sat["line1"], sat["line2"], norad, params["intl_designator"],
+          params["ephemeris_type"], params["inclination"], params["eccentricity"], params["mean_motion"],
+          params["raan"], params["arg_perigee"], params["epoch"],
+          params["velocity"], params["latitude"], params["longitude"],
+          spacetrack_data.get("object_type"), spacetrack_data.get("ops_status_code"),
+           spacetrack_data.get("owner"), spacetrack_data.get("launch_date"),
+           spacetrack_data.get("launch_site"), spacetrack_data.get("decay_date"),
+           spacetrack_data.get("rcs"), spacetrack_data.get("purpose"),
+             spacetrack_data.get("country")
+               ))
 
                 updated_count += 1
-                
-            except Exception as e:
+
+            except psycopg2.errors.UniqueViolation as e:
                 skipped_count += 1
-                print(f"⚠️ Skipping {sat['name']} (NORAD {norad}): {e}")
+                print(f"⚠️ Skipping duplicate: {sat['name']} (NORAD {norad}) → {e}")
                 conn.rollback()
 
     conn.commit()
     cursor.close()
     conn.close()
-    print(f"✅ {updated_count} satellites updated. 🚀 {skipped_count} skipped.")
-
-if __name__ == "__main__":
-    print("Connecting to the database...")
-    update_satellite_data()
+    print(f"✅ {updated_count} satellites inserted/updated successfully. 🚀 {skipped_count} entries skipped.")
