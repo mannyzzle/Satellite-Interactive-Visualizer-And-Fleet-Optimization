@@ -175,22 +175,37 @@ def infer_purpose(metadata):
 SPACETRACK_USER = os.getenv("SPACETRACK_USER")
 SPACETRACK_PASS = os.getenv("SPACETRACK_PASS")
 
+
+
+
 def get_spacetrack_session():
     """
     Logs in to SpaceTrack and returns a session with authentication cookies.
     """
     login_url = "https://www.space-track.org/ajaxauth/login"
     session = requests.Session()
+
+    payload = {
+        "identity": os.getenv("SPACETRACK_USER"),
+        "password": os.getenv("SPACETRACK_PASS")
+    }
+
+    print(f"🔍 Attempting SpaceTrack login as {payload['identity']}...")  # Debugging
+
+    response = session.post(login_url, data=payload)
     
-    # Attempt login
-    response = session.post(login_url, data={"identity": SPACETRACK_USER, "password": SPACETRACK_PASS})
-    
-    if response.status_code == 200 and "You are now logged in" in response.text:
-        print("✅ SpaceTrack login successful.")
-        return session
+    if response.status_code == 200:
+        if "You are now logged in" in response.text:
+            print("✅ SpaceTrack login successful.")
+            return session
+        else:
+            print(f"⚠️ Unexpected login response: {response.text}")
     else:
-        print(f"❌ SpaceTrack login failed! Response: {response.text}")
-        return None
+        print(f"❌ SpaceTrack login failed! HTTP {response.status_code} - {response.text}")
+
+    return None
+
+
 
 
 
