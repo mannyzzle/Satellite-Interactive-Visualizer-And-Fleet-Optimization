@@ -264,13 +264,13 @@ def update_satellite_data():
     INSERT INTO satellites (
         name, tle_line1, tle_line2, norad_number, intl_designator, ephemeris_type,
         inclination, eccentricity, mean_motion, raan, arg_perigee, epoch,
-        velocity, latitude, longitude, object_type, ops_status_code, owner, 
+        velocity, latitude, longitude, object_type, ops_status_code, 
         launch_date, launch_site, decay_date, rcs, purpose, country
     ) VALUES (
         %s, %s, %s, %s, %s, %s,
         %s, %s, %s, %s, %s, %s,
         %s, %s, %s, %s, %s, %s,
-        %s, %s, %s, %s, %s, %s
+        %s, %s, %s, %s, %s
     )
     ON CONFLICT (norad_number) DO UPDATE SET
         tle_line1 = COALESCE(EXCLUDED.tle_line1, satellites.tle_line1),
@@ -286,7 +286,6 @@ def update_satellite_data():
         longitude = COALESCE(EXCLUDED.longitude, satellites.longitude),
         object_type = COALESCE(EXCLUDED.object_type, satellites.object_type),
         ops_status_code = COALESCE(EXCLUDED.ops_status_code, satellites.ops_status_code),
-        owner = COALESCE(EXCLUDED.owner, satellites.owner),
         launch_date = COALESCE(EXCLUDED.launch_date, satellites.launch_date),
         launch_site = COALESCE(EXCLUDED.launch_site, satellites.launch_site),
         decay_date = COALESCE(EXCLUDED.decay_date, satellites.decay_date),
@@ -298,8 +297,7 @@ def update_satellite_data():
           params["ephemeris_type"], params["inclination"], params["eccentricity"], params["mean_motion"],
           params["raan"], params["arg_perigee"], params["epoch"],
           params["velocity"], params["latitude"], params["longitude"],
-          spacetrack_data.get("object_type"), spacetrack_data.get("ops_status_code"),
-           spacetrack_data.get("owner"), spacetrack_data.get("launch_date"),
+          spacetrack_data.get("object_type"), spacetrack_data.get("ops_status_code"), spacetrack_data.get("launch_date"),
            spacetrack_data.get("launch_site"), spacetrack_data.get("decay_date"),
            spacetrack_data.get("rcs"), spacetrack_data.get("purpose"),
              spacetrack_data.get("country")
