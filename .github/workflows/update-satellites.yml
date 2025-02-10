@@ -1,9 +1,9 @@
 name: Update Satellite Data (GitHub Actions + Docker)
 
 on:
-  schedule:
-    - cron: "0 6 * * *"  # Runs every day at 6 AM UTC
-  workflow_dispatch:  # Allows manual trigger
+    schedule:
+      - cron: "0 6 * * *"  # Runs every day at 6 AM UTC
+    workflow_dispatch:  # Allows manual trigger
 
 jobs:
   update_satellites:
@@ -16,15 +16,52 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
+      - name: Debug GitHub Secrets
+        run: |
+          echo "🔍 Checking Secrets..."
+          if [[ -z "${{ secrets.SPACETRACK_USER }}" ]]; then
+            echo "❌ SPACETRACK_USER is missing!"
+            exit 1
+          else
+            echo "✅ SPACETRACK_USER is set."
+          fi
+
+          if [[ -z "${{ secrets.SPACETRACK_PASS }}" ]]; then
+            echo "❌ SPACETRACK_PASS is missing!"
+            exit 1
+          else
+            echo "✅ SPACETRACK_PASS is set."
+          fi
+
+      - name: Set Environment Variables
+        run: |
+          echo "SPACETRACK_USER=${{ secrets.SPACETRACK_USER }}" >> $GITHUB_ENV
+          echo "SPACETRACK_PASS=${{ secrets.SPACETRACK_PASS }}" >> $GITHUB_ENV
+          echo "DB_HOST=${{ secrets.DB_HOST }}" >> $GITHUB_ENV
+          echo "DB_NAME=${{ secrets.DB_NAME }}" >> $GITHUB_ENV
+          echo "DB_USER=${{ secrets.DB_USER }}" >> $GITHUB_ENV
+          echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> $GITHUB_ENV
+          echo "DB_PORT=5432" >> $GITHUB_ENV
+
+      - name: Verify Loaded Environment Variables
+        run: |
+          echo "🔍 Verifying Environment Variables..."
+          echo "SPACETRACK_USER=${SPACETRACK_USER}"
+          echo "SPACETRACK_PASS=${SPACETRACK_PASS}"
+          echo "DB_HOST=${DB_HOST}"
+          echo "DB_NAME=${DB_NAME}"
+          echo "DB_USER=${DB_USER}"
+          
+
       - name: Build and Run Updater in Docker
         run: |
           docker build -t satellite-updater -f backend/Dockerfile.update ./backend
           docker run --rm \
-            -e DB_HOST=${{ secrets.DB_HOST }} \
-            -e DB_NAME=${{ secrets.DB_NAME }} \
-            -e DB_USER=${{ secrets.DB_USER }} \
-            -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
-            -e DB_PORT=5432 \
-            -e SPACETRACK_USER=${{ secrets.SPACETRACK_USER }} \
-            -e SPACETRACK_PASS=${{ secrets.SPACETRACK_PASS }} \
+            -e DB_HOST=$DB_HOST \
+            -e DB_NAME=$DB_NAME \
+            -e DB_USER=$DB_USER \
+            -e DB_PASSWORD=$DB_PASSWORD \
+            -e DB_PORT=$DB_PORT \
+            -e SPACETRACK_USER=$SPACETRACK_USER \
+            -e SPACETRACK_PASS=$SPACETRACK_PASS \
             satellite-updater
