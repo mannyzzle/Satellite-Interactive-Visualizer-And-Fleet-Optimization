@@ -316,3 +316,7 @@ def update_satellite_data():
     cursor.close()
     conn.close()
     print(f"✅ {updated_count} satellites inserted/updated successfully. 🚀 {skipped_count} entries skipped.")
+
+if __name__ == "__main__":
+    print("Connecting to the database...")
+    update_satellite_data()
