@@ -24,55 +24,35 @@ COOKIES_FILE = "cookies.txt"  # Ensure this is the correct cookie file path
 
 API_WAIT_TIME = 3  # ✅ Complies with API rate limits
 
-
 def get_spacetrack_session():
-    """
-    Logs in to Space-Track and returns a session with authentication cookies.
-    Tries to reuse cookies if available.
-    """
+    """Logs in to Space-Track and returns an authenticated session."""
     session = requests.Session()
 
-    # Try loading existing cookies
+    # Delete old cookies to force a fresh login
     if os.path.exists(COOKIES_FILE):
-        try:
-            print("🍪 Using saved Space-Track session cookie.")
-            with open(COOKIES_FILE, "r") as f:
-                cookies_data = f.read().strip()
+        os.remove(COOKIES_FILE)
 
-            # ✅ Extract cookie value correctly
-            if "\t" in cookies_data:
-                cookies_data = cookies_data.split("\t")[-1]  # Extract only the actual cookie value
-            
-            session.cookies.set("chocolatechip", cookies_data, domain="www.space-track.org")
-
-            # ✅ Validate session BEFORE logging in again
-            test_url = "https://www.space-track.org/basicspacedata/query/class/satcat/NORAD_CAT_ID/25544/format/json"
-            test_response = session.get(test_url)
-
-            if test_response.status_code == 200:
-                print("✅ Space-Track session is valid.")
-                return session
-        except Exception as e:
-            print(f"⚠️ Error loading cookies: {e}")
-
-    # **If session is invalid, perform login**
     login_url = "https://www.space-track.org/ajaxauth/login"
     payload = {"identity": SPACETRACK_USER, "password": SPACETRACK_PASS}
 
     response = session.post(login_url, data=payload)
+    
+    print(f"🔍 Login Response Status: {response.status_code}")
+    print(f"🔍 Login Response Text: {response.text}")  # ✅ Debugging
 
-    if response.status_code == 200 and "You are now logged in" in response.text:
-        print("✅ Space-Track login successful.")
-
-        # ✅ Correctly store only the cookie value (no Netscape formatting)
-        with open(COOKIES_FILE, "w") as f:
-            cookie_value = session.cookies.get("chocolatechip")
-            f.write(cookie_value if cookie_value else "")
-
-        return session
+    if response.status_code == 200:
+        cookie_value = session.cookies.get("chocolatechip")
+        if cookie_value:
+            print("✅ Space-Track login successful.")
+            with open(COOKIES_FILE, "w") as f:
+                f.write(cookie_value)
+            return session
+        else:
+            print("❌ Login successful, but no cookie received!")
     else:
         print(f"❌ Space-Track login failed! HTTP {response.status_code} - {response.text}")
-        return None
+
+    return None
 
 
 
@@ -96,7 +76,7 @@ def rate_limited_get(session, url):
 
 
 
-def fetch_tle_data(session, existing_norads, batch_size=300):
+def fetch_tle_data(session, existing_norads, batch_size=500):
     """
     Fetches latest TLE data from Space-Track with retries for failed requests.
     """
@@ -189,7 +169,7 @@ def fetch_tle_data(session, existing_norads, batch_size=300):
 
 
 
-def fetch_spacetrack_data_batch(session, norad_ids, batch_size=300):
+def fetch_spacetrack_data_batch(session, norad_ids, batch_size=500):
     """
     Fetch satellite metadata with retries for failed requests.
     """

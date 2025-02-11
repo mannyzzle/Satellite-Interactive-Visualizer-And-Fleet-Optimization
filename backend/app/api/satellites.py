@@ -4,10 +4,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.database import get_db_connection
 import math
 
-
-
 router = APIRouter()
-
 
 
 def sanitize_value(value):
@@ -46,7 +43,8 @@ def get_all_satellites(
                    latitude, longitude, bstar, rev_num, ephemeris_type, 
                    eccentricity, period, perigee, apogee, epoch, raan, 
                    arg_perigee, mean_motion, semi_major_axis, tle_line1, 
-                   tle_line2, intl_designator
+                   tle_line2, intl_designator, object_type, 
+                   launch_date, launch_site, decay_date, rcs, purpose, country
             FROM satellites
         """
 
@@ -85,7 +83,14 @@ def get_all_satellites(
                     "semi_major_axis": sanitize_value(sat["semi_major_axis"]),
                     "tle_line1": sat["tle_line1"],
                     "tle_line2": sat["tle_line2"],
-                    "intl_designator": sanitize_value(sat["intl_designator"])
+                    "intl_designator": sanitize_value(sat["intl_designator"]),
+                    "object_type": sat["object_type"],
+                    "launch_date": sat["launch_date"],
+                    "launch_site": sat["launch_site"],
+                    "decay_date": sat["decay_date"],
+                    "rcs": sanitize_value(sat["rcs"]),
+                    "purpose": sat["purpose"],
+                    "country": sat["country"]
                 }
                 for sat in satellites
             ]
@@ -102,27 +107,89 @@ def get_all_satellites(
 
 
 
+
+
 def get_filter_condition(filter):
     filter_conditions = {
+        # 🌍 Orbital Regions
         "LEO": "orbit_type = 'LEO'",
         "MEO": "orbit_type = 'MEO'",
         "GEO": "orbit_type = 'GEO'",
+        "HEO": "orbit_type = 'HEO'",  # ✅ Highly Elliptical Orbit
+        "Suborbital": "orbit_type = 'SUBORBITAL'",  # 🚀 Suborbital objects
+
+        # 🚀 Velocity Filters
         "High Velocity": "velocity > 7.8",
         "Low Velocity": "velocity <= 7.8",
+
+        # 🔍 Orbital Parameters
         "Perigee < 500 km": "perigee < 500",
+        "Perigee > 500 km": "perigee > 500",
         "Apogee > 35,000 km": "apogee > 35000",
-        "Recent Launches": "epoch > NOW() - INTERVAL '30 days'",
         "Eccentricity > 0.1": "eccentricity > 0.1",
-        "B* Drag Term > 0.0001": "bstar > 0.0001"
+        "Mean Motion > 15": "mean_motion > 15",  # Fast-moving objects
+
+        # 🌎 Drag & Atmospheric Effects
+        "B* Drag Term > 0.0001": "bstar > 0.0001",
+        "B* Drag Term < 0.0001": "bstar < 0.0001",
+
+        # 🛰️ Purpose Filters
+        "Communications": "purpose = 'Communications'",
+        "Navigation": "purpose = 'Navigation'",
+        "Military": "purpose = 'Military/Reconnaissance'",
+        "Weather": "purpose = 'Weather Monitoring'",
+        "Earth Observation": "purpose = 'Earth Observation'",
+        "Science": "purpose = 'Scientific Research'",
+        "Human Spaceflight": "purpose = 'Human Spaceflight'",
+        "Technology Demo": "purpose = 'Technology Demonstration'",
+        "Unknown": "purpose = 'Unknown'",
+
+
+        # 🚀 Launch & Decay Status
+        "Recent Launches": "launch_date > NOW() - INTERVAL '30 days'",
+
+
+        # 🛰️ Radar Cross-Section (RCS)
+        "Small Satellites": "rcs < 0.1",
+        "Medium Satellites": "rcs BETWEEN 0.1 AND 1.0",
+        "Large Satellites": "rcs > 1.0",
     }
-    
-    # ✅ Support multiple filters
+
+    conditions = []
+
     if filter:
         filters = filter.split(",")  # Assume filters are passed as CSV string
-        conditions = [filter_conditions[f] for f in filters if f in filter_conditions]
-        return " AND ".join(conditions) if conditions else "1=1"
 
-    return "1=1"  # Default to no filter
+        for f in filters:
+            if f in filter_conditions:
+                conditions.append(filter_conditions[f])
+
+            # 🎯 Dynamic Filters (Launch Year, Country, Inclination)
+            elif f.startswith("Launch Year:"):
+                year = f.split(":")[1]
+                if year.isdigit():
+                    conditions.append(f"EXTRACT(YEAR FROM launch_date) = {year}")
+
+            elif f.startswith("Country:"):
+                country = f.split(":")[1]
+                conditions.append(f"country = '{country}'")
+
+            elif f.startswith("Inclination <"):
+                angle = f.split("<")[1].strip()
+                if angle.replace(".", "", 1).isdigit():  # Allow decimals
+                    conditions.append(f"inclination < {angle}")
+
+            elif f.startswith("Inclination >"):
+                angle = f.split(">")[1].strip()
+                if angle.replace(".", "", 1).isdigit():
+                    conditions.append(f"inclination > {angle}")
+
+    return " AND ".join(conditions) if conditions else "1=1"  # Default: No filter applied
+
+
+
+
+
 
 
 
@@ -142,7 +209,8 @@ def get_satellite_by_name(satellite_name: str):
                latitude, longitude, bstar, rev_num, ephemeris_type, 
                eccentricity, period, perigee, apogee, epoch, raan, 
                arg_perigee, mean_motion, semi_major_axis, tle_line1, 
-               tle_line2, intl_designator
+               tle_line2, intl_designator, object_type, 
+               launch_date, launch_site, decay_date, rcs, purpose, country
         FROM satellites WHERE name = %s
     """, (satellite_name,))
     
@@ -177,5 +245,12 @@ def get_satellite_by_name(satellite_name: str):
         "semi_major_axis": satellite["semi_major_axis"],
         "tle_line1": satellite["tle_line1"],
         "tle_line2": satellite["tle_line2"],
-        "intl_designator": satellite["intl_designator"]
+        "intl_designator": satellite["intl_designator"],
+        "object_type": satellite["object_type"],
+        "launch_date": satellite["launch_date"],
+        "launch_site": satellite["launch_site"],
+        "decay_date": satellite["decay_date"],
+        "rcs": satellite["rcs"],
+        "purpose": satellite["purpose"],
+        "country": satellite["country"]
     }
