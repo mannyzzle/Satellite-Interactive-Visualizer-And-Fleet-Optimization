@@ -107,16 +107,13 @@ def get_all_satellites(
 
 
 
-
-
 def get_filter_condition(filter):
     filter_conditions = {
         # 🌍 Orbital Regions
         "LEO": "orbit_type = 'LEO'",
         "MEO": "orbit_type = 'MEO'",
         "GEO": "orbit_type = 'GEO'",
-        "HEO": "orbit_type = 'HEO'",  # ✅ Highly Elliptical Orbit
-        "Suborbital": "orbit_type = 'SUBORBITAL'",  # 🚀 Suborbital objects
+        "HEO": "orbit_type = 'HEO'",
 
         # 🚀 Velocity Filters
         "High Velocity": "velocity > 7.8",
@@ -124,14 +121,9 @@ def get_filter_condition(filter):
 
         # 🔍 Orbital Parameters
         "Perigee < 500 km": "perigee < 500",
-        "Perigee > 500 km": "perigee > 500",
         "Apogee > 35,000 km": "apogee > 35000",
         "Eccentricity > 0.1": "eccentricity > 0.1",
-        "Mean Motion > 15": "mean_motion > 15",  # Fast-moving objects
-
-        # 🌎 Drag & Atmospheric Effects
         "B* Drag Term > 0.0001": "bstar > 0.0001",
-        "B* Drag Term < 0.0001": "bstar < 0.0001",
 
         # 🛰️ Purpose Filters
         "Communications": "purpose = 'Communications'",
@@ -144,18 +136,15 @@ def get_filter_condition(filter):
         "Technology Demo": "purpose = 'Technology Demonstration'",
         "Unknown": "purpose = 'Unknown'",
 
-
-        # 🚀 Launch & Decay Status
+        # 🚀 Launch & Decay Filters
         "Recent Launches": "launch_date > NOW() - INTERVAL '30 days'",
-
-
-        # 🛰️ Radar Cross-Section (RCS)
-        "Small Satellites": "rcs < 0.1",
-        "Medium Satellites": "rcs BETWEEN 0.1 AND 1.0",
-        "Large Satellites": "rcs > 1.0",
+        "Decayed": "decay_date IS NOT NULL",
+        "Active Satellites": "decay_date IS NULL"
     }
-
+    
     conditions = []
+    launch_years = []  # Store multiple launch years
+    countries = []  # Store multiple country selections
 
     if filter:
         filters = filter.split(",")  # Assume filters are passed as CSV string
@@ -164,30 +153,25 @@ def get_filter_condition(filter):
             if f in filter_conditions:
                 conditions.append(filter_conditions[f])
 
-            # 🎯 Dynamic Filters (Launch Year, Country, Inclination)
+            # 🎯 Dynamic Filters (Launch Year, Country)
             elif f.startswith("Launch Year:"):
                 year = f.split(":")[1]
                 if year.isdigit():
-                    conditions.append(f"EXTRACT(YEAR FROM launch_date) = {year}")
+                    launch_years.append(year)
 
             elif f.startswith("Country:"):
                 country = f.split(":")[1]
-                conditions.append(f"country = '{country}'")
+                countries.append(f"'{country}'")
 
-            elif f.startswith("Inclination <"):
-                angle = f.split("<")[1].strip()
-                if angle.replace(".", "", 1).isdigit():  # Allow decimals
-                    conditions.append(f"inclination < {angle}")
+    # ✅ Handle multiple Launch Year filters with `IN (...)`
+    if launch_years:
+        conditions.append(f"EXTRACT(YEAR FROM launch_date) IN ({', '.join(launch_years)})")
 
-            elif f.startswith("Inclination >"):
-                angle = f.split(">")[1].strip()
-                if angle.replace(".", "", 1).isdigit():
-                    conditions.append(f"inclination > {angle}")
+    # ✅ Handle multiple Country filters
+    if countries:
+        conditions.append(f"country IN ({', '.join(countries)})")
 
     return " AND ".join(conditions) if conditions else "1=1"  # Default: No filter applied
-
-
-
 
 
 
