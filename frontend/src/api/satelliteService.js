@@ -36,13 +36,18 @@ export async function fetchSatellites(page = 1, limit = 100, filter = null) {
 }
 
 
-
 export async function fetchSatelliteByName(name) {
   try {
     console.log(`📡 Fetching satellite details for: ${name}`);
 
-    const response = await axios.get(`${API_BASE_URL}/${encodeURIComponent(name)}`, {
-      validateStatus: (status) => status < 500, // Allows handling 404 errors properly
+    // ✅ Remove trailing slashes, trim spaces, and ensure a properly formatted URL
+    const formattedName = encodeURIComponent(name.trim());
+    const url = `${API_BASE_URL}/${formattedName}`.replace(/([^:]\/)\/+/g, "$1"); // Fix double slash
+
+    console.log(`🔗 Corrected API Request URL: ${url}`);
+
+    const response = await axios.get(url, {
+      validateStatus: (status) => status < 500, // Allow handling 404 errors properly
     });
 
     if (response.status === 404) {

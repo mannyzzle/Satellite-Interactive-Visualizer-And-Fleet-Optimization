@@ -1014,6 +1014,66 @@ useEffect(() => {
 
 const displayedSatellites = filteredSatellites.length > 0 ? filteredSatellites : satellites;
 
+const countryMapping = {
+  "US": { name: "USA", flag: "🇺🇸" },
+  "PRC": { name: "China", flag: "🇨🇳" },
+  "UK": { name: "United Kingdom", flag: "🇬🇧" },
+  "CIS": { name: "CIS (Former USSR)", flag: "🇷🇺" },
+  "JPN": { name: "Japan", flag: "🇯🇵" },
+  "IND": { name: "India", flag: "🇮🇳" },
+  "ESA": { name: "European Space Agency", flag: "🇪🇺" },
+  "FR": { name: "France", flag: "🇫🇷" },
+  "SES": { name: "SES (Luxembourg)", flag: "🇱🇺" },
+  "CA": { name: "Canada", flag: "🇨🇦" },
+  "GER": { name: "Germany", flag: "🇩🇪" },
+  "SKOR": { name: "South Korea", flag: "🇰🇷" },
+  "IT": { name: "Italy", flag: "🇮🇹" },
+  "SPN": { name: "Spain", flag: "🇪🇸" },
+  "ARGN": { name: "Argentina", flag: "🇦🇷" },
+  "TURK": { name: "Turkey", flag: "🇹🇷" },
+  "BRAZ": { name: "Brazil", flag: "🇧🇷" },
+  "NOR": { name: "Norway", flag: "🇳🇴" },
+  "UAE": { name: "UAE", flag: "🇦🇪" },
+  "ISRA": { name: "Israel", flag: "🇮🇱" },
+  "TWN": { name: "Taiwan", flag: "🇹🇼" },
+  "IRAN": { name: "Iran", flag: "🇮🇷" },
+  "BEL": { name: "Belgium", flag: "🇧🇪" },
+  "SING": { name: "Singapore", flag: "🇸🇬" },
+  "INDO": { name: "Indonesia", flag: "🇮🇩" },
+  "THAI": { name: "Thailand", flag: "🇹🇭" },
+  "EGYP": { name: "Egypt", flag: "🇪🇬" },
+  "KAZ": { name: "Kazakhstan", flag: "🇰🇿" },
+  "SAFR": { name: "South Africa", flag: "🇿🇦" },
+  "PAKI": { name: "Pakistan", flag: "🇵🇰" },
+  "MEX": { name: "Mexico", flag: "🇲🇽" },
+  "POL": { name: "Poland", flag: "🇵🇱" },
+  "UKR": { name: "Ukraine", flag: "🇺🇦" },
+  "QAT": { name: "Qatar", flag: "🇶🇦" },
+  "CHLE": { name: "Chile", flag: "🇨🇱" },
+  "BOL": { name: "Bolivia", flag: "🇧🇴" },
+  "ISS": { name: "ISS (International Space Station)", flag: "🚀" },
+  "NICO": { name: "Nicaragua", flag: "🇳🇮" },
+  "PER": { name: "Peru", flag: "🇵🇪" },
+  "BGD": { name: "Bangladesh", flag: "🇧🇩" },
+  "IRAQ": { name: "Iraq", flag: "🇮🇶" },
+  "HUN": { name: "Hungary", flag: "🇭🇺" },
+  "KEN": { name: "Kenya", flag: "🇰🇪" },
+  "BELA": { name: "Belarus", flag: "🇧🇾" },
+  "AGO": { name: "Angola", flag: "🇦🇴" }
+};
+
+const getCountryFlag = (code) => countryMapping[code]?.flag || "🌍";
+const getCountryName = (code) => countryMapping[code]?.name || "Unknown";
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1026,91 +1086,93 @@ return (
     {/* 🌍 Main Layout: Sidebar + 3D UI */}
     <div className="relative flex flex-1">
 
-      {/* 📌 Sidebar (Satellite List, Search & Pagination) */}
-      <div className="relative flex flex-col h-[89vh]">
-        <div
-          className={`absolute top-0 left-0 h-full bg-gray-900 text-white p-2 overflow-y-auto shadow-lg transition-transform duration-300 ease-in-out w-48 md:w-1/10 z-40 ${
-            sidebarOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
-        >
-          <h2 className="text-lg font-bold mb-2 text-center">Satellite List</h2>
+{/* 📌 Sidebar (Satellite List, Search & Pagination) */}
+<div className="relative flex flex-col h-[90vh]">
+  <div
+    className={`absolute top-20 left-0 h-[60vh] bg-gray-900 bg-opacity-90 backdrop-blur-md text-white p-4 shadow-xl border-r border-gray-700 transition-transform duration-300 ease-in-out w-60 md:w-1/8 z-40 rounded-r-xl ${
+      sidebarOpen ? "translate-x-0" : "-translate-x-full"
+    }`}
+  >
+    {/* 🛰️ Sidebar Header */}
+    <h2 className="text-lg font-bold mb-3 text-center border-b border-gray-700 pb-2">Satellite List</h2>
 
-          {/* 🔍 Search Input */}
-          <input
-            type="text"
-            placeholder="Search satellites..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full p-2 mb-2 text-black rounded-md"
-          />
+    {/* 🔍 Search Input */}
+    <input
+      type="text"
+      placeholder="🔍 Search satellites..."
+      value={searchQuery}
+      onChange={(e) => setSearchQuery(e.target.value)}
+      className="w-full p-2 mb-3 text-black rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-600 shadow-sm"
+    />
 
-          {/* 🚀 Satellite List */}
-          {loading ? (
-            <p className="text-center text-gray-400">Loading...</p>
-          ) : activeFilters && filteredSatellites.length === 0 ? (
-            <p className="text-center text-yellow-400 font-semibold">⚠️ No satellites available</p>
-          ) : (
-            <ul className="space-y-2">
-  {displayedSatellites.slice((page - 1) * limit, page * limit).map((sat) => (
-    <li
-      key={sat.norad_number}
-      className={`cursor-pointer p-3 rounded-md text-center border border-gray-700 ${
-        selectedSatellite?.norad_number === sat.norad_number
-          ? "bg-blue-500 text-white border-blue-600"
-          : "bg-gray-700 hover:bg-gray-600"
-      }`}
-      onClick={() => {
-        console.log(`📡 Selecting satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
-        focusOnSatellite(sat);
-        enableInteraction();
-      }}
-    >
-      <span className="block w-full">{sat.name}</span>
-    </li>
-  ))}
-</ul>
+    {/* 🚀 Satellite List */}
+    <div className="overflow-y-auto max-h-[30vh] space-y-2 pr-2">
+      {loading ? (
+        <p className="text-center text-gray-400">Loading...</p>
+      ) : activeFilters && filteredSatellites.length === 0 ? (
+        <p className="text-center text-yellow-400 font-semibold">⚠️ No satellites available</p>
+      ) : (
+        <ul className="space-y-2">
+          {displayedSatellites.slice((page - 1) * limit, page * limit).map((sat) => (
+            <li
+              key={sat.norad_number}
+              className={`cursor-pointer p-3 rounded-md text-center border border-gray-700 shadow-sm transition-all duration-200 ${
+                selectedSatellite?.norad_number === sat.norad_number
+                  ? "bg-blue-500 text-white border-blue-600 shadow-md"
+                  : "bg-gray-800 hover:bg-gray-700"
+              }`}
+              onClick={() => {
+                console.log(`📡 Selecting satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
+                focusOnSatellite(sat);
+                enableInteraction();
+              }}
+            >
+              <span className="block w-full">{sat.name}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
 
-          )}
-
-          {/* 🌍 Pagination Controls */}
-{(activeFilters.length > 0 ? filteredSatellites.length : satellites.length) > limit && (
-  <div className="flex justify-between items-center mt-4">
-    <button
-      onClick={() => changePage(page - 1)}
-      disabled={page === 1 || loading}
-      className={`px-3 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-        page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
-      }`}
-    >
-      ← Prev
-    </button>
-
-    <span className="text-sm text-gray-300">Page {page}</span>
-
-    <button
-      onClick={() => changePage(page + 1)}
-      disabled={loading || satellites.length < limit}
-      className={`px-3 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-        loading || satellites.length < limit ? "opacity-50 cursor-not-allowed" : ""
-      }`}
-    >
-      Next →
-    </button>
-  </div>
-
-          )}
-        </div>
-
-        {/* 📌 Sidebar Toggle */}
+    {/* 🌍 Pagination Controls */}
+    {(activeFilters.length > 0 ? filteredSatellites.length : satellites.length) > limit && (
+      <div className="flex justify-between items-center mt-4 border-t border-gray-700 pt-3">
         <button
-          onClick={() => setSidebarOpen((prev) => !prev)}
-          className={`absolute top-1/2 transform -translate-y-1/2 bg-gray-800 text-white px-3 py-2 rounded-r-md shadow-md hover:bg-gray-700 transition-all duration-300 z-50 ${
-            sidebarOpen ? "left-[12rem] md:left-1/10" : "left-0"
+          onClick={() => changePage(page - 1)}
+          disabled={page === 1 || loading}
+          className={`px-4 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
+            page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
           }`}
         >
-          {sidebarOpen ? "←" : "→"}
+          ← Prev
+        </button>
+
+        <span className="text-sm text-gray-300">Page {page}</span>
+
+        <button
+          onClick={() => changePage(page + 1)}
+          disabled={loading || satellites.length < limit}
+          className={`px-4 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
+            loading || satellites.length < limit ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+        >
+          Next →
         </button>
       </div>
+    )}
+  </div>
+
+  {/* 📌 Sidebar Toggle */}
+  <button
+    onClick={() => setSidebarOpen((prev) => !prev)}
+    className={`absolute top-1/2 transform -translate-y-1/2 bg-gray-800 text-white px-3 py-2 rounded-r-md shadow-md hover:bg-gray-700 transition-all duration-300 z-50 ${
+      sidebarOpen ? "left-[15rem] md:left-1/6" : "left-0"
+    }`}
+  >
+    {sidebarOpen ? "←" : "→"}
+  </button>
+</div>
+
 
       {/* 🌍 3D UI + Sidebar + Info Box Sticking Together */}
       <div className="relative flex-1 flex flex-col">
@@ -1151,42 +1213,57 @@ return (
   </div>
 
 
-
-
-        {/* 🛰️ Satellite Info Box */}
-        <div className="absolute bottom-0 bg-gray-900 text-yellow-300 p-3 shadow-lg text-xs border-t border-gray-700 flex flex-col items-center h-24 w-full z-[60] transition-all duration-300 ease-in-out">
-          {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-yellow-300 border-opacity-75"></div>
-            </div>
-          ) : !selectedSatellite ? (
-            <div className="flex items-center justify-center h-full text-yellow-400 font-semibold">
-              <p>🔍 Make a selection to view details</p>
-            </div>
-          ) : (
-            <>
-              <div className="flex flex-col items-center w-full text-center pb-1">
-                <span className="font-bold text-yellow-400 text-sm">{selectedSatellite.name}</span>
-                <span className="text-yellow-500 text-xs">
-                  <strong>Last Update:</strong> {new Date(selectedSatellite.epoch).toLocaleString()}
-                </span>
-              </div>
-
-              <div className="flex flex-wrap justify-center items-center space-x-4 overflow-x-auto whitespace-nowrap w-full px-4 text-center">
-                <span><strong>NORAD:</strong> {selectedSatellite.norad_number}</span>
-                <span><strong>Orbit:</strong> {selectedSatellite.orbit_type}</span>
-                <span><strong>Velocity:</strong> {selectedSatellite.velocity} km/s</span>
-                <span><strong>Inclination:</strong> {selectedSatellite.inclination}°</span>
-                <span><strong>Latitude:</strong> {selectedSatellite.latitude?.toFixed(4)}°</span>
-                <span><strong>Longitude:</strong> {selectedSatellite.longitude?.toFixed(4)}°</span>
-                <span><strong>Apogee:</strong> {selectedSatellite.apogee} km</span>
-                <span><strong>Perigee:</strong> {selectedSatellite.perigee} km</span>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+{/* 🛰️ Satellite Info Box */}
+<div className="absolute bottom-0 bg-gray-900 text-yellow-300 p-3 shadow-lg text-xs border-t border-gray-700 flex flex-col items-center h-36 w-full z-[60] transition-all duration-300 ease-in-out">
+  {loading ? (
+    <div className="flex items-center justify-center h-full">
+      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-yellow-300 border-opacity-75"></div>
     </div>
+  ) : !selectedSatellite ? (
+    <div className="flex items-center justify-center h-full text-yellow-400 font-semibold">
+      <p>🔍 Make a selection to view details</p>
+    </div>
+  ) : (
+    <>
+      {/* Satellite Name, Country & Last Update */}
+      <div className="flex flex-col items-center w-full text-center pb-1">
+        <div className="flex items-center space-x-2">
+          <span className="text-lg font-bold text-yellow-400">{selectedSatellite.name}</span>
+          <span className="text-sm flex items-center">
+            {getCountryFlag(selectedSatellite.country)} {getCountryName(selectedSatellite.country)}
+          </span>
+        </div>
+        <span className="text-yellow-500 text-xs">
+          <strong>Last Update:</strong> {new Date(selectedSatellite.epoch).toLocaleString()}
+        </span>
+      </div>
+
+      {/* Satellite Details */}
+      <div className="flex flex-wrap justify-center items-center space-x-4 overflow-x-auto whitespace-nowrap w-full px-4 text-center">
+        <span><strong>NORAD:</strong> {selectedSatellite.norad_number}</span>
+        <span><strong>Orbit:</strong> {selectedSatellite.orbit_type}</span>
+        <span className={selectedSatellite.velocity > 7.8 ? "text-red-400" : "text-green-400"}>
+          <strong>Velocity:</strong> {selectedSatellite.velocity} km/s
+        </span>
+        <span><strong>Inclination:</strong> {selectedSatellite.inclination}°</span>
+        <span><strong>Latitude:</strong> {selectedSatellite.latitude?.toFixed(4)}°</span>
+        <span><strong>Longitude:</strong> {selectedSatellite.longitude?.toFixed(4)}°</span>
+        <span><strong>Altitude:</strong> {selectedSatellite.perigee} - {selectedSatellite.apogee} km</span>
+        <span><strong>Eccentricity:</strong> {selectedSatellite.eccentricity?.toFixed(4)}</span>
+        <span><strong>B* Drag:</strong> {selectedSatellite.bstar}</span>
+      </div>
+
+      {/* Additional Info: Purpose, Status, Launch Date */}
+      <div className="flex flex-wrap justify-center items-center space-x-4 overflow-x-auto whitespace-nowrap w-full px-4 text-center mt-2">
+        <span><strong>Type:</strong> {selectedSatellite.purpose || "Unknown"}</span>
+        <span><strong>Launch:</strong> {selectedSatellite.launch_date ? new Date(selectedSatellite.launch_date).toLocaleDateString() : "N/A"}</span>
+        <span><strong>Size:</strong> {selectedSatellite.rcs < 0.1 ? "🛰️ Small" : selectedSatellite.rcs < 1.0 ? "📡 Medium" : "🚀 Large"}</span>
+      </div>
+    </>
+  )}
+</div>
+</div>
+</div>
 
  {/* 🛰️ Filter Section Below 3D UI */}
 <div className="flex flex-wrap justify-center p-4 bg-gray-800 shadow-md rounded-md w-full z-50">
@@ -1198,7 +1275,6 @@ return (
     { name: "MEO", label: "🛰️ Medium Earth Orbit (MEO)" },
     { name: "GEO", label: "🛰️ Geostationary Orbit (GEO)" },
     { name: "HEO", label: "🚀 Highly Elliptical Orbit (HEO)" },
-    { name: "Suborbital", label: "🛑 Suborbital Objects" },
 
     // 🚀 Velocity & Orbital Characteristics
     { name: "High Velocity", label: "🚀 Fast (>7.8 km/s)" },
@@ -1219,18 +1295,10 @@ return (
     { name: "Technology Demo", label: "🛠️ Technology Demo" },
 
     // 🚀 Launch & Decay Filters
-    { name: "Recent Launches", label: "🚀 Recent Launch (30 Days)" },
-    { name: "Decayed", label: "💀 Decayed Satellites" },
-    { name: "Active Satellites", label: "✅ Active Satellites" },
+    { name: "Recent Launches", label: "🚀 Recent Launch (30 Days)" }
+  
 
-    // 📡 Operational Status
-    { name: "Active", label: "🟢 Operational" },
-    { name: "Retired", label: "🔴 Retired / Deactivated" },
-
-    // 🎯 Size (Radar Cross-Section)
-    { name: "Small Satellites", label: "🛰️ Small (<0.1 RCS)" },
-    { name: "Medium Satellites", label: "📡 Medium (0.1-1.0 RCS)" },
-    { name: "Large Satellites", label: "🚀 Large (>1.0 RCS)" }
+    
   ].map((filter) => (
     <button
       key={filter.name}
@@ -1255,15 +1323,113 @@ return (
   </select>
 
   {/* 🌍 Country Dropdown */}
-  <select
-    className="px-4 py-2 m-1 text-xs font-semibold rounded-md bg-gray-700 text-gray-300"
-    onChange={(e) => toggleFilter(`Country:${e.target.value}`)}
-  >
-    <option value="">🌍 Country</option>
-    {["USA", "Russia", "China", "India", "Japan", "EU", "Others"].map((country) => (
-      <option key={country} value={country}>{country}</option>
-    ))}
-  </select>
+<select
+  className="px-4 py-2 m-1 text-xs font-semibold rounded-md bg-gray-700 text-gray-300"
+  onChange={(e) => toggleFilter(`Country:${e.target.value}`)}
+>
+  <option value="">🌍 Select Country</option>
+  {[
+    { code: "US", label: "🇺🇸 USA" },
+    { code: "PRC", label: "🇨🇳 China" },
+    { code: "UK", label: "🇬🇧 United Kingdom" },
+    { code: "CIS", label: "🇷🇺 CIS (Former USSR)" },
+    { code: "TBD", label: "🌍 TBD" },
+    { code: "JPN", label: "🇯🇵 Japan" },
+    { code: "IND", label: "🇮🇳 India" },
+    { code: "ESA", label: "🇪🇺 European Space Agency" },
+    { code: "FR", label: "🇫🇷 France" },
+    { code: "SES", label: "📡 SES (Luxembourg)" },
+    { code: "CA", label: "🇨🇦 Canada" },
+    { code: "GER", label: "🇩🇪 Germany" },
+    { code: "SKOR", label: "🇰🇷 South Korea" },
+    { code: "IT", label: "🇮🇹 Italy" },
+    { code: "SPN", label: "🇪🇸 Spain" },
+    { code: "ARGN", label: "🇦🇷 Argentina" },
+    { code: "ITSO", label: "📡 ITSO (Intl. Telecomm Satellite Org.)" },
+    { code: "GLOB", label: "🌍 Global" },
+    { code: "EUTE", label: "📡 Eutelsat (Europe)" },
+    { code: "FIN", label: "🇫🇮 Finland" },
+    { code: "AUS", label: "🇦🇺 Australia" },
+    { code: "TURK", label: "🇹🇷 Turkey" },
+    { code: "O3B", label: "📡 O3B Networks" },
+    { code: "SWTZ", label: "🇨🇭 Switzerland" },
+    { code: "BRAZ", label: "🇧🇷 Brazil" },
+    { code: "NOR", label: "🇳🇴 Norway" },
+    { code: "ORB", label: "🚀 Orbital Sciences" },
+    { code: "IM", label: "🇮🇲 Isle of Man" },
+    { code: "UAE", label: "🇦🇪 UAE" },
+    { code: "SAUD", label: "🇸🇦 Saudi Arabia" },
+    { code: "ISRA", label: "🇮🇱 Israel" },
+    { code: "TWN", label: "🇹🇼 Taiwan" },
+    { code: "IRAN", label: "🇮🇷 Iran" },
+    { code: "BEL", label: "🇧🇪 Belgium" },
+    { code: "SING", label: "🇸🇬 Singapore" },
+    { code: "INDO", label: "🇮🇩 Indonesia" },
+    { code: "LUXE", label: "🇱🇺 Luxembourg" },
+    { code: "THAI", label: "🇹🇭 Thailand" },
+    { code: "AB", label: "🌍 AB Satellite" },
+    { code: "EGYP", label: "🇪🇬 Egypt" },
+    { code: "EUME", label: "🇪🇺 European Meteorological Org." },
+    { code: "AC", label: "🌍 AC Satellite" },
+    { code: "KAZ", label: "🇰🇿 Kazakhstan" },
+    { code: "RWA", label: "🇷🇼 Rwanda" },
+    { code: "SAFR", label: "🇿🇦 South Africa" },
+    { code: "BGR", label: "🇧🇬 Bulgaria" },
+    { code: "NETH", label: "🇳🇱 Netherlands" },
+    { code: "ABS", label: "📡 ABS Satellite Systems" },
+    { code: "MALA", label: "🇲🇾 Malaysia" },
+    { code: "PAKI", label: "🇵🇰 Pakistan" },
+    { code: "MEX", label: "🇲🇽 Mexico" },
+    { code: "ALG", label: "🇩🇿 Algeria" },
+    { code: "MA", label: "🇲🇦 Morocco" },
+    { code: "LTU", label: "🇱🇹 Lithuania" },
+    { code: "DEN", label: "🇩🇰 Denmark" },
+    { code: "NIG", label: "🇳🇬 Nigeria" },
+    { code: "SWED", label: "🇸🇪 Sweden" },
+    { code: "POL", label: "🇵🇱 Poland" },
+    { code: "VTNM", label: "🇻🇳 Vietnam" },
+    { code: "AZER", label: "🇦🇿 Azerbaijan" },
+    { code: "GREC", label: "🇬🇷 Greece" },
+    { code: "VENZ", label: "🇻🇪 Venezuela" },
+    { code: "ASRA", label: "🚀 ASRA Satellite" },
+    { code: "DJI", label: "🇩🇯 Djibouti" },
+    { code: "POR", label: "🇵🇹 Portugal" },
+    { code: "CZE", label: "🇨🇿 Czech Republic" },
+    { code: "UKR", label: "🇺🇦 Ukraine" },
+    { code: "QAT", label: "🇶🇦 Qatar" },
+    { code: "ECU", label: "🇪🇨 Ecuador" },
+    { code: "CHLE", label: "🇨🇱 Chile" },
+    { code: "BOL", label: "🇧🇴 Bolivia" },
+    { code: "LAOS", label: "🇱🇦 Laos" },
+    { code: "NICO", label: "🇳🇮 Nicaragua" },
+    { code: "ISS", label: "🚀 ISS (International Space Station)" },
+    { code: "STCT", label: "🚀 STCT Satellite" },
+    { code: "TUN", label: "🇹🇳 Tunisia" },
+    { code: "FRIT", label: "🚀 French IT Satellite" },
+    { code: "HRV", label: "🇭🇷 Croatia" },
+    { code: "KWT", label: "🇰🇼 Kuwait" },
+    { code: "COL", label: "🇨🇴 Colombia" },
+    { code: "JOR", label: "🇯🇴 Jordan" },
+    { code: "NKOR", label: "🇰🇵 North Korea" },
+    { code: "SVN", label: "🇸🇮 Slovenia" },
+    { code: "CHBZ", label: "🇨🇭 Swiss Satellite" },
+    { code: "CZCH", label: "🇨🇿 Czech Republic (Alt.)" },
+    { code: "RP", label: "🌍 RP Satellite" },
+    { code: "EST", label: "🇪🇪 Estonia" },
+    { code: "TMMC", label: "🚀 TMMC Satellite" },
+    { code: "PER", label: "🇵🇪 Peru" },
+    { code: "BGD", label: "🇧🇩 Bangladesh" },
+    { code: "IRAQ", label: "🇮🇶 Iraq" },
+    { code: "HUN", label: "🇭🇺 Hungary" },
+    { code: "KEN", label: "🇰🇪 Kenya" },
+    { code: "RASC", label: "🚀 RASC Satellite" },
+    { code: "BELA", label: "🇧🇾 Belarus" },
+    { code: "AGO", label: "🇦🇴 Angola" }
+  ].map(({ code, label }) => (
+    <option key={code} value={code}>{label}</option>
+  ))}
+</select>
+
 
   {/* 🛑 RESET FILTERS BOX */}
   <div className="w-full flex justify-center mt-3">
@@ -1277,16 +1443,13 @@ return (
 </div>
 
 
-
-
-
-    {/* 📜 Scrollable Content Below Everything (Responsive for Mobile & Desktop) */}
-<div className="overflow-y-auto min-h-[200vh] bg-gray-800 text-white px-4 sm:px-6 lg:px-12 py-6 z-60">
+{/* 📜 Scrollable Content Below Everything (Responsive for Mobile & Desktop) */}
+<div className="overflow-y-auto h-[calc(240vh-100px)] bg-gray-800 text-white px-2 sm:px-4 lg:px-6 py-6 z-60">
   
   {/* 🛰️ About the Satellite Tracker */}
-  <div className="max-w-full md:max-w-3xl mx-auto">
-    <h2 className="text-xl sm:text-2xl font-bold">About the Satellite Tracker</h2>
-    <p className="mt-4 text-sm sm:text-base">
+  <div className="w-full">
+    <h2 className="text-xl sm:text-2xl font-bold sticky top-0 bg-gray-800 py-2">About the Satellite Tracker</h2>
+    <p className="mt-4 text-sm sm:text-base leading-relaxed">
       This satellite tracker allows you to visualize real-time satellite movements and orbital paths. 
       It provides a dynamic 3D visualization of Earth and its orbiting satellites, updating in real-time
       using precise orbital mechanics calculations.
@@ -1294,9 +1457,9 @@ return (
   </div>
 
   {/* 🛰️ How It Works */}
-  <div className="max-w-full md:max-w-3xl mx-auto mt-8">
-    <h2 className="text-xl sm:text-2xl font-bold">How It Works</h2>
-    <p className="mt-4 text-sm sm:text-base">
+  <div className="w-full mt-8">
+    <h2 className="text-xl sm:text-2xl font-bold sticky top-0 bg-gray-800 py-2">How It Works</h2>
+    <p className="mt-4 text-sm sm:text-base leading-relaxed">
       The satellites update dynamically based on real-time orbital calculations, and the 3D visualization keeps
       track of their motion using <strong>Three.js</strong> and <strong>TLE (Two-Line Element) propagation</strong>. 
       Each satellite's trajectory is calculated using **Keplerian orbital mechanics** to ensure accuracy.
@@ -1304,9 +1467,9 @@ return (
   </div>
 
   {/* 🌎 Real-World Applications */}
-  <div className="max-w-full md:max-w-3xl mx-auto mt-8">
-    <h2 className="text-xl sm:text-2xl font-bold">Real-World Applications</h2>
-    <ul className="mt-4 list-disc pl-6 space-y-2 text-sm sm:text-base">
+  <div className="w-full mt-8">
+    <h2 className="text-xl sm:text-2xl font-bold sticky top-0 bg-gray-800 py-2">Real-World Applications</h2>
+    <ul className="mt-4 list-disc pl-4 sm:pl-6 space-y-2 text-sm sm:text-base leading-relaxed">
       <li><strong>Space Situational Awareness:</strong> Monitors space debris and ensures safe satellite operations.</li>
       <li><strong>Weather Monitoring:</strong> Tracks satellites like NOAA and GOES that provide weather updates.</li>
       <li><strong>GPS Navigation:</strong> Keeps track of positioning satellites like those in the GPS, Galileo, and GLONASS systems.</li>
@@ -1316,9 +1479,9 @@ return (
   </div>
 
   {/* 📡 Technical Features */}
-  <div className="max-w-full md:max-w-3xl mx-auto mt-8">
-    <h2 className="text-xl sm:text-2xl font-bold">Technical Features</h2>
-    <ul className="mt-4 list-disc pl-6 space-y-2 text-sm sm:text-base">
+  <div className="w-full mt-8">
+    <h2 className="text-xl sm:text-2xl font-bold sticky top-0 bg-gray-800 py-2">Technical Features</h2>
+    <ul className="mt-4 list-disc pl-4 sm:pl-6 space-y-2 text-sm sm:text-base leading-relaxed">
       <li><strong>Real-time Data Updates:</strong> Fetches and updates satellite positions every few seconds.</li>
       <li><strong>Interactive 3D Visualization:</strong> Uses <strong>Three.js</strong> for rendering Earth and satellites.</li>
       <li><strong>Orbit Path Calculation:</strong> Draws satellite orbits using **Keplerian elements**.</li>
@@ -1328,9 +1491,9 @@ return (
   </div>
 
   {/* 🚀 Future Enhancements */}
-  <div className="max-w-full md:max-w-3xl mx-auto mt-8">
-    <h2 className="text-xl sm:text-2xl font-bold">Future Enhancements</h2>
-    <ul className="mt-4 list-disc pl-6 space-y-2 text-sm sm:text-base">
+  <div className="w-full mt-8">
+    <h2 className="text-xl sm:text-2xl font-bold sticky top-0 bg-gray-800 py-2">Future Enhancements</h2>
+    <ul className="mt-4 list-disc pl-4 sm:pl-6 space-y-2 text-sm sm:text-base leading-relaxed">
       <li><strong>AI-Powered Anomaly Detection:</strong> Identifies unexpected orbital changes.</li>
       <li><strong>Space Weather Integration:</strong> Shows solar activity that may affect satellites.</li>
       <li><strong>Historical Data Replay:</strong> Allows users to replay satellite movements over time.</li>
@@ -1339,9 +1502,9 @@ return (
   </div>
 
   {/* 🌌 Space Exploration & New Missions */}
-  <div className="max-w-full md:max-w-3xl mx-auto mt-8">
-    <h2 className="text-xl sm:text-2xl font-bold">Exploring the Future of Space</h2>
-    <p className="mt-4 text-sm sm:text-base">
+  <div className="w-full mt-8">
+    <h2 className="text-xl sm:text-2xl font-bold sticky top-0 bg-gray-800 py-2">Exploring the Future of Space</h2>
+    <p className="mt-4 text-sm sm:text-base leading-relaxed">
       The rise of **mega-constellations** like Starlink and OneWeb, as well as missions to the Moon and Mars, 
       highlights the growing importance of satellite tracking. This platform could be expanded to support 
       real-time tracking of **deep space probes**, **lunar gateways**, and **interplanetary missions**.
@@ -1349,9 +1512,9 @@ return (
   </div>
 
   {/* 📜 Additional Resources */}
-  <div className="max-w-full md:max-w-3xl mx-auto mt-8">
-    <h2 className="text-xl sm:text-2xl font-bold">Additional Resources</h2>
-    <ul className="mt-4 list-disc pl-6 space-y-2 text-sm sm:text-base">
+  <div className="w-full mt-8">
+    <h2 className="text-xl sm:text-2xl font-bold sticky top-0 bg-gray-800 py-2">Additional Resources</h2>
+    <ul className="mt-4 list-disc pl-4 sm:pl-6 space-y-2 text-sm sm:text-base leading-relaxed">
       <li><a href="https://www.celestrak.com/" className="text-blue-400 hover:underline" target="_blank">CelesTrak - Satellite Data & TLE</a></li>
       <li><a href="https://www.n2yo.com/" className="text-blue-400 hover:underline" target="_blank">N2YO - Live Satellite Tracking</a></li>
       <li><a href="https://spaceweather.com/" className="text-blue-400 hover:underline" target="_blank">Space Weather Updates</a></li>
@@ -1360,8 +1523,7 @@ return (
   </div>
 
 </div>
+</div>
 
-
-  </div>
 );
 }
