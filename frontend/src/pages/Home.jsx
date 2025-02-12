@@ -948,12 +948,15 @@ useEffect(() => {
 
   animate();
 
+  
   return () => {
     window.removeEventListener("resize", resizeRenderer);
-    if (mountRef.current.contains(renderer.domElement)) {
+    
+    // ✅ Ensure mountRef.current exists before calling .contains()
+    if (mountRef.current && mountRef.current.contains(renderer.domElement)) {
       mountRef.current.removeChild(renderer.domElement);
     }
-  };
+  };  
 }, []); // ✅ Runs only once!
 
 

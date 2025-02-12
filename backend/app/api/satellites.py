@@ -180,7 +180,7 @@ def get_filter_condition(filter):
 
 
 
-@router.get("/{satellite_name}")
+@router.get("{satellite_name}")
 def get_satellite_by_name(satellite_name: str):
     """
     Retrieve a specific satellite by its name.

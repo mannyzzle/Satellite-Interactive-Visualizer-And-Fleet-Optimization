@@ -1,56 +1,63 @@
-import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { fetchSatelliteByName } from "../api/satelliteService";
 
 export default function SatelliteDetails() {
   const { name } = useParams();
+  const navigate = useNavigate();
   const [satellite, setSatellite] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchSatelliteByName(decodeURIComponent(name))
-      .then((data) => {
-        if (data) {
-          setSatellite(data);
-        } else {
-          setError("Satellite not found.");
-        }
+    const fetchData = async () => {
+      console.log(`🔍 Fetching details for: ${name}`);
+      const data = await fetchSatelliteByName(decodeURIComponent(name));
+
+      if (!data) {
+        setError(`Satellite "${name}" not found.`);
         setLoading(false);
-      })
-      .catch(() => {
-        setError("Failed to fetch satellite.");
-        setLoading(false);
-      });
+        return;
+      }
+
+      setSatellite(data);
+      setLoading(false);
+    };
+
+    fetchData();
   }, [name]);
 
-  if (loading) return <p>Loading satellite data...</p>;
-  if (error) return <p className="text-red-500">{error}</p>;
+  if (loading) return <p className="text-center text-gray-400">Loading satellite data...</p>;
+
+  if (error)
+    return (
+      <div className="p-6 text-center text-red-500">
+        ❌ {error}
+        <button
+          onClick={() => navigate("/satellites")}
+          className="block mt-4 px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600"
+        >
+          ← Back to List
+        </button>
+      </div>
+    );
 
   return (
-    <div className="p-10 bg-gray-900 text-white">
+    <div className="p-6 bg-gray-900 text-white min-h-screen">
       <h2 className="text-3xl font-bold">{satellite.name}</h2>
-      <p><strong>NORAD Number:</strong> {satellite.norad_number}</p>
-      <p><strong>Orbit Type:</strong> {satellite.orbit_type}</p>
-      <p><strong>Inclination:</strong> {satellite.inclination}°</p>
-      <p><strong>Velocity:</strong> {satellite.velocity} km/s</p>
-      <p><strong>Latitude:</strong> {satellite.latitude.toFixed(4)}°</p>
-      <p><strong>Longitude:</strong> {satellite.longitude.toFixed(4)}°</p>
-      <p><strong>BStar:</strong> {satellite.bstar}</p>
-      <p><strong>Rev Num:</strong> {satellite.rev_num}</p>
-      <p><strong>Ephemeris Type:</strong> {satellite.ephemeris_type}</p>
-      <p><strong>Eccentricity:</strong> {satellite.eccentricity}</p>
-      <p><strong>Period:</strong> {satellite.period} min</p>
-      <p><strong>Perigee:</strong> {satellite.perigee} km</p>
-      <p><strong>Apogee:</strong> {satellite.apogee} km</p>
-      <p><strong>Epoch:</strong> {satellite.epoch}</p>
-      <p><strong>RAAN:</strong> {satellite.raan}</p>
-      <p><strong>Arg Perigee:</strong> {satellite.arg_perigee}</p>
-      <p><strong>Mean Motion:</strong> {satellite.mean_motion}</p>
-      <p><strong>Semi-Major Axis:</strong> {satellite.semi_major_axis} km</p>
-      <p><strong>International Designator:</strong> {satellite.intl_designator}</p>
-      <p><strong>TLE Line 1:</strong> {satellite.tle_line1}</p>
-      <p><strong>TLE Line 2:</strong> {satellite.tle_line2}</p>
+      <p className="text-gray-400">NORAD Number: {satellite.norad_number}</p>
+      <p className="text-gray-400">Orbit Type: {satellite.orbit_type}</p>
+      <p className="text-gray-400">Inclination: {satellite.inclination}°</p>
+      <p className="text-gray-400">Velocity: {satellite.velocity.toFixed(3)} km/s</p>
+      <p className="text-gray-400">Latitude: {satellite.latitude.toFixed(4)}°</p>
+      <p className="text-gray-400">Longitude: {satellite.longitude.toFixed(4)}°</p>
+
+      <button
+        onClick={() => navigate("/satellites")}
+        className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500"
+      >
+        ← Back to List
+      </button>
     </div>
   );
 }
