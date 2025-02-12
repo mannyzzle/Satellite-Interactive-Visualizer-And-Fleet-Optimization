@@ -179,14 +179,16 @@ def get_filter_condition(filter):
 
 
 
-
-@router.get("{satellite_name}")
+@router.get("/{satellite_name}")
 def get_satellite_by_name(satellite_name: str):
     """
     Retrieve a specific satellite by its name.
     """
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    # ✅ Normalize input to handle spaces & case sensitivity
+    formatted_name = satellite_name.replace("%20", " ").strip().lower()
 
     cursor.execute("""
         SELECT id, name, norad_number, orbit_type, inclination, velocity, 
@@ -195,16 +197,16 @@ def get_satellite_by_name(satellite_name: str):
                arg_perigee, mean_motion, semi_major_axis, tle_line1, 
                tle_line2, intl_designator, object_type, 
                launch_date, launch_site, decay_date, rcs, purpose, country
-        FROM satellites WHERE name = %s
-    """, (satellite_name,))
-    
+        FROM satellites WHERE LOWER(name) = %s
+    """, (formatted_name,))  # ✅ Case-insensitive lookup
+
     satellite = cursor.fetchone()
 
     cursor.close()
     conn.close()
 
     if not satellite:
-        raise HTTPException(status_code=404, detail="Satellite not found")
+        raise HTTPException(status_code=404, detail=f"Satellite '{satellite_name}' not found")
 
     return {
         "id": satellite["id"],
