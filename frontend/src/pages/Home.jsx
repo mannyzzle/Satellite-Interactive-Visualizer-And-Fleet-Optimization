@@ -61,56 +61,75 @@ export default function Home() {
 
 
   const [filteredSatellites, setFilteredSatellites] = useState([]);
-  const [activeFilter, setActiveFilter] = useState(null); // Track active filter
+  const [activeFilters, setActiveFilters] = useState([]); // ✅ Track multiple filters
+  
+  
+
 
   
-  
-  
-  // ✅ Function to Compute Satellite Position
   function computeSatellitePosition(satellite, time) {
-    const { inclination, raan, arg_perigee, semi_major_axis, eccentricity, mean_motion, epoch } = satellite;
+    const { inclination, raan, arg_perigee, semi_major_axis, eccentricity, epoch } = satellite;
   
     const mu = 398600.4418; // Earth's gravitational parameter (km^3/s^2)
     const a = semi_major_axis; // Semi-major axis in km
-    const n = (2 * Math.PI) / (satellite.period * 60); // Mean motion in rad/s
+    const n = Math.sqrt(mu / Math.pow(a, 3)); // Mean motion in rad/s
     const M = n * (time - new Date(epoch).getTime() / 1000); // Mean anomaly
-
+  
+    // ✅ Convert angles to radians
+    const i = inclination * (Math.PI / 180);  // Inclination
+    const Ω = raan * (Math.PI / 180);         // RAAN
+    const ω = arg_perigee * (Math.PI / 180);  // Argument of Perigee
+  
+    // ✅ Solve Kepler's Equation for Eccentric Anomaly (E)
     let E = M;
-    for (let i = 0; i < 10; i++) {
+    for (let j = 0; j < 10; j++) {
       E = M + eccentricity * Math.sin(E);
     }
   
-  
-
+    // ✅ Compute True Anomaly (ν)
     const nu = 2 * Math.atan2(
       Math.sqrt(1 + eccentricity) * Math.sin(E / 2),
       Math.sqrt(1 - eccentricity) * Math.cos(E / 2)
     );
-
+  
+    // ✅ Compute Orbital Distance
     const r = a * (1 - eccentricity * Math.cos(E));
+  
+    // ✅ Perifocal (Orbital) Coordinates
     const x_orb = r * Math.cos(nu);
     const y_orb = r * Math.sin(nu);
-
-    const cos_raan = Math.cos(raan * (Math.PI / 180));
-    const sin_raan = Math.sin(raan * (Math.PI / 180));
-    const cos_inc = Math.cos(inclination * (Math.PI / 180));
-    const sin_inc = Math.sin(inclination * (Math.PI / 180));
-    const cos_argp = Math.cos(arg_perigee * (Math.PI / 180));
-    const sin_argp = Math.sin(arg_perigee * (Math.PI / 180));
-
-    const x = x_orb * (cos_raan * cos_argp - sin_raan * sin_argp * cos_inc) - y_orb * (cos_raan * sin_argp + sin_raan * cos_argp * cos_inc);
-    const y = x_orb * (sin_raan * cos_argp + cos_raan * sin_argp * cos_inc) - y_orb * (sin_raan * sin_argp - cos_raan * cos_argp * cos_inc);
-    const z = x_orb * (sin_argp * sin_inc) + y_orb * (cos_argp * sin_inc);
-
-    return new THREE.Vector3(x / 1000, y / 1000, z / 1000); // Scale down for visualization
+    const z_orb = 0; // No z-component in perifocal frame
+  
+    // ✅ Transformation from Perifocal to ECI (Earth-Centered Inertial) Coordinates
+  
+    // **Rotation Matrices**
+    const cos_Ω = Math.cos(Ω);
+    const sin_Ω = Math.sin(Ω);
+    const cos_i = Math.cos(i);
+    const sin_i = Math.sin(i);
+    const cos_ω = Math.cos(ω);
+    const sin_ω = Math.sin(ω);
+  
+    // **Transformation Equations**
+    const x_final = (cos_Ω * cos_ω - sin_Ω * sin_ω * cos_i) * x_orb +
+                    (-cos_Ω * sin_ω - sin_Ω * cos_ω * cos_i) * y_orb;
+  
+    const y_final = (sin_Ω * cos_ω + cos_Ω * sin_ω * cos_i) * x_orb +
+                    (-sin_Ω * sin_ω + cos_Ω * cos_ω * cos_i) * y_orb;
+  
+    const z_final = (sin_ω * sin_i) * x_orb +
+                    (cos_ω * sin_i) * y_orb;  // ✅ Now properly transformed!
+  
+    return new THREE.Vector3(-x_final / 1000,  z_final / 1000, y_final / 1000); // Scale down for visualization
   }
-
+  
+  
 
 
   const addOrbitPaths = () => {
     console.log("🛰️ Adding orbit paths...");
   
-    // Remove existing paths first
+    // ✅ Remove existing paths first
     orbitPathsRef.current.forEach((path) => {
       sceneRef.current.remove(path);
       path.geometry.dispose();
@@ -119,11 +138,12 @@ export default function Home() {
   
     orbitPathsRef.current = [];
   
-    // Generate new orbit paths
-    Object.values(satelliteObjectsRef.current).forEach((satelliteModel) => {
+    const MAX_ORBITS = 100;  // ✅ Performance limit
+    const selectedSatellites = Object.values(satelliteObjectsRef.current).slice(0, MAX_ORBITS);
+  
+    selectedSatellites.forEach((satelliteModel) => {
       if (satelliteModel.userData) {
         const orbitPath = createOrbitPath(satelliteModel.userData);
-  
         if (orbitPath) {
           sceneRef.current.add(orbitPath);
           orbitPathsRef.current.push(orbitPath);
@@ -133,18 +153,15 @@ export default function Home() {
   
     console.log(`🛰️ Added ${orbitPathsRef.current.length} orbit paths.`);
   };
-
   
 
-
   
-  // ✅ Compute Orbit Path for a Satellite
   function createOrbitPath(satellite) {
     if (!satellite || !satellite.period) return null;
-
-    const numPoints = 100;
+  
+    const numPoints = 500;
     const orbitPoints = [];
-
+  
     for (let i = 0; i <= numPoints; i++) {
       const timeOffset = (i / numPoints) * satellite.period * 60;
       const position = computeSatellitePosition(satellite, Date.now() / 1000 + timeOffset);
@@ -152,14 +169,29 @@ export default function Home() {
       if (!position) continue;
       orbitPoints.push(new THREE.Vector3(position.x, position.y, position.z));
     }
-
+  
     if (orbitPoints.length === 0) return null;
-
+  
+    // ✅ Ensure satellite exists before accessing properties
+    const orbitColors = {
+      "LEO": 0x4CAF50,  // Green for LEO
+      "MEO": 0xFF9800,  // Orange for MEO
+      "GEO": 0x2196F3,  // Blue for GEO
+      "HEO": 0x9C27B0,  // Purple for HEO
+    };
+  
+    const orbitColor = satellite?.orbit_type ? orbitColors[satellite.orbit_type] || 0x89CFF0 : 0x89CFF0; 
+  
     const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
-    const orbitMaterial = new THREE.LineBasicMaterial({ color: 0x89CFF0, opacity: 0.5, transparent: true });
-
+    const orbitMaterial = new THREE.LineBasicMaterial({
+      color: orbitColor,
+      opacity: 0.7, 
+      transparent: true,
+    });
+  
     return new THREE.Line(orbitGeometry, orbitMaterial);
   }
+  
   
 
   //  ✅ Reset Marker Function
@@ -253,114 +285,135 @@ function animateMoon() {
 
 
 
-  const applyFilter = async (filterType) => {
-    console.log(`🔍 Applying filter: ${filterType}`);
+  const toggleFilter = async (filterType) => {
+    console.log(`🔍 Toggling filter: ${filterType}`);
   
-    if (!filterType) {
-      console.warn("⚠️ No filter type provided!");
+    setActiveFilters((prevFilters) => {
+      const updatedFilters = prevFilters.includes(filterType)
+        ? prevFilters.filter((f) => f !== filterType) // Remove if already selected
+        : [...prevFilters, filterType]; // Add if not selected
+  
+      console.log("✅ Updated Filters:", updatedFilters);
+  
+      // Fetch new satellites only if filters are applied
+      if (updatedFilters.length > 0) {
+        fetchAndUpdateSatellites(updatedFilters);
+      } else {
+        resetFilters();
+      }
+  
+      return updatedFilters;
+    });
+  };
+
+  
+
+
+
+  const fetchAndUpdateSatellites = async (updatedFilters) => {
+    if (updatedFilters.length === 0) {
+      resetFilters();
       return;
     }
   
-    resetMarker();
-    setActiveFilter(filterType);
     setLoading(true);
-    setPage(1); // ✅ Reset pagination when a new filter is applied
+    setPage(1);
   
     try {
-      let data = await fetchSatellites(1, 11000, filterType); // ✅ Fetch only first 100
-      
-      if (!data.satellites || data.satellites.length === 0) {
-        console.warn("⚠️ No satellites found for this filter.");
-        setFilteredSatellites([]);
-        setSatellites([]);
-        return;
+      console.log(`📡 Fetching satellites with filters: ${updatedFilters.join(",")}`);
+  
+      // ✅ Fetch just the first 100 satellites instantly
+      const initialData = await fetchSatellites(1, 100, updatedFilters.join(","));
+      if (initialData?.satellites?.length) {
+        console.log(`📌 First batch: ${initialData.satellites.length} satellites`);
+        setFilteredSatellites(initialData.satellites);
+        setSatellites(initialData.satellites); // ✅ Update sidebar immediately
+        updateSceneWithFilteredSatellites(initialData.satellites);
       }
   
-      console.log(`✅ Filtered ${data.satellites.length} satellites.`);
-  
-      setFilteredSatellites(data.satellites); // ✅ Store full filtered dataset
-      setSatellites(data.satellites.slice(0, limit)); // ✅ Load only first page for rendering
-      updateSceneWithFilteredSatellites(data.satellites.slice(0, limit)); // ✅ Render only first 100
+      // ✅ Fetch full dataset asynchronously (no UI blocking)
+      fetchSatellites(1, 11000, updatedFilters.join(",")).then((fullData) => {
+        if (fullData?.satellites?.length) {
+          console.log(`📌 Full batch: ${fullData.satellites.length} satellites`);
+          setFilteredSatellites(fullData.satellites);
+        }
+      });
     } catch (error) {
       console.error("❌ Error fetching filtered satellites:", error);
-      setFilteredSatellites([]);
     } finally {
       setLoading(false);
     }
   };
   
 
-  
-  
-
-
-  // ✅ Function to Reset Filter
-  const resetFilter = async () => {
+  const resetFilters = async () => {
     console.log("🔄 Resetting filters...");
-    setActiveFilter(null);
+    setActiveFilters([]); // ✅ Reset active filters
+    setPage(1); // ✅ Reset to first page
     setLoading(true);
-    setPage(1);
   
-    const data = await fetchSatellites(1, limit, null); // ✅ Fetch all satellites without filter
-    
-    setSatellites(data.satellites); // ✅ Update full dataset
-    setFilteredSatellites([]); // ✅ Clear any previous filtering
-    updateSceneWithFilteredSatellites(data.satellites);
-    
-    setLoading(false);
-  };
-  
-
-
-
-
-
-
-  const loadSatelliteModel = (satellite) => {
-    console.log(`🔄 Loading model for: ${satellite.name} (${satellite.norad_number})`);
-  
-    // ✅ Prevent duplicate loading
-    if (satelliteObjectsRef.current[satellite.norad_number]) {
-      console.log(`⚠️ Satellite ${satellite.norad_number} already exists in the scene.`);
-      return;
+    try {
+      const data = await fetchSatellites(1, limit, null); // ✅ Fetch all satellites
+      setSatellites(data.satellites);
+      setFilteredSatellites([]);
+      updateSceneWithFilteredSatellites(data.satellites);
+    } catch (error) {
+      console.error("❌ Error fetching satellites:", error);
+    } finally {
+      setLoading(false);
     }
-  
-    const loader = new GLTFLoader();
-    
-    loader.load(
-      satelliteModelPath,
-      (gltf) => {
-        const satelliteModel = gltf.scene;
-        satelliteModel.scale.set(0.00005, 0.00005, 0.00005);
-  
-        // 🚀 Compute Initial Position
-        const initialPos = computeSatellitePosition(satellite, Date.now() / 1000);
-        satelliteModel.position.copy(initialPos);
-  
-        // ✅ Ensure proper orientation
-        satelliteModel.lookAt(new THREE.Vector3(0, 5, 10));
-        satelliteModel.rotateX(Math.PI / 2);
-        satelliteModel.rotateY(-Math.PI / 2);
-  
-        // ✅ Attach metadata
-        satelliteModel.userData = satellite;
-  
-        // ✅ Store reference
-        satelliteObjectsRef.current[satellite.norad_number] = satelliteModel;
-  
-        // ✅ Add to scene
-        if (sceneRef.current) {
-          sceneRef.current.add(satelliteModel);
-          console.log(`📡 Satellite model added: ${satellite.name} (${satellite.norad_number})`);
-        }
-      },
-      undefined,
-      (error) => {
-        console.error("❌ Error loading satellite model:", error);
-      }
-    );
   };
   
+
+
+
+
+
+
+const loadSatelliteModel = (satellite) => {
+  console.log(`🔄 Attempting to load model for: ${satellite.name} (${satellite.norad_number})`);
+
+  // ✅ Prevent duplicate loading
+  if (satelliteObjectsRef.current[satellite.norad_number]) {
+    console.log(`⚠️ Satellite ${satellite.norad_number} already exists in the scene.`);
+    return;
+  }
+
+  const loader = new GLTFLoader();
+  
+  loader.load(
+    satelliteModelPath,
+    (gltf) => {
+      const satelliteModel = gltf.scene;
+      satelliteModel.scale.set(0.00005, 0.00005, 0.00005);
+
+      // 🚀 Compute Initial Position
+      const initialPos = computeSatellitePosition(satellite, Date.now() / 1000);
+      satelliteModel.position.copy(initialPos);
+
+      // ✅ Ensure proper orientation
+      satelliteModel.lookAt(new THREE.Vector3(0, 0, 0));
+      satelliteModel.rotateX(Math.PI / 2);
+      satelliteModel.rotateY(-Math.PI / 2);
+
+      // ✅ Attach metadata
+      satelliteModel.userData = satellite;
+
+      // ✅ Store reference
+      satelliteObjectsRef.current[satellite.norad_number] = satelliteModel;
+
+      // ✅ Add to scene
+      if (sceneRef.current) {
+        sceneRef.current.add(satelliteModel);
+        console.log(`📡 Satellite model successfully added: ${satellite.name} (${satellite.norad_number})`);
+      }
+    },
+    undefined,
+    (error) => {
+      console.error(`❌ Error loading satellite model (${satellite.norad_number}):`, error);
+    }
+  );
+};
 
 
 
@@ -440,6 +493,7 @@ function animateMoon() {
 
 
 
+
   useEffect(() => {
     console.log("📌 Page changed! Resetting selection and clearing previous satellites.");
     
@@ -452,14 +506,18 @@ function animateMoon() {
       setLoading(true);
   
       try {
-        const data = await fetchSatellites(page, limit, activeFilter);
-        
-        if (data?.satellites?.length) {
-          setSatellites(data.satellites);
-        } else {
-          console.warn("⚠️ No satellites returned from API.");
-          setSatellites([]);
+        // ✅ Fetch first 100 immediately to show something in sidebar
+        const initialData = await fetchSatellites(page, 100, activeFilters);
+        if (initialData?.satellites?.length) {
+          setSatellites(initialData.satellites); // ✅ Update UI immediately
         }
+  
+        // ✅ Fetch full data asynchronously (to avoid UI delay)
+        fetchSatellites(page, limit, activeFilters).then((fullData) => {
+          if (fullData?.satellites?.length) {
+            setSatellites(fullData.satellites);
+          }
+        });
       } catch (error) {
         console.error("❌ Error fetching satellites:", error);
         setSatellites([]);
@@ -469,10 +527,8 @@ function animateMoon() {
     };
   
     getSatellites();
-  }, [page, limit, activeFilter]);
+  }, [page, limit, activeFilters]);
   
-
-
 
 
 
@@ -480,9 +536,9 @@ function animateMoon() {
     const getSatellites = async () => {
       setLoading(true);
       try {
-        console.log(`📡 Fetching satellites (page: ${page}, limit: ${limit}, filter: ${activeFilter})...`);
+        console.log(`📡 Fetching satellites (page: ${page}, limit: ${limit}, filter: ${activeFilters})...`);
   
-        let data = await fetchSatellites(page, limit, activeFilter); // ✅ Always use active filter
+        let data = await fetchSatellites(page, limit, activeFilters); // ✅ Always use active filter
         if (data?.satellites?.length) {
           console.log(`📡 Loaded ${data.satellites.length} satellites.`);
           setSatellites(data.satellites); // ✅ Store dataset
@@ -499,7 +555,7 @@ function animateMoon() {
     };
   
     getSatellites();
-  }, [page, limit, activeFilter]); // ✅ Runs when page, limit, or filter changes
+  }, [page, limit, activeFilters]); // ✅ Runs when page, limit, or filter changes
   
 
 
@@ -579,7 +635,7 @@ const changePage = async (newPage) => {
   try {
     resetMarker(); // ✅ Remove previous marker
 
-    if (activeFilter) {
+    if (activeFilters) {
       // ✅ Get next page from already filtered results
       const startIndex = (newPage - 1) * limit;
       const endIndex = startIndex + limit;
@@ -609,15 +665,15 @@ const changePage = async (newPage) => {
 
 
 
-
-
 useEffect(() => {
   if (loading) {
     console.log("⏳ Waiting for satellites...");
-  } else if (!loading && satellites.length > 0) {
-      console.log(`📌 Sidebar Updated: ${satellites.length} satellites available.`);
-  } else {
-    console.warn("⚠️ Sidebar has no satellites, waiting for fetch...");
+  } else if (!loading) {
+    if (satellites.length > 0) {
+      console.log(`📌 Sidebar Updated: ${satellites.length} satellites available.`, satellites);
+    } else {
+      console.warn("⚠️ Sidebar has no satellites, waiting for fetch...");
+    }
   }
 }, [satellites, loading]);
 
@@ -953,6 +1009,7 @@ useEffect(() => {
 
 
 
+const displayedSatellites = filteredSatellites.length > 0 ? filteredSatellites : satellites;
 
 
 
@@ -962,9 +1019,10 @@ return (
     {/* 📌 Navbar */}
     <Navbar />
 
+
     {/* 🌍 Main Layout: Sidebar + 3D UI */}
     <div className="relative flex flex-1">
-      
+
       {/* 📌 Sidebar (Satellite List, Search & Pagination) */}
       <div className="relative flex flex-col h-[89vh]">
         <div
@@ -986,55 +1044,57 @@ return (
           {/* 🚀 Satellite List */}
           {loading ? (
             <p className="text-center text-gray-400">Loading...</p>
-          ) : activeFilter && filteredSatellites.length === 0 ? (
+          ) : activeFilters && filteredSatellites.length === 0 ? (
             <p className="text-center text-yellow-400 font-semibold">⚠️ No satellites available</p>
           ) : (
             <ul className="space-y-2">
-              {(activeFilter ? filteredSatellites.slice((page - 1) * limit, page * limit) : satellites).map((sat) => (
-                <li
-                  key={sat.norad_number}
-                  className={`cursor-pointer p-3 rounded-md text-center border border-gray-700 ${
-                    selectedSatellite?.norad_number === sat.norad_number
-                      ? "bg-blue-500 text-white border-blue-600"
-                      : "bg-gray-700 hover:bg-gray-600"
-                  }`}
-                  onClick={() => {
-                    console.log(`📡 Selecting satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
-                    focusOnSatellite(sat);
-                    enableInteraction();
-                  }}
-                >
-                  <span className="block w-full">{sat.name}</span>
-                </li>
-              ))}
-            </ul>
+  {displayedSatellites.slice((page - 1) * limit, page * limit).map((sat) => (
+    <li
+      key={sat.norad_number}
+      className={`cursor-pointer p-3 rounded-md text-center border border-gray-700 ${
+        selectedSatellite?.norad_number === sat.norad_number
+          ? "bg-blue-500 text-white border-blue-600"
+          : "bg-gray-700 hover:bg-gray-600"
+      }`}
+      onClick={() => {
+        console.log(`📡 Selecting satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
+        focusOnSatellite(sat);
+        enableInteraction();
+      }}
+    >
+      <span className="block w-full">{sat.name}</span>
+    </li>
+  ))}
+</ul>
+
           )}
 
           {/* 🌍 Pagination Controls */}
-          {(activeFilter ? filteredSatellites.length : satellites.length) > limit && (
-            <div className="flex justify-between items-center mt-4">
-              <button
-                onClick={() => changePage(page - 1)}
-                disabled={page === 1 || loading}
-                className={`px-3 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-                  page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
-                }`}
-              >
-                ← Prev
-              </button>
+{(activeFilters.length > 0 ? filteredSatellites.length : satellites.length) > limit && (
+  <div className="flex justify-between items-center mt-4">
+    <button
+      onClick={() => changePage(page - 1)}
+      disabled={page === 1 || loading}
+      className={`px-3 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
+        page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
+      }`}
+    >
+      ← Prev
+    </button>
 
-              <span className="text-sm text-gray-300">Page {page}</span>
+    <span className="text-sm text-gray-300">Page {page}</span>
 
-              <button
-                onClick={() => changePage(page + 1)}
-                disabled={loading || satellites.length < limit}
-                className={`px-3 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-                  loading || satellites.length < limit ? "opacity-50 cursor-not-allowed" : ""
-                }`}
-              >
-                Next →
-              </button>
-            </div>
+    <button
+      onClick={() => changePage(page + 1)}
+      disabled={loading || satellites.length < limit}
+      className={`px-3 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
+        loading || satellites.length < limit ? "opacity-50 cursor-not-allowed" : ""
+      }`}
+    >
+      Next →
+    </button>
+  </div>
+
           )}
         </div>
 
@@ -1064,6 +1124,31 @@ return (
             </div>
           )}
         </div>
+
+{/* 📌 Active Filters UI (Fix: Positioned Relative to 3D UI) */}
+<div className="absolute top-16 right-6 bg-gray-900 text-white p-3 rounded-md shadow-lg text-xs z-50">
+    <h3 className="text-sm font-semibold text-gray-300">Active Filters:</h3>
+    {activeFilters.length > 0 ? (
+      <ul className="mt-1 space-y-1">
+        {activeFilters.map((filter, index) => (
+          <li key={index} className="text-blue-400 flex items-center">
+            • {filter}
+            <button
+              className="ml-2 text-red-500 hover:text-red-700"
+              onClick={() => toggleFilter(filter)}
+            >
+              ✖
+            </button>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <p className="text-gray-400">None</p>
+    )}
+  </div>
+
+
+
 
         {/* 🛰️ Satellite Info Box */}
         <div className="absolute bottom-0 bg-gray-900 text-yellow-300 p-3 shadow-lg text-xs border-t border-gray-700 flex flex-col items-center h-24 w-full z-[60] transition-all duration-300 ease-in-out">
@@ -1105,38 +1190,89 @@ return (
   <h3 className="text-lg font-semibold text-white mb-2 w-full text-center">Filters</h3>
 
   {[
+    // 🌍 Orbital Filters
     { name: "LEO", label: "🛰️ Low Earth Orbit (LEO)" },
     { name: "MEO", label: "🛰️ Medium Earth Orbit (MEO)" },
-    { name: "GEO", label: "🛰️ Geostationary (GEO)" },
+    { name: "GEO", label: "🛰️ Geostationary Orbit (GEO)" },
+    { name: "HEO", label: "🚀 Highly Elliptical Orbit (HEO)" },
+    { name: "Suborbital", label: "🛑 Suborbital Objects" },
+
+    // 🚀 Velocity & Orbital Characteristics
     { name: "High Velocity", label: "🚀 Fast (>7.8 km/s)" },
     { name: "Low Velocity", label: "🛑 Slow (≤7.8 km/s)" },
     { name: "Perigee < 500 km", label: "🌍 Perigee < 500 km" },
     { name: "Apogee > 35,000 km", label: "🌌 Apogee > 35,000 km" },
-    { name: "Recent Launches", label: "🚀 Recent Launch (30 Days)" },
     { name: "Eccentricity > 0.1", label: "🔄 High Eccentricity (>0.1)" },
-    { name: "B* Drag Term > 0.0001", label: "🌬️ High Drag (B* > 0.0001)" }
+    { name: "B* Drag Term > 0.0001", label: "🌬️ High Drag (B* > 0.0001)" },
+
+    // 🛰️ Satellite Purpose
+    { name: "Communications", label: "📡 Communications" },
+    { name: "Navigation", label: "🧭 Navigation" },
+    { name: "Military", label: "🎖️ Military / Recon" },
+    { name: "Weather", label: "🌦️ Weather Monitoring" },
+    { name: "Earth Observation", label: "🛰️ Earth Observation" },
+    { name: "Science", label: "🔬 Scientific Research" },
+    { name: "Human Spaceflight", label: "🚀 Human Spaceflight" },
+    { name: "Technology Demo", label: "🛠️ Technology Demo" },
+
+    // 🚀 Launch & Decay Filters
+    { name: "Recent Launches", label: "🚀 Recent Launch (30 Days)" },
+    { name: "Decayed", label: "💀 Decayed Satellites" },
+    { name: "Active Satellites", label: "✅ Active Satellites" },
+
+    // 📡 Operational Status
+    { name: "Active", label: "🟢 Operational" },
+    { name: "Retired", label: "🔴 Retired / Deactivated" },
+
+    // 🎯 Size (Radar Cross-Section)
+    { name: "Small Satellites", label: "🛰️ Small (<0.1 RCS)" },
+    { name: "Medium Satellites", label: "📡 Medium (0.1-1.0 RCS)" },
+    { name: "Large Satellites", label: "🚀 Large (>1.0 RCS)" }
   ].map((filter) => (
     <button
       key={filter.name}
       className={`px-4 py-2 m-1 text-xs font-semibold rounded-md transition-all duration-200 shadow-md ${
-        activeFilter === filter.name ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-300"
+        activeFilters.includes(filter.name) ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-300"
       }`}
-      onClick={() => applyFilter(filter.name)}
+      onClick={() => toggleFilter(filter.name)}
     >
       {filter.label}
     </button>
   ))}
 
+  {/* 📅 Launch Year Dropdown */}
+  <select
+    className="px-4 py-2 m-1 text-xs font-semibold rounded-md bg-gray-700 text-gray-300"
+    onChange={(e) => toggleFilter(`Launch Year:${e.target.value}`)}
+  >
+    <option value="">📅 Launch Year</option>
+    {Array.from({ length: 50 }, (_, i) => 2025 - i).map((year) => (
+      <option key={year} value={year}>{year}</option>
+    ))}
+  </select>
+
+  {/* 🌍 Country Dropdown */}
+  <select
+    className="px-4 py-2 m-1 text-xs font-semibold rounded-md bg-gray-700 text-gray-300"
+    onChange={(e) => toggleFilter(`Country:${e.target.value}`)}
+  >
+    <option value="">🌍 Country</option>
+    {["USA", "Russia", "China", "India", "Japan", "EU", "Others"].map((country) => (
+      <option key={country} value={country}>{country}</option>
+    ))}
+  </select>
+
   {/* 🛑 RESET FILTERS BOX */}
   <div className="w-full flex justify-center mt-3">
     <button
       className="px-5 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-md shadow-md"
-      onClick={resetFilter}
+      onClick={resetFilters}
     >
       🔄 Reset Filters
     </button>
   </div>
 </div>
+
 
 
 
