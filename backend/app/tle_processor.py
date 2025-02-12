@@ -443,11 +443,10 @@ def get_existing_norad_numbers():
 
 
 
-
 def update_satellite_data():
     """
-    Fetch TLE data **ONLY for NORAD IDs in the database**, compute orbital parameters,
-    fetch metadata in batches, and insert/update the database efficiently.
+    Fetch TLE data **ONLY for ACTIVE NORADs in the database**, add new satellites above the highest NORAD,
+    and update SATCAT metadata only for new satellites or ones missing data.
     """
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -457,22 +456,39 @@ def update_satellite_data():
         print("❌ Could not authenticate with Space-Track. Exiting update process.")
         return
 
-    # ✅ Fetch existing NORAD numbers
-    existing_norads = get_existing_norad_numbers()
-    if not existing_norads:
-        print("⚠️ No NORAD numbers found in the database. Skipping update.")
+    # ✅ Get current active NORADs and highest NORAD number
+    cursor.execute("SELECT norad_number FROM satellites WHERE decay_date IS NULL;")
+    active_norads = {row[0] for row in cursor.fetchall()}
+
+    cursor.execute("SELECT MAX(norad_number) FROM satellites;")
+    max_norad = cursor.fetchone()[0] or 0  # Defaults to 0 if no satellites exist
+
+    print(f"📡 Found {len(active_norads)} active NORADs in the database.")
+    print(f"🚀 Highest existing NORAD: {max_norad}")
+
+    if not active_norads:
+        print("⚠️ No active NORADs found. Skipping update.")
         return
 
-    # ✅ Fetch TLE data
-    satellites = fetch_tle_data(session, existing_norads)
-    print(f"📡 Fetched {len(satellites)} satellites for processing.")
+    # ✅ Fetch TLE data only for active NORADs
+    satellites = fetch_tle_data(session, list(active_norads))
+    print(f"📡 Fetched TLEs for {len(satellites)} active satellites.")
 
     updated_count, skipped_count = 0, 0
-    skipped_satellites = []  # ✅ Store skipped satellites
+    skipped_satellites = []
 
+    # ✅ Fetch metadata **only for new NORADs or ones with missing data**
+    new_norads = set()
+    cursor.execute("SELECT norad_number FROM satellites WHERE country IS NULL OR launch_date IS NULL;")
+    missing_metadata_norads = {row[0] for row in cursor.fetchall()}
 
-    # ✅ Fetch metadata in batches to avoid API limits
-    metadata_dict = fetch_spacetrack_data_batch(session, list(existing_norads))
+    cursor.execute(f"SELECT norad_number FROM satellites WHERE norad_number > {max_norad};")
+    new_norads.update(row[0] for row in cursor.fetchall())
+
+    metadata_norads = missing_metadata_norads.union(new_norads)
+    metadata_dict = fetch_spacetrack_data_batch(session, list(metadata_norads)) if metadata_norads else {}
+
+    print(f"📡 Fetching SATCAT metadata for {len(metadata_norads)} satellites.")
 
     for i, sat in enumerate(tqdm(satellites, desc="🔄 Updating Satellite Data")):
         tle_line1 = sat.get("tle_line1", "").strip()
@@ -480,24 +496,19 @@ def update_satellite_data():
 
         if i % 10 == 0:
             print(f"✅ {i}/{len(satellites)} satellites processed...", flush=True)
-        
 
-        # ✅ Compute orbital parameters using TLE data
+        # ✅ Compute orbital parameters using TLE
         params = compute_orbital_params(sat["name"], tle_line1, tle_line2)
         if not params or not params.get("norad_number"):
             print(f"⚠️ Skipping satellite {sat['name']} due to missing computed parameters.")
             skipped_count += 1
-            skipped_satellites.append(sat["name"]) 
+            skipped_satellites.append(sat["name"])
             continue
 
         norad = params["norad_number"]
         metadata = metadata_dict.get(norad, {})
 
-        # ✅ Handle missing metadata
-        launch_date = metadata.get("launch_date")
-        decay_date = metadata.get("decay_date")
-
-        # ✅ Ensure **all required values** are present before insertion
+        # ✅ Ensure required values before insertion
         satellite_data = {
             "name": sat["name"],
             "tle_line1": tle_line1,
@@ -513,9 +524,9 @@ def update_satellite_data():
             "latitude": params["latitude"],
             "longitude": params["longitude"],
             "object_type": metadata.get("object_type", "Unknown"),
-            "launch_date": launch_date,
+            "launch_date": metadata.get("launch_date"),
             "launch_site": metadata.get("launch_site"),
-            "decay_date": decay_date,
+            "decay_date": metadata.get("decay_date"),
             "rcs": metadata.get("rcs"),
             "purpose": metadata.get("purpose"),
             "country": metadata.get("country"),
@@ -599,18 +610,8 @@ def update_satellite_data():
     conn.commit()
     cursor.close()
     conn.close()
-    print(f"✅ {updated_count} satellites inserted/updated successfully. Skipped: {skipped_count}")
+    print(f"✅ {updated_count} satellites updated. Skipped: {skipped_count}")
 
-    # ✅ Print skipped satellites at the end
-    if skipped_satellites:
-        print("\n⚠️ **Skipped Satellites:**")
-        for sat_name in skipped_satellites:
-            print(f"  - {sat_name}")
-
-        # ✅ Optionally write skipped satellites to a log file
-        with open("skipped_satellites.log", "w") as log_file:
-            log_file.write("\n".join(skipped_satellites))
-        print("📝 Skipped satellites saved to **skipped_satellites.log**")
 
 
 
