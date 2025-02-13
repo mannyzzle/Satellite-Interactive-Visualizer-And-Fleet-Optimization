@@ -11,6 +11,7 @@ import os
 import requests
 import time
 from database import get_db_connection  # ✅ Use get_db_connection()
+from math import isfinite
 
 # Load environment variables
 load_dotenv()
@@ -333,26 +334,39 @@ def parse_tle_line2(tle_line2):
 
 
 
-
-# Compute orbital parameters
 def compute_orbital_params(name, tle_line1, tle_line2):
     """
     Computes orbital parameters from TLE data.
     Returns a dictionary with computed values, including NORAD number.
     """
     try:
+        # 🚨 Validate TLE input before proceeding
+        if not tle_line1 or not tle_line2:
+            print(f"⚠️ Skipping {name}: Invalid TLE data")
+            return None
+        
         satellite = EarthSatellite(tle_line1, tle_line2, name, ts)  # Initialize satellite object
         norad_number, intl_designator, ephemeris_type = parse_tle_line1(tle_line1)
         mean_motion, rev_num = parse_tle_line2(tle_line2)
         epoch = extract_epoch(tle_line1)
 
+        # 🚨 Validate mean_motion to prevent division errors
+        if mean_motion <= 0:
+            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Invalid mean_motion ({mean_motion})")
+            return None
+
         # Skyfield calculations
         t = ts.now()
         geocentric = satellite.at(t)
-        subpoint = geocentric.subpoint()
 
-        latitude = subpoint.latitude.degrees
-        longitude = subpoint.longitude.degrees
+        # 🚨 Handle cases where geocentric position is invalid
+        try:
+            subpoint = geocentric.subpoint()
+            latitude = subpoint.latitude.degrees
+            longitude = subpoint.longitude.degrees
+        except Exception as e:
+            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Unable to determine latitude/longitude ({e})")
+            latitude, longitude = None, None
 
         inclination = satellite.model.inclo * (180 / pi)
         eccentricity = satellite.model.ecco
@@ -363,35 +377,47 @@ def compute_orbital_params(name, tle_line1, tle_line2):
         # Derived parameters
         mu = 398600.4418  # Earth's standard gravitational parameter (km³/s²)
         period = (1 / mean_motion) * 1440  # Period in minutes
+
+        # 🚨 Validate period
+        if not isfinite(period) or period <= 0:
+            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Invalid orbital period ({period})")
+            return None
+
         semi_major_axis = (mu / ((mean_motion * 2 * pi / 86400) ** 2)) ** (1 / 3)
         perigee = semi_major_axis * (1 - eccentricity) - 6378  # km
         apogee = semi_major_axis * (1 + eccentricity) - 6378  # km
         velocity = sqrt(mu * (2 / semi_major_axis - 1 / semi_major_axis))  # km/s
         orbit_type = classify_orbit_type(perigee, apogee)
 
+        # 🚨 Validate velocity
+        if not isfinite(velocity) or velocity <= 0:
+            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Invalid velocity ({velocity})")
+            return None
+
         return {
             "norad_number": norad_number,
             "intl_designator": intl_designator,
             "ephemeris_type": ephemeris_type,
             "epoch": epoch,
-            "inclination": inclination,
-            "eccentricity": eccentricity,
-            "mean_motion": mean_motion,
-            "raan": raan,
-            "arg_perigee": arg_perigee,
-            "period": period,
-            "semi_major_axis": semi_major_axis,
-            "perigee": perigee,
-            "apogee": apogee,
-            "velocity": velocity,
+            "inclination": inclination if isfinite(inclination) else None,
+            "eccentricity": eccentricity if isfinite(eccentricity) else None,
+            "mean_motion": mean_motion if isfinite(mean_motion) else None,
+            "raan": raan if isfinite(raan) else None,
+            "arg_perigee": arg_perigee if isfinite(arg_perigee) else None,
+            "period": period if isfinite(period) else None,
+            "semi_major_axis": semi_major_axis if isfinite(semi_major_axis) else None,
+            "perigee": perigee if isfinite(perigee) else None,
+            "apogee": apogee if isfinite(apogee) else None,
+            "velocity": velocity if isfinite(velocity) else None,
             "orbit_type": orbit_type,
-            "bstar": bstar,
-            "rev_num": rev_num,
+            "bstar": bstar if isfinite(bstar) else None,
+            "rev_num": rev_num if isfinite(rev_num) else None,
             "latitude": latitude,
             "longitude": longitude
         }
+
     except Exception as e:
-        print(f"❌ Error computing parameters: {e}")
+        print(f"❌ Error computing parameters for {name}: {e}")
         return None
 
 
