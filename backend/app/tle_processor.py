@@ -532,10 +532,11 @@ def fetch_new_payload_norads(session, max_norad):
 
 
 
+
 def update_satellite_data():
     """
     Fetch TLE data **ONLY for NORADs in the database**, 
-    fetch **new payloads (NORADs > current max)**,
+    fetch **new payloads (NORADs > current max NORAD)**,
     and update SATCAT data **only for new payloads**.
     """
     conn = get_db_connection()
@@ -556,81 +557,84 @@ def update_satellite_data():
 
     # ✅ Fetch TLE data **ONLY for existing NORADs**
     existing_tles = fetch_tle_data(session, existing_norads)
-    print(f"📡 Fetched {len(existing_tles)} existing satellites for TLE update.")
+    print(f"📡 Fetched TLE data for {len(existing_tles)} existing satellites.")
 
     # ✅ Fetch new payload NORADs **ONLY if they are greater than max_norad**
     new_norads = fetch_new_payload_norads(session, max_norad)
     print(f"🚀 Found {len(new_norads)} new payload satellites to be added.")
 
+    if not new_norads:
+        print("✅ No new satellites to add. Skipping new satellite processing.")
+        return
+
     # ✅ Fetch metadata **only for new payloads**
     new_satellites_metadata = fetch_spacetrack_data_batch(session, list(new_norads))
 
-    # ✅ Process existing & new satellites
-    satellites_to_process = existing_tles + list(new_satellites_metadata.values())
+    # ✅ Fetch TLEs for new satellites
+    new_satellites_tles = fetch_tle_data(session, new_norads)
+
+    # ✅ Merge TLE & Metadata
+    new_satellites = []
+    for norad in new_norads:
+        metadata = new_satellites_metadata.get(norad, {})
+        tle = next((tle for tle in new_satellites_tles if tle["norad_number"] == norad), None)
+
+        if not tle:
+            print(f"⚠️ Skipping new satellite {metadata.get('name', 'Unknown')} (NORAD {norad}): No TLE found.")
+            continue  # ❌ Don't add satellites without TLE data
+
+        new_satellites.append({**metadata, **tle})  # ✅ Merge metadata & TLE
+
+    print(f"✅ {len(new_satellites)} new satellites with valid TLEs will be added.")
+
+    # ✅ Process updates separately:
     updated_count, new_count, skipped_count = 0, 0, 0
 
-    for i, sat in enumerate(tqdm(satellites_to_process, desc="🔄 Updating Satellite Data")):
+    # ✅ Update only existing NORADs with new TLEs
+    for sat in tqdm(existing_tles, desc="🔄 Updating TLEs for existing satellites"):
         norad = sat.get("norad_number")
-
-        # ✅ Compute orbital parameters using TLE data
         tle_line1 = sat.get("tle_line1", "").strip()
         tle_line2 = sat.get("tle_line2", "").strip()
-        params = compute_orbital_params(sat["name"], tle_line1, tle_line2)
 
-        if not params or not norad:
-            print(f"⚠️ Skipping satellite {sat['name']} due to missing computed parameters.")
+        # ✅ Compute orbital parameters
+        params = compute_orbital_params(sat["name"], tle_line1, tle_line2)
+        if not params:
+            print(f"⚠️ Skipping TLE update for {sat['name']} due to missing computed parameters.")
             skipped_count += 1
             continue
 
-        metadata = new_satellites_metadata.get(norad, {})
+        try:
+            # ✅ Update TLE-related fields only
+            cursor.execute("""
+                UPDATE satellites SET 
+                    tle_line1 = %s, tle_line2 = %s, epoch = %s,
+                    inclination = %s, eccentricity = %s, mean_motion = %s,
+                    raan = %s, arg_perigee = %s, velocity = %s, latitude = %s, longitude = %s,
+                    orbit_type = %s, period = %s, perigee = %s, apogee = %s,
+                    semi_major_axis = %s, bstar = %s, rev_num = %s
+                WHERE norad_number = %s;
+            """, (
+                tle_line1, tle_line2, params["epoch"],
+                params["inclination"], params["eccentricity"], params["mean_motion"],
+                params["raan"], params["arg_perigee"], params["velocity"],
+                params["latitude"], params["longitude"], params["orbit_type"],
+                params["period"], params["perigee"], params["apogee"],
+                params["semi_major_axis"], params["bstar"], params["rev_num"], norad
+            ))
 
-        # ✅ Handle missing metadata fields safely
-        satellite_data = {
-            "name": sat["name"],
-            "tle_line1": tle_line1,
-            "tle_line2": tle_line2,
-            "norad_number": norad,
-            "epoch": params["epoch"],
-            "inclination": params["inclination"],
-            "eccentricity": params["eccentricity"],
-            "mean_motion": params["mean_motion"],
-            "raan": params["raan"],
-            "arg_perigee": params["arg_perigee"],
-            "velocity": params["velocity"],
-            "latitude": params["latitude"],
-            "longitude": params["longitude"],
-            "orbit_type": params["orbit_type"],
-            "period": params["period"],
-            "perigee": params["perigee"],
-            "apogee": params["apogee"],
-            "semi_major_axis": params["semi_major_axis"],
-            "bstar": params["bstar"],
-            "rev_num": params["rev_num"],
-        }
-
-        # ✅ Only add full SATCAT metadata for new payload satellites
-        if norad > max_norad:
-            satellite_data.update({
-                "object_type": metadata.get("object_type", "Unknown"),
-                "launch_date": metadata.get("launch_date", None),
-                "launch_site": metadata.get("launch_site", None),
-                "decay_date": metadata.get("decay_date", None),
-                "rcs": metadata.get("rcs", None),
-                "purpose": metadata.get("purpose", "Unknown"),
-                "country": metadata.get("country", "Unknown"),
-            })
-
-            # 🚨 Check if any fields are missing
-            missing_fields = [key for key, value in satellite_data.items() if value is None]
-            if missing_fields:
-                print(f"⚠️ Missing fields for {satellite_data['name']} (NORAD {norad}): {', '.join(missing_fields)}")
-
-            new_count += 1
-        else:
             updated_count += 1
 
+        except Exception as e:
+            skipped_count += 1
+            print(f"⚠️ Error updating TLE for satellite {sat['name']} (NORAD {norad}): {e}")
+            conn.rollback()
+
+    # ✅ Insert only new satellites (with valid TLEs)
+    for sat in tqdm(new_satellites, desc="🚀 Adding new payload satellites"):
+        norad = sat.get("norad_number")
+
         try:
-            # ✅ Insert/Update data in PostgreSQL
+            # ✅ Insert new satellite with full metadata & TLE
             cursor.execute("""
                 INSERT INTO satellites (
                     name, tle_line1, tle_line2, norad_number, epoch,
@@ -645,30 +649,14 @@ def update_satellite_data():
                     %(semi_major_axis)s, %(bstar)s, %(rev_num)s,
                     %(object_type)s, %(launch_date)s, %(launch_site)s, %(decay_date)s, %(rcs)s, %(purpose)s, %(country)s
                 )
-                ON CONFLICT (norad_number) DO UPDATE SET
-                    tle_line1 = EXCLUDED.tle_line1,
-                    tle_line2 = EXCLUDED.tle_line2,
-                    epoch = EXCLUDED.epoch,
-                    inclination = EXCLUDED.inclination,
-                    eccentricity = EXCLUDED.eccentricity,
-                    mean_motion = EXCLUDED.mean_motion,
-                    raan = EXCLUDED.raan,
-                    arg_perigee = EXCLUDED.arg_perigee,
-                    velocity = EXCLUDED.velocity,
-                    latitude = EXCLUDED.latitude,
-                    longitude = EXCLUDED.longitude,
-                    orbit_type = EXCLUDED.orbit_type,
-                    period = EXCLUDED.period,
-                    perigee = EXCLUDED.perigee,
-                    apogee = EXCLUDED.apogee,
-                    semi_major_axis = EXCLUDED.semi_major_axis,
-                    bstar = EXCLUDED.bstar,
-                    rev_num = EXCLUDED.rev_num;
-            """, satellite_data)
+                ON CONFLICT (norad_number) DO NOTHING;
+            """, sat)
+
+            new_count += 1
 
         except Exception as e:
             skipped_count += 1
-            print(f"⚠️ Error updating satellite {sat['name']} (NORAD {norad}): {e}")
+            print(f"⚠️ Error inserting new satellite {sat['name']} (NORAD {norad}): {e}")
             conn.rollback()
 
     conn.commit()
