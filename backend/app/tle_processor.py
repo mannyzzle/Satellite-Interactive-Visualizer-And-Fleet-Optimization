@@ -168,10 +168,10 @@ def fetch_tle_data(session, existing_norads, batch_size=500):
     return satellites
 
 
-
 def fetch_spacetrack_data_batch(session, norad_ids, batch_size=500):
     """
-    Fetch satellite metadata with retries for failed requests.
+    Fetch satellite metadata from Space-Track with retries for failed requests.
+    Returns a dictionary mapping NORAD numbers to metadata.
     """
     metadata_dict = {}
     all_norads = set(norad_ids)
@@ -192,16 +192,17 @@ def fetch_spacetrack_data_batch(session, norad_ids, batch_size=500):
             for metadata in response.json():
                 try:
                     norad_number = int(metadata.get("NORAD_CAT_ID", -1))
-                    fetched_norads.add(norad_number)
-                    metadata_dict[norad_number] = {
-                        "object_type": metadata.get("OBJECT_TYPE", "Unknown"),
-                        "launch_date": metadata.get("LAUNCH") if metadata.get("LAUNCH") != "Unknown" else None,
-                        "launch_site": metadata.get("SITE") if metadata.get("SITE") != "Unknown" else None,
-                        "decay_date": metadata.get("DECAY") if metadata.get("DECAY") != "Unknown" else None,
-                        "rcs": metadata.get("RCSVALUE") if metadata.get("RCSVALUE") != "Unknown" else None,
-                        "purpose": infer_purpose(metadata),
-                        "country": metadata.get("COUNTRY", "Unknown"),
-                    }
+                    if norad_number > 0:
+                        # ✅ Ensure metadata is always a valid dictionary
+                        metadata_dict[norad_number] = {
+                            "object_type": metadata.get("OBJECT_TYPE", "Unknown"),
+                            "launch_date": metadata.get("LAUNCH") if metadata.get("LAUNCH") != "Unknown" else None,
+                            "launch_site": metadata.get("SITE") if metadata.get("SITE") != "Unknown" else None,
+                            "decay_date": metadata.get("DECAY") if metadata.get("DECAY") != "Unknown" else None,
+                            "rcs": metadata.get("RCSVALUE") if metadata.get("RCSVALUE") != "Unknown" else None,
+                            "purpose": infer_purpose(metadata),
+                            "country": metadata.get("COUNTRY", "Unknown"),
+                        }
                 except Exception as e:
                     print(f"⚠️ Error processing metadata for NORAD {norad_number}: {e}")
 
@@ -497,8 +498,6 @@ def fetch_all_spacetrack_norads(session, batch_size=500):
 
 
 
-
-
 def update_satellite_data():
     """
     Fetch TLE data **ONLY for NORADs in the database**, 
@@ -521,21 +520,18 @@ def update_satellite_data():
         print("⚠️ No NORAD numbers found in the database. Skipping update.")
         return
 
-    # ✅ Fetch TLE data ONLY for existing NORADs
+    # ✅ Fetch TLE data **ONLY for existing NORADs**
     existing_tles = fetch_tle_data(session, existing_norads)
     print(f"📡 Fetched {len(existing_tles)} existing satellites for TLE update.")
 
-    # ✅ Fetch all NORADs from Space-Track
-    all_spacetrack_norads = fetch_all_spacetrack_norads(session)
-
-    # ✅ Identify new NORADs (Only those greater than max_norad)
-    new_norads = {norad for norad in all_spacetrack_norads if norad > max_norad}
+    # ✅ Fetch new payload NORADs **ONLY if they are greater than max_norad**
+    new_norads = fetch_new_payload_norads(session, max_norad)
     print(f"🚀 Found {len(new_norads)} new payload satellites to be added.")
 
-    # ✅ Fetch metadata only for new payload satellites
+    # ✅ Fetch metadata **only for new payloads**
     new_satellites_metadata = fetch_spacetrack_data_batch(session, list(new_norads))
 
-    # ✅ Merge existing and new satellites
+    # ✅ Process existing & new satellites
     satellites_to_process = existing_tles + list(new_satellites_metadata.values())
     updated_count, new_count, skipped_count = 0, 0, 0
 
@@ -554,7 +550,7 @@ def update_satellite_data():
 
         metadata = new_satellites_metadata.get(norad, {})
 
-        # ✅ Build satellite data object
+        # ✅ Handle missing metadata fields safely
         satellite_data = {
             "name": sat["name"],
             "tle_line1": tle_line1,
@@ -582,13 +578,19 @@ def update_satellite_data():
         if norad > max_norad:
             satellite_data.update({
                 "object_type": metadata.get("object_type", "Unknown"),
-                "launch_date": metadata.get("launch_date"),
-                "launch_site": metadata.get("launch_site"),
-                "decay_date": metadata.get("decay_date"),
-                "rcs": metadata.get("rcs"),
-                "purpose": metadata.get("purpose"),
-                "country": metadata.get("country"),
+                "launch_date": metadata.get("launch_date", None),
+                "launch_site": metadata.get("launch_site", None),
+                "decay_date": metadata.get("decay_date", None),
+                "rcs": metadata.get("rcs", None),
+                "purpose": metadata.get("purpose", "Unknown"),
+                "country": metadata.get("country", "Unknown"),
             })
+
+            # 🚨 Check if any fields are missing
+            missing_fields = [key for key, value in satellite_data.items() if value is None]
+            if missing_fields:
+                print(f"⚠️ Missing fields for {satellite_data['name']} (NORAD {norad}): {', '.join(missing_fields)}")
+
             new_count += 1
         else:
             updated_count += 1
@@ -627,8 +629,7 @@ def update_satellite_data():
                     apogee = EXCLUDED.apogee,
                     semi_major_axis = EXCLUDED.semi_major_axis,
                     bstar = EXCLUDED.bstar,
-                    rev_num = EXCLUDED.rev_num
-                    """ + (", object_type = EXCLUDED.object_type, launch_date = EXCLUDED.launch_date, launch_site = EXCLUDED.launch_site, decay_date = EXCLUDED.decay_date, rcs = EXCLUDED.rcs, purpose = EXCLUDED.purpose, country = EXCLUDED.country" if norad > max_norad else "") + """
+                    rev_num = EXCLUDED.rev_num;
             """, satellite_data)
 
         except Exception as e:
