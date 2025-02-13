@@ -51,6 +51,13 @@ def get_all_satellites(
         if filter:
             query += f" WHERE {get_filter_condition(filter)}"
 
+        # ✅ Move ORDER BY launch_date DESC outside of WHERE
+        if filter == "Recent Launches":
+            query += " ORDER BY launch_date DESC"
+        else:
+            query += " ORDER BY id"
+
+
         query += " ORDER BY id LIMIT %s OFFSET %s"
         cursor.execute(query, (limit, offset))
         satellites = cursor.fetchall()
@@ -137,7 +144,7 @@ def get_filter_condition(filter):
         "Unknown": "purpose = 'Unknown'",
 
         # 🚀 Launch & Decay Filters
-        "Recent Launches": "launch_date > NOW() - INTERVAL '30 days' ORDER BY launch_date DESC",
+        "Recent Launches": "launch_date > NOW() - INTERVAL '30 days'",
         "Decayed": "decay_date IS NOT NULL",
         "Active Satellites": "decay_date IS NULL"
     }
