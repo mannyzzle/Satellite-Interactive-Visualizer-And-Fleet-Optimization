@@ -457,8 +457,21 @@ def update_satellite_data():
         return
 
     # ✅ Get current active NORADs and highest NORAD number
-    cursor.execute("SELECT norad_number FROM satellites WHERE decay_date IS NULL;")
-    active_norads = {row[0] for row in cursor.fetchall()}
+    cursor.execute("SELECT norad_number FROM satellites;")
+    rows = cursor.fetchall()
+
+    # ✅ Ensure rows exist before processing
+    if not rows:
+        print("⚠️ No active NORADs found in the database! Skipping update.")
+        return
+
+    # ✅ Ensure tuple-based access
+    active_norads = {row[0] for row in rows if isinstance(row, tuple)}
+
+    print(f"📡 Found {len(active_norads)} active NORADs in the database.")
+
+
+
 
     cursor.execute("SELECT MAX(norad_number) FROM satellites;")
     max_norad = cursor.fetchone()[0] or 0  # Defaults to 0 if no satellites exist
