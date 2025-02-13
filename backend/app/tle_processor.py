@@ -441,7 +441,6 @@ def get_existing_norad_numbers():
 
 
 
-
 def get_max_norad_number():
     """
     Fetches the highest NORAD number from the database.
@@ -450,11 +449,14 @@ def get_max_norad_number():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT MAX(norad_number) FROM satellites;")
-    max_norad = cursor.fetchone()[0] or 0  # If no records exist, return 0
+    cursor.execute("SELECT MAX(norad_number) AS max_norad FROM satellites;")
+    result = cursor.fetchone()  # Fetch result safely
 
     cursor.close()
     conn.close()
+
+    # ✅ Handle case where no rows exist
+    max_norad = result["max_norad"] if result and result["max_norad"] is not None else 0
 
     print(f"✅ Highest NORAD in the database: {max_norad}")
     return max_norad
