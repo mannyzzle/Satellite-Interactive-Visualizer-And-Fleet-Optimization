@@ -440,9 +440,6 @@ def get_existing_norad_numbers():
     return norads
 
 
-
-
-
 def update_satellite_data():
     """
     Fetch TLE data **ONLY for ACTIVE NORADs in the database**, add new satellites above the highest NORAD,
@@ -456,31 +453,17 @@ def update_satellite_data():
         print("❌ Could not authenticate with Space-Track. Exiting update process.")
         return
 
-    # ✅ Get current active NORADs and highest NORAD number
-    cursor.execute("SELECT norad_number FROM satellites;")
-    rows = cursor.fetchall()
+    # ✅ Get active NORADs from the correct function
+    active_norads = get_existing_norad_numbers()
 
-    # ✅ Ensure rows exist before processing
-    if not rows:
-        print("⚠️ No active NORADs found in the database! Skipping update.")
-        return
-
-    # ✅ Ensure tuple-based access
-    active_norads = {row[0] for row in rows if isinstance(row, tuple)}
-
-    print(f"📡 Found {len(active_norads)} active NORADs in the database.")
-
-
-
+    # ✅ Ensure only active satellites (i.e., decay_date IS NULL)
+    active_norads = {norad for norad in active_norads if norad is not None}
 
     cursor.execute("SELECT MAX(norad_number) FROM satellites;")
-    result = cursor.fetchone()
+    max_norad = cursor.fetchone()[0] or 0  # Defaults to 0 if no satellites exist
 
-    # ✅ Ensure result exists before accessing index 0
-    max_norad = result[0] if result and result[0] is not None else 0  
-
+    print(f"📡 Found {len(active_norads)} active NORADs in the database.")
     print(f"🚀 Highest existing NORAD: {max_norad}")
-
 
     if not active_norads:
         print("⚠️ No active NORADs found. Skipping update.")
@@ -496,10 +479,10 @@ def update_satellite_data():
     # ✅ Fetch metadata **only for new NORADs or ones with missing data**
     new_norads = set()
     cursor.execute("SELECT norad_number FROM satellites WHERE country IS NULL OR launch_date IS NULL;")
-    missing_metadata_norads = {row[0] for row in cursor.fetchall()}
+    missing_metadata_norads = {row["norad_number"] for row in cursor.fetchall()}
 
     cursor.execute(f"SELECT norad_number FROM satellites WHERE norad_number > {max_norad};")
-    new_norads.update(row[0] for row in cursor.fetchall())
+    new_norads.update(row["norad_number"] for row in cursor.fetchall())
 
     metadata_norads = missing_metadata_norads.union(new_norads)
     metadata_dict = fetch_spacetrack_data_batch(session, list(metadata_norads)) if metadata_norads else {}
@@ -627,8 +610,6 @@ def update_satellite_data():
     cursor.close()
     conn.close()
     print(f"✅ {updated_count} satellites updated. Skipped: {skipped_count}")
-
-
 
 
 # Run the check
