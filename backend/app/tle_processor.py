@@ -498,6 +498,40 @@ def fetch_all_spacetrack_norads(session, batch_size=500):
 
 
 
+def fetch_new_payload_norads(session, max_norad):
+    """
+    Fetches NORAD numbers **ONLY for new payload satellites**
+    that have NORAD numbers greater than max_norad.
+    Returns a set of new NORAD numbers.
+    """
+    spacetrack_url = f"https://www.space-track.org/basicspacedata/query/class/satcat/format/json"
+
+    print(f"📡 Fetching new payload satellites with NORAD > {max_norad}...")
+
+    response = rate_limited_get(session, spacetrack_url)
+
+    new_norads = set()
+
+    if response.status_code == 200 and response.json():
+        for metadata in response.json():
+            try:
+                norad_number = int(metadata.get("NORAD_CAT_ID", -1))
+                
+                # ✅ Only add NORADs greater than max_norad
+                if norad_number > max_norad:
+                    new_norads.add(norad_number)
+            except Exception as e:
+                print(f"⚠️ Error processing NORAD {metadata.get('NORAD_CAT_ID', 'Unknown')}: {e}")
+
+        print(f"✅ Successfully found {len(new_norads)} new payload NORADs.")
+    else:
+        print(f"❌ API error {response.status_code} while fetching new payload NORADs.")
+
+    return new_norads
+
+
+
+
 def update_satellite_data():
     """
     Fetch TLE data **ONLY for NORADs in the database**, 
