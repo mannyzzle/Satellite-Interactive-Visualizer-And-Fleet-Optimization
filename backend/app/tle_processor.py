@@ -463,7 +463,6 @@ def get_max_norad_number():
 
 
 
-
 def update_satellite_data():
     """
     Fetch TLE data **ONLY for NORADs in the database**, 
@@ -490,13 +489,18 @@ def update_satellite_data():
     existing_tles = fetch_tle_data(session, existing_norads)
     print(f"📡 Fetched {len(existing_tles)} existing satellites for TLE update.")
 
-    # ✅ Fetch new payload satellites (NORADs > max NORAD in DB)
-    new_satellites = fetch_spacetrack_data_batch(session, min_norad=max_norad + 1)
-    new_norads = {sat["norad_number"] for sat in new_satellites}
+    # ✅ Fetch all NORADs from Space-Track
+    all_spacetrack_norads = fetch_all_spacetrack_norads(session)
+
+    # ✅ Identify new NORADs (Only those greater than max_norad)
+    new_norads = {norad for norad in all_spacetrack_norads if norad > max_norad}
     print(f"🚀 Found {len(new_norads)} new payload satellites to be added.")
 
+    # ✅ Fetch metadata only for new payload satellites
+    new_satellites_metadata = fetch_spacetrack_data_batch(session, list(new_norads))
+
     # ✅ Merge existing and new satellites
-    satellites_to_process = existing_tles + new_satellites
+    satellites_to_process = existing_tles + list(new_satellites_metadata.values())
     updated_count, new_count, skipped_count = 0, 0, 0
 
     for i, sat in enumerate(tqdm(satellites_to_process, desc="🔄 Updating Satellite Data")):
@@ -512,7 +516,7 @@ def update_satellite_data():
             skipped_count += 1
             continue
 
-        metadata = fetch_spacetrack_data_batch(session, [norad]).get(norad, {})
+        metadata = new_satellites_metadata.get(norad, {})
 
         # ✅ Build satellite data object
         satellite_data = {
