@@ -67,7 +67,7 @@ body {
   margin-top: 75vh; /* ✅ Push it below the 3D UI */
   padding: 20px;
   width: 100%;
-  height: 100vh; /* ✅ Increase content area */
+  height: 500vh; /* ✅ Increase content area */
   background: rgba(0, 0, 0, 0.8);
   color: white;
 }
