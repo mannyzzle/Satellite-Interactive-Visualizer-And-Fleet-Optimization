@@ -24,7 +24,7 @@
 body {
   margin: 0;
   width: 100vw;
-  min-height: 150vh; /* ✅ Increase height for more scrolling space */
+  min-height: 100vh; /* ✅ Increase height for more scrolling space */
   display: flex;
   flex-direction: column;
   overflow-x: hidden; /* ✅ Prevents horizontal scroll */
@@ -33,7 +33,7 @@ body {
 
 #root {
   width: 100%;
-  min-height: 150vh; /* ✅ Expand root container height */
+  min-height: 100vh; /* ✅ Expand root container height */
   display: flex;
   flex-direction: column;
 }

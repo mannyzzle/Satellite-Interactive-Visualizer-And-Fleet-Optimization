@@ -137,7 +137,7 @@ def get_filter_condition(filter):
         "Unknown": "purpose = 'Unknown'",
 
         # 🚀 Launch & Decay Filters
-        "Recent Launches": "launch_date > NOW() - INTERVAL '30 days'",
+        "Recent Launches": "SELECT * FROM satellites WHERE launch_date > NOW() - INTERVAL '30 days' ORDER BY launch_date DESC",
         "Decayed": "decay_date IS NOT NULL",
         "Active Satellites": "decay_date IS NULL"
     }

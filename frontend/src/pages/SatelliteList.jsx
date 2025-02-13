@@ -39,7 +39,7 @@ export default function SatelliteList() {
     : satellites;
 
   return (
-    <div className="p-6 bg-gray-900 text-white min-h-screen">
+    <div className="p-6 pt-[80px] bg-gray-900 text-white min-h-screen">
       <h2 className="text-3xl font-bold mb-4">🛰️ Satellite List</h2>
 
       {/* 🔍 Search Bar */}
