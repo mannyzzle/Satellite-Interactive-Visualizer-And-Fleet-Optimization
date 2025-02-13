@@ -58,7 +58,7 @@ def get_all_satellites(
             query += " ORDER BY id"
 
 
-        query += " ORDER BY id LIMIT %s OFFSET %s"
+        query += " LIMIT %s OFFSET %s"
         cursor.execute(query, (limit, offset))
         satellites = cursor.fetchall()
 
