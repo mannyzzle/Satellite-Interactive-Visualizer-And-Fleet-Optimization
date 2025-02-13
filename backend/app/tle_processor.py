@@ -474,10 +474,13 @@ def update_satellite_data():
 
 
     cursor.execute("SELECT MAX(norad_number) FROM satellites;")
-    max_norad = cursor.fetchone()[0] or 0  # Defaults to 0 if no satellites exist
+    result = cursor.fetchone()
 
-    print(f"📡 Found {len(active_norads)} active NORADs in the database.")
+    # ✅ Ensure result exists before accessing index 0
+    max_norad = result[0] if result and result[0] is not None else 0  
+
     print(f"🚀 Highest existing NORAD: {max_norad}")
+
 
     if not active_norads:
         print("⚠️ No active NORADs found. Skipping update.")
