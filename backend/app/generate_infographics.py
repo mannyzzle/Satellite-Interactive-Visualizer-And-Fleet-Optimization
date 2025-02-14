@@ -172,6 +172,7 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.savefig(f"{INFOGRAPHICS_DIR}/{filter_name}_orbital_lifetime_drag.png")
     plt.close()
 
+
 # ✅ Run for all filters
 for filter_name, filter_condition in {
     "All Satellites": None, "LEO": "orbit_type = 'LEO'", "MEO": "orbit_type = 'MEO'", "GEO": "orbit_type = 'GEO'", "HEO": "orbit_type = 'HEO'",

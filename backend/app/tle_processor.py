@@ -169,6 +169,9 @@ def fetch_tle_data(session, existing_norads, batch_size=500):
     return satellites
 
 
+
+
+
 def fetch_spacetrack_data_batch(session, norad_ids, batch_size=500):
     """
     Fetch satellite metadata from Space-Track with retries for failed requests.
@@ -335,90 +338,82 @@ def parse_tle_line2(tle_line2):
 
 
 def compute_orbital_params(name, tle_line1, tle_line2):
-    """
-    Computes orbital parameters from TLE data.
-    Returns a dictionary with computed values, including NORAD number.
-    """
     try:
-        # 🚨 Validate TLE input before proceeding
         if not tle_line1 or not tle_line2:
-            print(f"⚠️ Skipping {name}: Invalid TLE data")
+            print(f"⚠️ Skipping {name}: Missing TLE data")
             return None
-        
-        satellite = EarthSatellite(tle_line1, tle_line2, name, ts)  # Initialize satellite object
+
+        # 🚨 Initialize Satellite
+        satellite = EarthSatellite(tle_line1, tle_line2, name, ts)
+
+        # 🚨 Extract Orbital Parameters
         norad_number, intl_designator, ephemeris_type = parse_tle_line1(tle_line1)
         mean_motion, rev_num = parse_tle_line2(tle_line2)
         epoch = extract_epoch(tle_line1)
 
-        # 🚨 Validate mean_motion to prevent division errors
-        if mean_motion <= 0:
-            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Invalid mean_motion ({mean_motion})")
-            return None
+        # ✅ **Check for bad values**
+        bad_values = []
+        if mean_motion <= 0 or not isfinite(mean_motion):
+            bad_values.append("mean_motion")
+        if not isfinite(satellite.model.inclo):
+            bad_values.append("inclination")
+        if not isfinite(satellite.model.ecco):
+            bad_values.append("eccentricity")
+        if not isfinite(satellite.model.nodeo):
+            bad_values.append("raan")
+        if not isfinite(satellite.model.argpo):
+            bad_values.append("arg_perigee")
+        if not isfinite(satellite.model.bstar):
+            bad_values.append("bstar")
 
-        # Skyfield calculations
-        t = ts.now()
-        geocentric = satellite.at(t)
+        if bad_values:
+            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Bad values: {', '.join(bad_values)}")
+            return None  # ❌ Don't use corrupted TLEs
 
-        # 🚨 Handle cases where geocentric position is invalid
-        try:
-            subpoint = geocentric.subpoint()
-            latitude = subpoint.latitude.degrees
-            longitude = subpoint.longitude.degrees
-        except Exception as e:
-            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Unable to determine latitude/longitude ({e})")
-            latitude, longitude = None, None
-
+        # 🚨 Compute Derived Parameters
         inclination = satellite.model.inclo * (180 / pi)
         eccentricity = satellite.model.ecco
         bstar = satellite.model.bstar
         raan = satellite.model.nodeo * (180 / pi)
         arg_perigee = satellite.model.argpo * (180 / pi)
-
-        # Derived parameters
-        mu = 398600.4418  # Earth's standard gravitational parameter (km³/s²)
-        period = (1 / mean_motion) * 1440  # Period in minutes
-
-        # 🚨 Validate period
-        if not isfinite(period) or period <= 0:
-            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Invalid orbital period ({period})")
-            return None
-
+        mu = 398600.4418  
+        period = (1 / mean_motion) * 1440  
         semi_major_axis = (mu / ((mean_motion * 2 * pi / 86400) ** 2)) ** (1 / 3)
-        perigee = semi_major_axis * (1 - eccentricity) - 6378  # km
-        apogee = semi_major_axis * (1 + eccentricity) - 6378  # km
-        velocity = sqrt(mu * (2 / semi_major_axis - 1 / semi_major_axis))  # km/s
-        orbit_type = classify_orbit_type(perigee, apogee)
+        perigee = semi_major_axis * (1 - eccentricity) - 6378
+        apogee = semi_major_axis * (1 + eccentricity) - 6378
+        velocity = sqrt(mu / semi_major_axis)  
 
-        # 🚨 Validate velocity
         if not isfinite(velocity) or velocity <= 0:
-            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Invalid velocity ({velocity})")
+            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Bad velocity ({velocity})")
             return None
+
+        orbit_type = classify_orbit_type(perigee, apogee)
 
         return {
             "norad_number": norad_number,
             "intl_designator": intl_designator,
             "ephemeris_type": ephemeris_type,
             "epoch": epoch,
-            "inclination": inclination if isfinite(inclination) else None,
-            "eccentricity": eccentricity if isfinite(eccentricity) else None,
-            "mean_motion": mean_motion if isfinite(mean_motion) else None,
-            "raan": raan if isfinite(raan) else None,
-            "arg_perigee": arg_perigee if isfinite(arg_perigee) else None,
-            "period": period if isfinite(period) else None,
-            "semi_major_axis": semi_major_axis if isfinite(semi_major_axis) else None,
-            "perigee": perigee if isfinite(perigee) else None,
-            "apogee": apogee if isfinite(apogee) else None,
-            "velocity": velocity if isfinite(velocity) else None,
+            "inclination": inclination,
+            "eccentricity": eccentricity,
+            "mean_motion": mean_motion,
+            "raan": raan,
+            "arg_perigee": arg_perigee,
+            "period": period,
+            "semi_major_axis": semi_major_axis,
+            "perigee": perigee,
+            "apogee": apogee,
+            "velocity": velocity,
             "orbit_type": orbit_type,
-            "bstar": bstar if isfinite(bstar) else None,
-            "rev_num": rev_num if isfinite(rev_num) else None,
-            "latitude": latitude,
-            "longitude": longitude
+            "bstar": bstar,
+            "rev_num": rev_num
         }
 
     except Exception as e:
         print(f"❌ Error computing parameters for {name}: {e}")
         return None
+
+
 
 
 
@@ -657,6 +652,10 @@ def update_satellite_data():
 
     # ✅ Insert only new satellites (with valid TLEs)
     for sat in tqdm(new_satellites, desc="🚀 Adding new payload satellites"):
+        if "R/B" in sat["name"] or "DEB" in sat["name"]:  # ✅ Skip debris
+            print(f"🗑️ Skipping debris: {sat['name']} (NORAD {sat['norad_number']})")
+            continue
+
         norad = sat.get("norad_number")
 
         try:
@@ -670,11 +669,13 @@ def update_satellite_data():
                     object_type, launch_date, launch_site, decay_date, rcs, purpose, country
                 ) VALUES (
                     %(name)s, %(tle_line1)s, %(tle_line2)s, %(norad_number)s, %(epoch)s,
-                    %(inclination)s, %(eccentricity)s, %(mean_motion)s, %(raan)s, %(arg_perigee)s, %(velocity)s,
-                    %(latitude)s, %(longitude)s, %(orbit_type)s, %(period)s, %(perigee)s, %(apogee)s,
-                    %(semi_major_axis)s, %(bstar)s, %(rev_num)s,
-                    %(object_type)s, %(launch_date)s, %(launch_site)s, %(decay_date)s, %(rcs)s, %(purpose)s, %(country)s
-                )
+                COALESCE(%(inclination)s, 0), COALESCE(%(eccentricity)s, 0), COALESCE(%(mean_motion)s, 0),
+                COALESCE(%(raan)s, 0), COALESCE(%(arg_perigee)s, 0), COALESCE(%(velocity)s, 0),
+                %(latitude)s, %(longitude)s, %(orbit_type)s, 
+                COALESCE(%(period)s, 0), COALESCE(%(perigee)s, 0), COALESCE(%(apogee)s, 0),
+                COALESCE(%(semi_major_axis)s, 0), COALESCE(%(bstar)s, 0), COALESCE(%(rev_num)s, 0),
+                %(object_type)s, %(launch_date)s, %(launch_site)s, %(decay_date)s, %(rcs)s, %(purpose)s, %(country)s
+            )
                 ON CONFLICT (norad_number) DO NOTHING;
             """, sat)
 
