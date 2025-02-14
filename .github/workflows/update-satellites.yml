@@ -1,4 +1,4 @@
-name: Update Satellite Data (GitHub Actions + Docker)
+name: Update Satellite Data & Generate Infographics
 
 on:
     schedule:
@@ -51,7 +51,6 @@ jobs:
           echo "DB_HOST=${DB_HOST}"
           echo "DB_NAME=${DB_NAME}"
           echo "DB_USER=${DB_USER}"
-          
 
       - name: Build and Run Updater in Docker
         run: |
@@ -65,3 +64,33 @@ jobs:
             -e SPACETRACK_USER=$SPACETRACK_USER \
             -e SPACETRACK_PASS=$SPACETRACK_PASS \
             satellite-updater
+
+  generate_infographics:
+    runs-on: ubuntu-latest
+    needs: update_satellites  # Ensure satellite data is updated before generating graphs
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python environment
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install -r backend/requirements.txt
+          pip install matplotlib pandas seaborn
+
+      - name: Generate Infographics
+        run: |
+          python backend/app/generate_infographics.py  # ✅ Correct path
+
+      - name: Commit and Push Updated Graphs
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/infographics/*.png
+          git commit -m "📊 Auto-update satellite infographics (Daily Update)" || echo "No changes to commit"
+          git push

@@ -3,6 +3,7 @@
 import axios from "axios";
 
 const API_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/satellites/";
+const INFOGRAPHICS_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/infographics/";
 
 export async function fetchSatellites(page = 1, limit = 100, filter = null) {
   try {
@@ -35,14 +36,12 @@ export async function fetchSatellites(page = 1, limit = 100, filter = null) {
   }
 }
 
-
 export async function fetchSatelliteByName(name) {
   try {
     console.log(`📡 Fetching satellite details for: ${name}`);
 
-    // ✅ Remove trailing slashes, trim spaces, and ensure a properly formatted URL
     const formattedName = encodeURIComponent(name.trim());
-    const url = `${API_BASE_URL}/${formattedName}`.replace(/([^:]\/)\/+/g, "$1"); // Fix double slash
+    const url = `${API_BASE_URL}/${formattedName}`.replace(/([^:]\/)\/+/g, "$1");
 
     console.log(`🔗 Corrected API Request URL: ${url}`);
 
@@ -64,5 +63,37 @@ export async function fetchSatelliteByName(name) {
   } catch (error) {
     console.error("❌ Error fetching satellite:", error);
     return null;
+  }
+}
+
+export async function fetchInfographics(filters) {
+  try {
+    if (!filters || filters.length === 0) {
+      console.warn("⚠️ No filters applied. Returning empty infographics.");
+      return [];
+    }
+
+    const graphTypes = [
+      "orbit_distribution",
+      "velocity_distribution",
+      "perigee_apogee",
+      "purpose_breakdown",
+      "country_distribution",
+      "inclination_altitude",
+      "meanmotion_drag",
+      "launch_trend",
+      "satellite_lifetime",
+      "orbital_lifetime_drag"
+    ];
+
+    const infographicUrls = filters.flatMap((filter) =>
+      graphTypes.map((graph) => `${INFOGRAPHICS_BASE_URL}${filter}/${graph}`)
+    );
+
+    console.log(`📡 Fetching infographics for filters: ${filters.join(", ")}`);
+    return infographicUrls;
+  } catch (error) {
+    console.error("❌ Error fetching infographics:", error);
+    return [];
   }
 }

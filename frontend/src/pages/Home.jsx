@@ -1548,6 +1548,12 @@ return (
 </div>
 
 
+{/* 📊 Infographics Section */}
+<div className="w-full p-6 bg-gray-900 shadow-md rounded-md text-white">
+  <h3 className="text-lg font-semibold text-center text-blue-400">📊 Satellite Infographics</h3>
+  <p className="text-center text-gray-400 text-sm">Visual analytics based on your selected filters.</p>
+  <Infographics activeFilters={activeFilters} />
+</div>
 
 {/* 📜 Scrollable Content Below Everything (Responsive for Mobile & Desktop) */}
 <div className="overflow-y-auto h-[calc(240vh-100px)] bg-gradient-to-b from-gray-900 via-gray-800 to-black text-white px-4 sm:px-8 lg:px-12 py-10 z-60">
