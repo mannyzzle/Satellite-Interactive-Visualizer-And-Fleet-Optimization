@@ -83,7 +83,41 @@ jobs:
           pip install -r backend/requirements.txt
           pip install matplotlib pandas seaborn
 
+      - name: Verify Database Connection
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          echo "🔍 Testing database connection..."
+          python -c "
+          import psycopg2, os
+          try:
+              conn = psycopg2.connect(
+                  dbname=os.getenv('DB_NAME'),
+                  user=os.getenv('DB_USER'),
+                  password=os.getenv('DB_PASSWORD'),
+                  host=os.getenv('DB_HOST'),
+                  port='5432'
+              )
+              print('✅ Successfully connected to the database!')
+              conn.close()
+          except Exception as e:
+              print(f'❌ Database connection failed: {e}')
+              exit(1)
+          "
+
+      - name: Ensure Infographics Directory Exists
+        run: |
+          mkdir -p backend/infographics  # ✅ Creates directory if missing
+
       - name: Generate Infographics
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
           python backend/app/generate_infographics.py  # ✅ Correct path
 
