@@ -192,6 +192,8 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.savefig(f"{INFOGRAPHICS_DIR}/{safe_filter_name}_cumulative_launch_trend.png")
     plt.close()
 
+
+
     ## 🔄 7. Orbital Period vs. Mean Motion (Scatter Plot) - Outliers Removed
     df_filtered = remove_outliers(df, "period")
     df_filtered = remove_outliers(df_filtered, "mean_motion")
@@ -238,7 +240,7 @@ def generate_infographics(filter_name, filter_condition=None):
     ## 🏆 10. Most Frequent Satellite Launch Sites (Bar Chart)
     plt.figure(figsize=(8, 6))
     launch_sites = df["launch_site"].value_counts()[:10]
-    sns.barplot(y=launch_sites.index, x=launch_sites.values, palette="Blues_r")
+    sns.barplot(y=launch_sites.index, x=launch_sites.values, hue=launch_sites.index, palette="Blues_r", legend=False)
     plt.title(f"Top 10 Satellite Launch Sites ({filter_name})", fontsize=14, color="white")
     plt.ylabel("Launch Site", fontsize=12, color="white")
     plt.xlabel("Number of Launches", fontsize=12, color="white")
@@ -246,7 +248,6 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.tight_layout()
     plt.savefig(f"{INFOGRAPHICS_DIR}/{safe_filter_name}_launch_sites.png")
     plt.close()
-
 
 
 

@@ -82,7 +82,7 @@ jobs:
           import os
           import pandas as pd
           from sqlalchemy import create_engine
-          from backend.app.generate_infographics import filters, generate_infographics
+          from backend.app.generate_infographics import generate_infographics
 
           db_user = os.getenv('DB_USER')
           db_password = os.getenv('DB_PASSWORD')
@@ -100,13 +100,9 @@ jobs:
 
           top_countries = get_top_20_countries()
 
-          print('🔄 Generating Infographics for all filters...')
-          for f_name, f_condition in filters.items():
-              generate_infographics(f_name, f_condition)
-
           print('🔄 Generating Infographics for Select Launch Years...')
           for year in range(1990, 2026):
-              generate_infographics(f'Launch Year {year}', f'launch_year = {year}')
+              generate_infographics(f'Launch Year {year}', f'EXTRACT(YEAR FROM launch_date) = {year}')
 
           if top_countries:
               print(f'🔄 Generating Infographics for Top 20 Countries: {top_countries}')
