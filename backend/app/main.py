@@ -20,7 +20,7 @@ app.add_middleware(
 # Routers
 app.include_router(satellites.router, prefix="/api/satellites", tags=["Satellites"])
 app.include_router(llm.router, prefix="/api/llm", tags=["LLM"])
-app.include_router(infographics.router, prefix="/infographics", tags=["Infographics"])
+app.include_router(infographics.router, prefix="/api/infographics", tags=["Infographics"])
 
 @app.get("/")
 def root():
