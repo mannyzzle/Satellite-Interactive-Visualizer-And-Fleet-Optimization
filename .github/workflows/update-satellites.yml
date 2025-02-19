@@ -71,7 +71,7 @@ jobs:
           # 1) Import filters and generate_infographics from the file
           # 2) Loop over the filters
           # 3) Generate "Launch Year" and "Country" too
-          python -c "
+            python -c "
           import os
           os.environ['DB_HOST'] = '${DB_HOST}'
           os.environ['DB_NAME'] = '${DB_NAME}'
@@ -83,14 +83,14 @@ jobs:
 
           print('🔄 Generating Infographics for all filters...')
           for f_name, f_condition in filters.items():
-          generate_infographics(f_name, f_condition)
+              generate_infographics(f_name, f_condition)
 
           print('🔄 Generating Infographics for Launch Year (All)...')
           generate_infographics('Launch Year (All)', None)
 
           print('🔄 Generating Infographics for Country (All)...')
           generate_infographics('Country (All)', None)
-              "
+          "
       - name: Commit & Push Updated Graphs
         run: |
           git config --global user.name "github-actions[bot]"
