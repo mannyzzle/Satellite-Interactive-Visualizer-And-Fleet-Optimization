@@ -10,9 +10,8 @@ from datetime import datetime
 from sqlalchemy import create_engine
 import matplotlib.font_manager as fm
 
-# ✅ Set a font that supports emojis (Noto Sans)
-plt.rcParams["font.family"] = "Arial"  # Change to "Noto Sans" if installed
 
+plt.rcParams["font.family"] = "Liberation Sans"  # or "DejaVu Sans"
 
 # ✅ Dark Mode Theme with Dark Blue Background
 plt.style.use("dark_background")

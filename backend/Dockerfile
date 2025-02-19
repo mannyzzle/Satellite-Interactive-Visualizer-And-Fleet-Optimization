@@ -1,20 +1,21 @@
-# Use a minimal Python image
 FROM python:3.10-slim
 
-# Set working directory inside the container
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 1) Install fonts-liberation + fontconfig so matplotlib can find them
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    fontconfig \
+    fonts-liberation \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Copy the entire backend directory to the container
 COPY . /app
 
-# Install dependencies
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# ✅ Create infographics directory with full permissions
 RUN mkdir -p /app/backend/infographics && chmod -R 777 /app/backend/infographics
 
-# Expose FastAPI port
 EXPOSE 8000
 
-# ✅ Correct the start command
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
