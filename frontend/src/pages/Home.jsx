@@ -7,7 +7,7 @@ import { useCallback } from "react";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { fetchSatellites } from "../api/satelliteService";
-
+import Infographics from "../components/Infographics"; // Ensure correct path
 
 
 const dayTexture = "/assets/earth_day.jpg";

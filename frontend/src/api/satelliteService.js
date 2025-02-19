@@ -36,6 +36,10 @@ export async function fetchSatellites(page = 1, limit = 100, filter = null) {
   }
 }
 
+
+
+
+
 export async function fetchSatelliteByName(name) {
   try {
     console.log(`📡 Fetching satellite details for: ${name}`);
@@ -66,6 +70,10 @@ export async function fetchSatelliteByName(name) {
   }
 }
 
+
+
+
+
 export async function fetchInfographics(filters) {
   try {
     if (!filters || filters.length === 0) {
@@ -79,16 +87,25 @@ export async function fetchInfographics(filters) {
       "perigee_apogee",
       "purpose_breakdown",
       "country_distribution",
-      "inclination_altitude",
-      "meanmotion_drag",
-      "launch_trend",
-      "satellite_lifetime",
-      "orbital_lifetime_drag"
+      "cumulative_launch_trend",
+      "orbital_period_vs_mean_motion",
+      "inclination_mean_motion",
+      "bstar_altitude",
+      "launch_sites"
     ];
 
-    const infographicUrls = filters.flatMap((filter) =>
-      graphTypes.map((graph) => `${INFOGRAPHICS_BASE_URL}${filter}/${graph}`)
-    );
+    const infographicUrls = filters.flatMap((filter) => {
+      const formattedFilter = filter
+        .trim()
+        .replace(/ /g, "_")
+        .replace(/:/g, "")
+        .replace(/\(|\)/g, "");
+
+      return graphTypes.map((graph) => ({
+        url: `${INFOGRAPHICS_BASE_URL}${formattedFilter}/${graph}.png`, // ✅ Now gets the API response
+        name: `${filter.replace(/_/g, " ")} - ${graph.replace(/_/g, " ")}`,
+      }));
+    });
 
     console.log(`📡 Fetching infographics for filters: ${filters.join(", ")}`);
     return infographicUrls;

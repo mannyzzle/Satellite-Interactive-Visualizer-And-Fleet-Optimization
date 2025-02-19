@@ -10,6 +10,9 @@ COPY . /app
 # Install dependencies
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
+# ✅ Create and persist the `infographics` directory
+RUN mkdir -p /app/backend/infographics
+
 # Expose the FastAPI port
 EXPOSE 8000
 
