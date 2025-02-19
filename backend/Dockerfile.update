@@ -10,6 +10,7 @@ COPY . /app
 # Ensure logs are displayed in real-time
 ENV PYTHONUNBUFFERED=1
 
+
 # Install dependencies
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
