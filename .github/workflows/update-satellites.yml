@@ -71,6 +71,10 @@ jobs:
           mkdir -p backend/infographics
           chmod -R 777 backend/infographics  # Ensure write permissions
 
+      - name: Remove Old Infographics
+        run: rm -rf backend/infographics/*  # ✅ Clears old files to ensure fresh data
+  
+
       - name: Generate Infographics
         env:
           DB_HOST: ${{ secrets.DB_HOST }}
@@ -117,9 +121,8 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git rm --cached -r backend/infographics/  # ✅ Forces Git to re-track changes
           git add backend/infographics/*.png
-          git commit -m "📊 Auto-update satellite infographics" || echo "No changes to commit"
-          git commit --allow-empty -m "📊 Force redeploy"  # ✅ Ensures a commit even if no changes
-          git push
-
-          
+          git commit -m "📊 Auto-update satellite infographics (Force update)" || echo "No changes to commit"
+          git commit --allow-empty -m "📊 Force redeploy"  # ✅ Ensures an empty commit if needed
+          git push --force  # ✅ Ensures changes go through
