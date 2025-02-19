@@ -7,7 +7,7 @@ import urllib.parse
 
 router = APIRouter()
 
-INFOGRAPHICS_DIR = "/app/backend/infographics"
+INFOGRAPHICS_DIR = "backend/infographics"
 
 # Ensure directory at runtime (just in case)
 os.makedirs(INFOGRAPHICS_DIR, exist_ok=True)

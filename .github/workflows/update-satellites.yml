@@ -58,7 +58,7 @@ jobs:
 
       - name: Make Infographics Dir
         run: |
-          mkdir -p /app/backend/infographics
+          mkdir -p backend/infographics
 
       - name: Generate Infographics
         env:

@@ -10,11 +10,13 @@ from sqlalchemy import create_engine
 plt.rcParams["font.family"] = "Liberation Sans"
 plt.style.use("dark_background")
 
-INFOGRAPHICS_DIR = "/app/backend/infographics"
+INFOGRAPHICS_DIR = "backend/infographics"
 
 # ✅ Automatically create the folder if missing
 os.makedirs(INFOGRAPHICS_DIR, exist_ok=True)
 print(f"✅ Infographics will be saved in: {INFOGRAPHICS_DIR}")
+
+
 
 def get_sqlalchemy_engine():
     DB_USER = os.getenv("DB_USER")
