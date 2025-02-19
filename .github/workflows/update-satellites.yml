@@ -107,7 +107,8 @@ jobs:
           if top_countries:
               print(f'🔄 Generating Infographics for Top 20 Countries: {top_countries}')
               for country in top_countries:
-                  generate_infographics(f'Country {country}', f'country = \"{country}\"')
+                  generate_infographics(f'Country {country}', f"country = '{country}'")  
+
 
           print('✅ Infographics Generation Completed!')
           "

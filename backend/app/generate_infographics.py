@@ -6,6 +6,7 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine
+from matplotlib.patches import Patch
 
 # Use a font that's installed (Liberation Sans is included in fonts-liberation)
 plt.rcParams["font.family"] = "Liberation Sans"
@@ -222,20 +223,37 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.close()
 
 
-    ## 🔥 9. Drag Effects on Satellites (Bubble Chart) - Outliers Removed
+
+
+  ## 🔥 9. Drag Effects on Satellites (Bubble Chart) - Keeps Negative B*
     df_filtered = remove_outliers(df, "bstar")
     df_filtered = remove_outliers(df_filtered, "apogee")
     plt.figure(figsize=(8, 6))
-    plt.scatter(df_filtered["bstar"], df_filtered["apogee"], alpha=0.6, color="yellow", s=40)
-    plt.xscale("log")
-    plt.yscale("log")
+    # 🎨 Color coding: Red for negative B*, Yellow for positive B*
+    colors = ["red" if b < 0 else "yellow" if b > 0 else "blue" for b in df_filtered["bstar"]]
+    sizes = [60 if b == 0 else 40 for b in df_filtered["bstar"]]
+    # 🔄 Scatter plot with different colors for positive/negative values
+    plt.scatter(df_filtered["bstar"], df_filtered["apogee"], c=colors, alpha=0.6, s=sizes)
+    # ✅ Use 'symlog' scale to keep negative values visible
+    plt.xscale("symlog", linthresh=1e-7)
+    plt.yscale("log")  # Keep Apogee on log scale
     plt.title(f"Drag Effects on Satellite Orbits ({filter_name})", fontsize=14, color="white")
-    plt.xlabel("Atmospheric Drag (B* Term, log scale)", fontsize=12, color="white")
+    plt.xlabel("Atmospheric Drag (B* Term, symlog scale)", fontsize=12, color="white")
     plt.ylabel("Maximum Altitude (km, log scale)", fontsize=12, color="white")
+    # 🏷️ Add Legend
+    legend_elements = [
+        Patch(facecolor="red", edgecolor="black", label="Negative Drag (B* < 0)"),
+        Patch(facecolor="yellow", edgecolor="black", label="Positive Drag (B* > 0)"),
+        Patch(facecolor="blue", edgecolor="black", label="No Drag (B* = 0)")
+        ]
+    plt.legend(handles=legend_elements, loc="upper left", fontsize=10)
     plt.grid(alpha=0.3)
     plt.tight_layout()
     plt.savefig(f"{INFOGRAPHICS_DIR}/{safe_filter_name}_bstar_altitude.png")
     plt.close()
+
+
+
 
     ## 🏆 10. Most Frequent Satellite Launch Sites (Bar Chart)
     plt.figure(figsize=(8, 6))
