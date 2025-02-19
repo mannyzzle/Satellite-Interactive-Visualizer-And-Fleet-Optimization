@@ -218,6 +218,21 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.savefig(f"{INFOGRAPHICS_DIR}/{safe_filter_name}_orbital_period_vs_mean_motion.png")
     plt.close()
 
+
+    ## 8. Inclination vs. Mean Motion (Scatter Plot)
+    df_filtered = remove_outliers(df, "inclination")
+    df_filtered = remove_outliers(df_filtered, "mean_motion")
+    plt.figure(figsize=(8, 6))
+    sns.scatterplot(x=df_filtered["inclination"], y=df_filtered["mean_motion"], alpha=0.6, color="green")
+    plt.title(f"Inclination vs. Mean Motion ({filter_name})", fontsize=14, color="white")
+    plt.xlabel("Inclination (degrees)", fontsize=12, color="white")
+    plt.ylabel("Revolutions per Day", fontsize=12, color="white")
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f"{INFOGRAPHICS_DIR}/{safe_filter_name}_inclination_mean_motion.png")
+    plt.close()
+
+
     ## 🔥 9. Drag Effects on Satellites (Bubble Chart) - Outliers Removed
     df_filtered = remove_outliers(df, "bstar")
     df_filtered = remove_outliers(df_filtered, "apogee")
