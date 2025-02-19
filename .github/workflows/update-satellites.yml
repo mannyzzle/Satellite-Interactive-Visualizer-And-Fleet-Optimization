@@ -66,8 +66,10 @@ jobs:
           pip install -r backend/requirements.txt
           pip install matplotlib seaborn pandas sqlalchemy psycopg2
 
-      - name: Make Infographics Directory
-        run: mkdir -p backend/infographics
+      - name: Ensure Infographics Directory Exists  # ✅ Fix 1 Added Here
+        run: |
+          mkdir -p backend/infographics
+          chmod -R 777 backend/infographics  # Ensure write permissions
 
       - name: Generate Infographics
         env:
@@ -117,13 +119,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add backend/infographics/*.png
           git commit -m "📊 Auto-update satellite infographics" || echo "No changes to commit"
+          git commit --allow-empty -m "📊 Force redeploy"  # ✅ Ensures a commit even if no changes
           git push
 
           
-      - name: 🚀 Redeploy on Railway
-        run: |
-          curl -X POST \
-          -H "Authorization: Bearer ${{ secrets.RAILWAY_API_TOKEN }}" \
-          -H "Content-Type: application/json" \
-          "https://backboard.railway.app/project/${{ secrets.RAILWAY_PROJECT_ID }}/service/${{ secrets.RAILWAY_SERVICE_ID }}/deploy"
-
