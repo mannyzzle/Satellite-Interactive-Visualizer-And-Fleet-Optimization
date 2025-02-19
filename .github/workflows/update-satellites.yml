@@ -1,58 +1,31 @@
-name: Update Satellite Data & Generate Infographics
+name: Update Satellites & Infographics
 
 on:
-    schedule:
-      - cron: "0 6 * * *"  # Runs every day at 6 AM UTC
-    workflow_dispatch:  # Allows manual trigger
+  schedule:
+    - cron: "0 6 * * *"  # Every day at 06:00 UTC
+  workflow_dispatch:  # Allows manual triggering
 
 jobs:
-  update_satellites:
+  update_db:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repo
         uses: actions/checkout@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Debug GitHub Secrets
+      - name: Set Env Vars
         run: |
-          echo "🔍 Checking Secrets..."
-          if [[ -z "${{ secrets.SPACETRACK_USER }}" ]]; then
-            echo "❌ SPACETRACK_USER is missing!"
-            exit 1
-          else
-            echo "✅ SPACETRACK_USER is set."
-          fi
-
-          if [[ -z "${{ secrets.SPACETRACK_PASS }}" ]]; then
-            echo "❌ SPACETRACK_PASS is missing!"
-            exit 1
-          else
-            echo "✅ SPACETRACK_PASS is set."
-          fi
-
-      - name: Set Environment Variables
-        run: |
-          echo "SPACETRACK_USER=${{ secrets.SPACETRACK_USER }}" >> $GITHUB_ENV
-          echo "SPACETRACK_PASS=${{ secrets.SPACETRACK_PASS }}" >> $GITHUB_ENV
           echo "DB_HOST=${{ secrets.DB_HOST }}" >> $GITHUB_ENV
           echo "DB_NAME=${{ secrets.DB_NAME }}" >> $GITHUB_ENV
           echo "DB_USER=${{ secrets.DB_USER }}" >> $GITHUB_ENV
           echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> $GITHUB_ENV
-          echo "DB_PORT=5432" >> $GITHUB_ENV
+          echo "SPACETRACK_USER=${{ secrets.SPACETRACK_USER }}" >> $GITHUB_ENV
+          echo "SPACETRACK_PASS=${{ secrets.SPACETRACK_PASS }}" >> $GITHUB_ENV
 
-      - name: Verify Loaded Environment Variables
-        run: |
-          echo "🔍 Verifying Environment Variables..."
-          echo "SPACETRACK_USER=${SPACETRACK_USER}"
-          echo "SPACETRACK_PASS=${SPACETRACK_PASS}"
-          echo "DB_HOST=${DB_HOST}"
-          echo "DB_NAME=${DB_NAME}"
-          echo "DB_USER=${DB_USER}"
-
-      - name: Build and Run Updater in Docker
+      - name: Build & Run Updater
         run: |
           docker build -t satellite-updater -f backend/Dockerfile.update ./backend
           docker run --rm \
@@ -60,57 +33,32 @@ jobs:
             -e DB_NAME=$DB_NAME \
             -e DB_USER=$DB_USER \
             -e DB_PASSWORD=$DB_PASSWORD \
-            -e DB_PORT=$DB_PORT \
             -e SPACETRACK_USER=$SPACETRACK_USER \
             -e SPACETRACK_PASS=$SPACETRACK_PASS \
             satellite-updater
 
   generate_infographics:
     runs-on: ubuntu-latest
-    needs: update_satellites  # Ensure satellite data is updated before generating graphs
+    needs: update_db
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repo
         uses: actions/checkout@v3
 
-      - name: Set up Python environment
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.10"
 
-      - name: Install dependencies
+      - name: Install Python Dependencies
         run: |
           pip install -r backend/requirements.txt
-          pip install matplotlib pandas seaborn
+          # If these aren't in your requirements
+          pip install matplotlib seaborn pandas
 
-      - name: Verify Database Connection
-        env:
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      - name: Make Infographics Dir
         run: |
-          echo "🔍 Testing database connection..."
-          python -c "
-          import psycopg2, os
-          try:
-              conn = psycopg2.connect(
-                  dbname=os.getenv('DB_NAME'),
-                  user=os.getenv('DB_USER'),
-                  password=os.getenv('DB_PASSWORD'),
-                  host=os.getenv('DB_HOST'),
-                  port='5432'
-              )
-              print('✅ Successfully connected to the database!')
-              conn.close()
-          except Exception as e:
-              print(f'❌ Database connection failed: {e}')
-              exit(1)
-          "
-
-      - name: Ensure Infographics Directory Exists
-        run: |
-          mkdir -p backend/infographics  # ✅ Creates directory if missing
+          mkdir -p /app/backend/infographics
 
       - name: Generate Infographics
         env:
@@ -118,13 +66,35 @@ jobs:
           DB_NAME: ${{ secrets.DB_NAME }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_PORT: 5432
         run: |
-          python backend/app/generate_infographics.py  # ✅ Correct path
+          # 1) Import filters and generate_infographics from the file
+          # 2) Loop over the filters
+          # 3) Generate "Launch Year" and "Country" too
+          python -c "
+          import os
+          os.environ['DB_HOST'] = '${DB_HOST}'
+          os.environ['DB_NAME'] = '${DB_NAME}'
+          os.environ['DB_USER'] = '${DB_USER}'
+          os.environ['DB_PASSWORD'] = '${DB_PASSWORD}'
+          os.environ['DB_PORT'] = '${DB_PORT}'
 
-      - name: Commit and Push Updated Graphs
+          from backend.app.generate_infographics import filters, generate_infographics
+
+          print('🔄 Generating Infographics for all filters...')
+          for f_name, f_condition in filters.items():
+          generate_infographics(f_name, f_condition)
+
+          print('🔄 Generating Infographics for Launch Year (All)...')
+          generate_infographics('Launch Year (All)', None)
+
+          print('🔄 Generating Infographics for Country (All)...')
+          generate_infographics('Country (All)', None)
+              "
+      - name: Commit & Push Updated Graphs
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add backend/infographics/*.png
-          git commit -m "📊 Auto-update satellite infographics (Daily Update)" || echo "No changes to commit"
+          git commit -m "📊 Auto-update satellite infographics (Daily)" || echo "No changes to commit"
           git push

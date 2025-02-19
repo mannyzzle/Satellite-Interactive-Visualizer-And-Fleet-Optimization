@@ -7,17 +7,16 @@ import urllib.parse
 
 router = APIRouter()
 
-
 INFOGRAPHICS_DIR = "/app/backend/infographics"
 
-# ✅ Ensure the directory exists
+# Ensure directory at runtime (just in case)
 os.makedirs(INFOGRAPHICS_DIR, exist_ok=True)
 
 @router.get("/{filter_name}/{graph_type}.png")
 def get_infographic(filter_name: str, graph_type: str):
     """
-    Fetches the requested infographic dynamically.
-    Example: `/api/infographics/LEO/orbit_distribution.png`
+    Returns a pre-generated .png from /app/backend/infographics.
+    e.g. /api/infographics/LEO/orbit_distribution.png
     """
 
     valid_graphs = {
@@ -32,26 +31,23 @@ def get_infographic(filter_name: str, graph_type: str):
         "bstar_altitude",
         "launch_sites",
     }
-
     if graph_type not in valid_graphs:
         raise HTTPException(status_code=400, detail=f"Invalid graph type: {graph_type}")
 
-    # ✅ Ensure filter name is formatted to match file names
     decoded_filter_name = urllib.parse.unquote(filter_name)
     safe_filter_name = (
         decoded_filter_name.strip()
-        .replace(" ", "_")   # Convert spaces to underscores
-        .replace(":", "")    # Remove colons
-        .replace("(", "")    # Remove parentheses
+        .replace(" ", "_")
+        .replace(":", "")
+        .replace("(", "")
         .replace(")", "")
     )
 
     file_name = f"{safe_filter_name}_{graph_type}.png"
     file_path = os.path.join(INFOGRAPHICS_DIR, file_name)
-
     print(f"🔍 Looking for infographic: {file_path}")
 
     if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail=f"Infographic '{graph_type}' for '{safe_filter_name}' not found at {file_path}")
+        raise HTTPException(status_code=404, detail=f"Infographic not found at {file_path}")
 
     return FileResponse(file_path)
