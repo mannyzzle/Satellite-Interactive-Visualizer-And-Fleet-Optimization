@@ -1,61 +1,47 @@
-#backend/app/generate_infographics.py
+# backend/app/generate_infographics.py
 
-
+import os
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
-import os
-from datetime import datetime
 from sqlalchemy import create_engine
-import matplotlib.font_manager as fm
 
-
-plt.rcParams["font.family"] = "Liberation Sans"  # or "DejaVu Sans"
-
-# ✅ Dark Mode Theme with Dark Blue Background
+# Use a font that's installed (Liberation Sans is included in fonts-liberation)
+plt.rcParams["font.family"] = "Liberation Sans"
 plt.style.use("dark_background")
 
+# If you prefer a relative path in GH Actions, set INFOGRAPHICS_DIR = "backend/infographics"
+# If you do generate images in Docker, you might want "/app/backend/infographics"
+INFOGRAPHICS_DIR = "backend/infographics"
 
-
-INFOGRAPHICS_DIR = "/app/backend/infographics"
-
-
-# ✅ Ensure the volume is mounted correctly
-if not os.path.exists(INFOGRAPHICS_DIR):
-    print(f"❌ Directory does not exist: {INFOGRAPHICS_DIR}")
-    print("Ensure the Railway volume is correctly mounted.")
-    exit(1)
-
+# ✅ Automatically create directory if missing (no fail-fast)
+os.makedirs(INFOGRAPHICS_DIR, exist_ok=True)
 print(f"✅ Infographics will be saved in: {INFOGRAPHICS_DIR}")
 
-
-
-# ✅ Create SQLAlchemy Engine
 def get_sqlalchemy_engine():
     """
-    Creates a SQLAlchemy database connection engine.
+    Creates a SQLAlchemy database connection engine using env vars.
     """
     DB_USER = os.getenv("DB_USER")
     DB_PASSWORD = os.getenv("DB_PASSWORD")
     DB_HOST = os.getenv("DB_HOST")
     DB_PORT = os.getenv("DB_PORT", "5432")
     DB_NAME = os.getenv("DB_NAME")
-    
+
     db_url = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     return create_engine(db_url)
 
-
-# ✅ Function to Fetch & Clean Data
 def fetch_clean_satellite_data(filter_condition=None):
     """
-    Fetches satellite data & ensures proper data types and missing value handling.
+    Fetches satellite data from the DB, cleans numeric/categorical columns.
     """
     engine = get_sqlalchemy_engine()
 
     query = """
-    SELECT orbit_type, velocity, perigee, apogee, eccentricity, bstar, inclination, 
-           mean_motion, purpose, country, launch_date, launch_site, semi_major_axis, period
+    SELECT orbit_type, velocity, perigee, apogee, eccentricity, bstar,
+           inclination, mean_motion, purpose, country, launch_date,
+           launch_site, semi_major_axis, period
     FROM satellites
     """
     if filter_condition:
@@ -63,31 +49,33 @@ def fetch_clean_satellite_data(filter_condition=None):
 
     df = pd.read_sql(query, engine)
 
-    # ✅ Ensure there is data before processing
     if df.empty:
         print(f"⚠️ No data found for filter: {filter_condition}")
         return df
 
     print("✅ Raw satellite data fetched successfully!")
 
-    # ✅ Convert necessary columns to numeric
-    numeric_columns = ["velocity", "perigee", "apogee", "eccentricity", "bstar", "inclination", "mean_motion", "semi_major_axis"]
+    # Convert to numeric, ignoring errors
+    numeric_columns = [
+        "velocity", "perigee", "apogee", "eccentricity",
+        "bstar", "inclination", "mean_motion", "semi_major_axis"
+    ]
     for col in numeric_columns:
-        df[col] = pd.to_numeric(df[col], errors="coerce")  # Convert to float, replacing errors with NaN
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # ✅ Fill missing numeric values with appropriate defaults
+    # Fill missing numeric
     df = df.fillna({
         "velocity": df["velocity"].median(),
-        "perigee": 500,  # Default safe perigee
-        "apogee": 2000,  # Default high altitude
-        "eccentricity": 0,  # Assume circular orbit if missing
-        "bstar": 0,  # No drag assumption
+        "perigee": 500,
+        "apogee": 2000,
+        "eccentricity": 0,
+        "bstar": 0,
         "inclination": df["inclination"].median(),
         "mean_motion": df["mean_motion"].median(),
         "semi_major_axis": df["semi_major_axis"].median() if "semi_major_axis" in df.columns else np.nan
     })
 
-    # ✅ Fill missing categorical values
+    # Fill missing categorical
     df = df.fillna({
         "orbit_type": "Unknown",
         "purpose": "Unknown/Other",
@@ -95,13 +83,12 @@ def fetch_clean_satellite_data(filter_condition=None):
         "launch_site": "Unknown"
     })
 
-    # ✅ Convert `launch_date`
+    # Convert launch_date
     df["launch_date"] = pd.to_datetime(df["launch_date"], errors="coerce")
     df.dropna(subset=["launch_date"], inplace=True)
     df["launch_year"] = df["launch_date"].dt.year
 
     return df
-
 
 
 
@@ -294,15 +281,3 @@ filters = {
 
     # 📅 Dynamic Filters (Launch Year & Country)
 }
-
-
-
-# ✅ Generate infographics for all predefined filters
-for filter_name, filter_condition in filters.items():
-    generate_infographics(filter_name, filter_condition)
-
-# ✅ Generate infographics ONCE for "Launch Year" category (Uses full dataset)
-generate_infographics("Launch Year (All)", None)
-
-# ✅ Generate infographics ONCE for "Country" category (Uses full dataset)
-generate_infographics("Country (All)", None)
