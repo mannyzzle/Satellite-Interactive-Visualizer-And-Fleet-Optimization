@@ -10,11 +10,8 @@ COPY . /app
 # Install dependencies
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# ✅ Create and persist the `infographics` directory
-RUN mkdir -p /app/backend/infographics
-
-# Expose the FastAPI port
+# Expose FastAPI port
 EXPOSE 8000
 
-# Use Railway-injected environment variables
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# ✅ Correct the start command
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

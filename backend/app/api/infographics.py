@@ -7,13 +7,11 @@ import urllib.parse
 
 router = APIRouter()
 
-# ✅ Adjust path to correctly reference `backend/infographics`
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Points to `/backend`
-INFOGRAPHICS_DIR = os.path.join(BASE_DIR, "infographics")
+# ✅ Use Railway's mounted volume path
+INFOGRAPHICS_DIR = "/app/backend/infographics"
 
 # ✅ Ensure the directory exists
-if not os.path.exists(INFOGRAPHICS_DIR):
-    os.makedirs(INFOGRAPHICS_DIR)
+os.makedirs(INFOGRAPHICS_DIR, exist_ok=True)
 
 @router.get("/{filter_name}/{graph_type}.png")
 def get_infographic(filter_name: str, graph_type: str):

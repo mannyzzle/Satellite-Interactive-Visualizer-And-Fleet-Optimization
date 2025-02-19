@@ -16,14 +16,19 @@ plt.rcParams["font.family"] = "Arial"  # Change to "Noto Sans" if installed
 plt.style.use("dark_background")
 
 
-# ✅ Adjust path to correctly reference backend directory
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-INFOGRAPHICS_DIR = os.path.join(BASE_DIR, "infographics")
 
+# ✅ Use Railway-mounted volume path directly
+INFOGRAPHICS_DIR = "/app/backend/infographics"
 
-os.makedirs(INFOGRAPHICS_DIR, exist_ok=True)
+# ✅ Ensure the volume is mounted correctly
+if not os.path.exists(INFOGRAPHICS_DIR):
+    print(f"❌ Directory does not exist: {INFOGRAPHICS_DIR}")
+    print("Ensure the Railway volume is correctly mounted.")
+    exit(1)
 
 print(f"✅ Infographics will be saved in: {INFOGRAPHICS_DIR}")
+
+
 
 # ✅ Create SQLAlchemy Engine
 def get_sqlalchemy_engine():
@@ -113,20 +118,6 @@ def remove_outliers(df, column):
     upper_bound = Q3 + 1.5 * IQR
     return df[(df[column] >= lower_bound) & (df[column] <= upper_bound)]
 
-
-
-
-# ✅ Function to Remove Outliers (IQR Method)
-def remove_outliers(df, column):
-    """Removes outliers using the interquartile range (IQR) method."""
-    if column not in df.columns:
-        return df
-    Q1 = df[column].quantile(0.25)
-    Q3 = df[column].quantile(0.75)
-    IQR = Q3 - Q1
-    lower_bound = Q1 - 1.5 * IQR
-    upper_bound = Q3 + 1.5 * IQR
-    return df[(df[column] >= lower_bound) & (df[column] <= upper_bound)]
 
 
 
