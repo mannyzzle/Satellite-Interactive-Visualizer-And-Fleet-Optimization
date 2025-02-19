@@ -71,14 +71,14 @@ export async function fetchSatelliteByName(name) {
 }
 
 
-
-
-
 export async function fetchInfographics(filters) {
   try {
-    if (!filters || filters.length === 0) {
+    if (!filters || (Array.isArray(filters) && filters.length === 0)) {
       console.warn("⚠️ No filters applied. Returning empty infographics.");
       return [];
+    }
+    if (!Array.isArray(filters)) {
+      filters = [filters]; // ✅ Convert single filter string to array
     }
 
     const graphTypes = [
@@ -94,18 +94,19 @@ export async function fetchInfographics(filters) {
       "launch_sites"
     ];
 
-    const infographicUrls = filters.flatMap((filter) => {
-      const formattedFilter = filter
+    // ✅ Ensure properly formatted names
+    const infographicUrls = filters.map((filter) => {
+      const formattedFilter = decodeURIComponent(filter) // ✅ Fix double encoding
         .trim()
         .replace(/ /g, "_")
         .replace(/:/g, "")
         .replace(/\(|\)/g, "");
 
       return graphTypes.map((graph) => ({
-        url: `${INFOGRAPHICS_BASE_URL}${formattedFilter}/${graph}.png`, // ✅ Now gets the API response
-        name: `${filter.replace(/_/g, " ")} - ${graph.replace(/_/g, " ")}`,
+        url: `${INFOGRAPHICS_BASE_URL}${formattedFilter}/${graph}.png`,
+        name: `${formattedFilter.replace(/_/g, " ")} - ${graph.replace(/_/g, " ")}`, // ✅ Fix display names
       }));
-    });
+    }).flat(); // ✅ Flatten after mapping
 
     console.log(`📡 Fetching infographics for filters: ${filters.join(", ")}`);
     return infographicUrls;

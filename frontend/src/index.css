@@ -62,14 +62,16 @@ body {
   z-index: 50;
 }
 
-/* 📜 Scrollable Content Below the 3D UI */
+
+/* 📜 Scrollable Content */
 .scrollable-content {
-  margin-top: 75vh; /* ✅ Push it below the 3D UI */
+  margin-top: 90vh; /* ⬅️ Adjust so it starts sooner */
   padding: 20px;
   width: 100%;
-  height: 500vh; /* ✅ Increase content area */
+  min-height: 100vh; /* ⬅️ Set dynamic height instead of 500vh */
   background: rgba(0, 0, 0, 0.8);
   color: white;
+  overflow-y: auto; /* ✅ Allows scrolling inside */
 }
 
 /* 📌 Fixed Bottom Info Box */

@@ -956,53 +956,8 @@ useEffect(() => {
 
 
 
-  const auroraMaterial = new THREE.ShaderMaterial({
-    uniforms: {
-      time: { value: 0 },
-    },
-    vertexShader: `
-      varying vec3 vPosition;
-      void main() {
-        vPosition = position;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      varying vec3 vPosition;
-      uniform float time;
-  
-      void main() {
-        float latitude = abs(vPosition.y); // Get vertical position (Y-axis)
-        
-        // ✅ Smooth gradient fade instead of hard cut-off
-        float visibility = smoothstep(4.0, 5.0, latitude); // Start fading from 30° and fully visible above 50°
-  
-        // ✅ Ensure aurora isn’t fully transparent
-        if (visibility < 0.1) {
-          discard;
-        }
-  
-        float intensity = pow(visibility, 1.0); // Adjust intensity
-        float wave = sin(vPosition.y * 10.0 + time) * 0.4 + 0.6; // Add dynamic wave effect
-  
-        gl_FragColor = vec4(0.5, 1, 0.8, 0.4) * intensity * wave; // Green aurora effect
-      }
-    `,
-    transparent: true,
-    side: THREE.DoubleSide,
-  });
   
   
-  // ✅ Create the Aurora Mesh and Position It
-  const aurora = new THREE.Mesh(new THREE.SphereGeometry(5.1, 64, 64), auroraMaterial);
-  scene.add(aurora);
-  
-  // ✅ Animate the Aurora Over Time
-  function animateAurora() {
-    auroraMaterial.uniforms.time.value += 0.009;
-    requestAnimationFrame(animateAurora);
-  }
-  animateAurora();
   
 
   
@@ -1252,6 +1207,8 @@ const FilterButton = ({ filter }) => (
 
 
 
+
+
 return (
   <div className="flex flex-col min-h-screen w-screen overflow-hidden">
     {/* 📌 Navbar */}
@@ -1444,7 +1401,7 @@ return (
 </div>
 
  {/* 🛰️ Filter Section Below 3D UI */}
-<div className="flex flex-col items-center p-4 bg-gray-800 shadow-md rounded-md w-full z-50">
+<div className="flex flex-col items-center p-4 bg-gray-800 shadow-md rounded-md w-full z-50 ax-w-xl mx-auto">
   <h3 className="text-lg font-semibold text-white mb-2 text-center">Filters</h3>
 
   {/* 🌍 Orbital Filters */}
@@ -1498,16 +1455,19 @@ return (
     </div>
   </div>
 
+  {/* Combined Row for Launch & Decay Filters, Launch Year, Country, and Reset */}
+<div className="flex flex-wrap items-center justify-center gap-4 w-full text-center mb-3">
   {/* 🚀 Launch & Decay Filters */}
-  <div className="w-full text-center mb-3">
+  <div className="flex flex-col items-center flex-1">
     <h4 className="text-sm font-semibold text-gray-300 mb-2">🚀 Launch & Decay Filters</h4>
-    <div className="flex flex-wrap justify-center gap-2">
-      <FilterButton key="Recent Launches" filter={{ name: "Recent Launches", label: "🚀 Recent Launch (30 Days)" }} />
-    </div>
+    <FilterButton
+      key="Recent Launches"
+      filter={{ name: "Recent Launches", label: "🚀 Recent Launch (30 Days)" }}
+    />
   </div>
 
   {/* 📅 Launch Year Dropdown */}
-  <div className="w-full text-center mb-3">
+  <div className="flex flex-col items-center flex-1">
     <h4 className="text-sm font-semibold text-gray-300 mb-2">📅 Launch Year</h4>
     <select
       className="px-4 py-2 text-xs font-semibold rounded-md bg-gray-700 text-gray-300"
@@ -1521,7 +1481,7 @@ return (
   </div>
 
   {/* 🌍 Country Dropdown */}
-  <div className="w-full text-center mb-3">
+  <div className="flex flex-col items-center flex-1">
     <h4 className="text-sm font-semibold text-gray-300 mb-2">🌍 Select Country</h4>
     <select
       className="px-4 py-2 text-xs font-semibold rounded-md bg-gray-700 text-gray-300"
@@ -1537,7 +1497,7 @@ return (
   </div>
 
   {/* 🛑 RESET FILTERS */}
-  <div className="w-full flex justify-center mt-3">
+  <div className="flex flex-col items-center flex-1">
     <button
       className="px-5 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-md shadow-md"
       onClick={resetFilters}
@@ -1545,6 +1505,7 @@ return (
       🔄 Reset Filters
     </button>
   </div>
+</div>
 </div>
 
 
@@ -1555,18 +1516,20 @@ return (
   <Infographics activeFilters={activeFilters} />
 </div>
 
-{/* 📜 Scrollable Content Below Everything (Responsive for Mobile & Desktop) */}
-<div className="overflow-y-auto h-[calc(240vh-100px)] bg-gradient-to-b from-gray-900 via-gray-800 to-black text-white px-4 sm:px-8 lg:px-12 py-10 z-60">
+
+
+{/* 📜 Content Container (Ensures Full Visibility) */}
+<div className="min-h-screen overflow-y-auto bg-gradient-to-b from-gray-900 via-gray-800 to-black text-white px-4 sm:px-8 lg:px-12 py-10 z-60">
 
   {/* 🛰️ Section Container */}
-  <div className="max-w-5xl mx-auto space-y-12">
+  <div className="max-w-5xl mx-auto space-y-12 pb-40"> {/* Increased padding-bottom */}
 
     {/* 🔥 About the Satellite Tracker */}
     <div className="p-6 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700">
       <h2 className="text-3xl sm:text-4xl font-extrabold text-blue-400 tracking-wide animate-pulse">🛰️ About the Satellite Tracker</h2>
       <p className="mt-4 text-lg leading-relaxed">
-        This advanced satellite tracker offers a **real-time 3D visualization** of Earth’s orbiting satellites, dynamically updating based on 
-        precise orbital mechanics. Using **Three.js** and **TLE propagation**, it provides accurate tracking of thousands of satellites, ensuring
+        This advanced satellite tracker offers a <strong className="text-yellow-400">real-time 3D visualization</strong> of Earth’s orbiting satellites, dynamically updating based on 
+        precise orbital mechanics. Using <strong className="text-green-400">Three.js</strong> and <strong className="text-purple-400">TLE propagation</strong>, it provides accurate tracking of thousands of satellites, ensuring
         a realistic space simulation.
       </p>
     </div>
@@ -1575,8 +1538,8 @@ return (
     <div className="p-6 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700">
       <h2 className="text-3xl sm:text-4xl font-extrabold text-green-400 tracking-wide">⚙️ How It Works</h2>
       <p className="mt-4 text-lg leading-relaxed">
-        The tracker processes live **Two-Line Element (TLE) data**, which is fed into an orbital mechanics engine. Using Keplerian orbital 
-        elements, it calculates each satellite’s trajectory with extreme accuracy. The **3D visualization** is powered by <strong>Three.js</strong>,
+        The tracker processes live <strong className="text-yellow-400">Two-Line Element (TLE) data</strong>, which is fed into an orbital mechanics engine. Using Keplerian orbital 
+        elements, it calculates each satellite’s trajectory with extreme accuracy. The <strong className="text-cyan-400">3D visualization</strong> is powered by <strong className="text-blue-400">Three.js</strong>,
         enabling smooth real-time rendering.
       </p>
     </div>
@@ -1585,11 +1548,11 @@ return (
     <div className="p-6 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700">
       <h2 className="text-3xl sm:text-4xl font-extrabold text-yellow-400 tracking-wide">🌎 Real-World Applications</h2>
       <ul className="mt-4 list-disc pl-6 space-y-3 text-lg">
-        <li>📡 **Space Situational Awareness** - Detect and track space debris to prevent collisions.</li>
-        <li>⛈️ **Weather Monitoring** - Observe satellites like NOAA and GOES for real-time weather data.</li>
-        <li>📍 **GPS & Navigation** - Track global navigation systems such as GPS, Galileo, and GLONASS.</li>
-        <li>📺 **Telecommunications** - Monitor internet, TV, and radio signal satellites.</li>
-        <li>🛡️ **Military & Defense** - Track classified satellites used for national security.</li>
+        <li>📡 <strong className="text-blue-400">Space Situational Awareness</strong> - Detect and track space debris to prevent collisions.</li>
+        <li>⛈️ <strong className="text-green-400">Weather Monitoring</strong> - Observe satellites like NOAA and GOES for real-time weather data.</li>
+        <li>📍 <strong className="text-red-400">GPS & Navigation</strong> - Track global navigation systems such as GPS, Galileo, and GLONASS.</li>
+        <li>📺 <strong className="text-purple-400">Telecommunications</strong> - Monitor internet, TV, and radio signal satellites.</li>
+        <li>🛡️ <strong className="text-yellow-400">Military & Defense</strong> - Track classified satellites used for national security.</li>
       </ul>
     </div>
 
@@ -1597,11 +1560,11 @@ return (
     <div className="p-6 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700">
       <h2 className="text-3xl sm:text-4xl font-extrabold text-purple-400 tracking-wide">🔧 Technical Features</h2>
       <ul className="mt-4 list-disc pl-6 space-y-3 text-lg">
-        <li>🚀 **Real-Time Data Updates** - Fetches & updates satellite positions every few seconds.</li>
-        <li>🌌 **Interactive 3D Visualization** - Uses <strong>Three.js</strong> for realistic rendering.</li>
-        <li>🛰️ **Orbit Path Calculation** - Predicts movement using **Keplerian elements**.</li>
-        <li>🎯 **Click & Track** - Select a satellite to focus and get detailed real-time data.</li>
-        <li>🔍 **Sidebar Filtering** - Advanced search and filter options for easy navigation.</li>
+        <li>🚀 <strong className="text-cyan-400">Real-Time Data Updates</strong> - Fetches & updates satellite positions every few seconds.</li>
+        <li>🌌 <strong className="text-blue-400">Interactive 3D Visualization</strong> - Uses Three.js for realistic rendering.</li>
+        <li>🛰️ <strong className="text-yellow-400">Orbit Path Calculation</strong> - Predicts movement using Keplerian elements.</li>
+        <li>🎯 <strong className="text-green-400">Click & Track</strong> - Select a satellite to focus and get detailed real-time data.</li>
+        <li>🔍 <strong className="text-red-400">Sidebar Filtering</strong> - Advanced search and filter options for easy navigation.</li>
       </ul>
     </div>
 
@@ -1609,10 +1572,10 @@ return (
     <div className="p-6 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700">
       <h2 className="text-3xl sm:text-4xl font-extrabold text-red-400 tracking-wide">🚀 Future Enhancements</h2>
       <ul className="mt-4 list-disc pl-6 space-y-3 text-lg">
-        <li>🤖 **AI-Powered Anomaly Detection** - Detects unexpected orbital deviations.</li>
-        <li>🌞 **Space Weather Integration** - Displays solar activity and geomagnetic storm risks.</li>
-        <li>🕰️ **Historical Data Replay** - Play back satellite movements over time.</li>
-        <li>📊 **Enhanced UI & Analytics** - Improved user control and data visualization.</li>
+        <li>🤖 <strong className="text-cyan-400">AI-Powered Anomaly Detection</strong> - Detects unexpected orbital deviations.</li>
+        <li>🌞 <strong className="text-yellow-400">Space Weather Integration</strong> - Displays solar activity and geomagnetic storm risks.</li>
+        <li>🕰️ <strong className="text-purple-400">Historical Data Replay</strong> - Play back satellite movements over time.</li>
+        <li>📊 <strong className="text-blue-400">Enhanced UI & Analytics</strong> - Improved user control and data visualization.</li>
       </ul>
     </div>
 
@@ -1620,9 +1583,9 @@ return (
     <div className="p-6 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700">
       <h2 className="text-3xl sm:text-4xl font-extrabold text-pink-400 tracking-wide">🌌 Exploring the Future of Space</h2>
       <p className="mt-4 text-lg leading-relaxed">
-        With the rise of **mega-constellations** like Starlink and OneWeb, and the launch of deep-space missions, tracking satellites is more 
-        important than ever. Future versions of this platform could support real-time monitoring of **lunar bases**, **interplanetary probes**, 
-        and even **Mars-bound spacecraft**.
+        With the rise of <strong className="text-yellow-400">mega-constellations</strong> like Starlink and OneWeb, and the launch of deep-space missions, tracking satellites is more 
+        important than ever. Future versions of this platform could support real-time monitoring of <strong className="text-green-400">lunar bases</strong>, <strong className="text-cyan-400">interplanetary probes</strong>, 
+        and even <strong className="text-red-400">Mars-bound spacecraft</strong>.
       </p>
     </div>
 
@@ -1630,10 +1593,10 @@ return (
     <div className="p-6 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700">
       <h2 className="text-3xl sm:text-4xl font-extrabold text-cyan-400 tracking-wide">📜 Additional Resources</h2>
       <ul className="mt-4 list-disc pl-6 space-y-3 text-lg">
-        <li><a href="https://www.celestrak.com/" className="text-blue-400 hover:underline hover:text-blue-300" target="_blank">🌍 CelesTrak - Satellite Data & TLE</a></li>
-        <li><a href="https://www.n2yo.com/" className="text-blue-400 hover:underline hover:text-blue-300" target="_blank">🛰️ N2YO - Live Satellite Tracking</a></li>
-        <li><a href="https://spaceweather.com/" className="text-blue-400 hover:underline hover:text-blue-300" target="_blank">☀️ Space Weather Updates</a></li>
-        <li><a href="https://www.nasa.gov/" className="text-blue-400 hover:underline hover:text-blue-300" target="_blank">🚀 NASA Official Website</a></li>
+        <li><a href="https://www.celestrak.com/" className="text-blue-400 hover:underline hover:text-blue-300" target="_blank">🌍 <strong>CelesTrak</strong> - Satellite Data & TLE</a></li>
+        <li><a href="https://www.n2yo.com/" className="text-blue-400 hover:underline hover:text-blue-300" target="_blank">🛰️ <strong>N2YO</strong> - Live Satellite Tracking</a></li>
+        <li><a href="https://spaceweather.com/" className="text-blue-400 hover:underline hover:text-blue-300" target="_blank">☀️ <strong>Space Weather Updates</strong></a></li>
+        <li><a href="https://www.nasa.gov/" className="text-blue-400 hover:underline hover:text-blue-300" target="_blank">🚀 <strong>NASA Official Website</strong></a></li>
       </ul>
     </div>
 
@@ -1641,6 +1604,5 @@ return (
 
 </div>
 </div>
-
 );
 }

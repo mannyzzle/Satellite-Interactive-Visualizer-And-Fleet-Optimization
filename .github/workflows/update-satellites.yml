@@ -2,7 +2,7 @@ name: Update Satellites & Infographics
 
 on:
   schedule:
-    - cron: "0 6 * * *"  # Every day at 06:00 UTC
+    - cron: "0 6 * * *"  # Runs daily at 06:00 UTC
   workflow_dispatch:  # Allows manual triggering
 
 jobs:
@@ -53,10 +53,9 @@ jobs:
       - name: Install Python Dependencies
         run: |
           pip install -r backend/requirements.txt
-          # If these aren't in your requirements
           pip install matplotlib seaborn pandas
 
-      - name: Make Infographics Dir
+      - name: Make Infographics Directory
         run: |
           mkdir -p backend/infographics
 
@@ -68,29 +67,44 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_PORT: 5432
         run: |
-          # 1) Import filters and generate_infographics from the file
-          # 2) Loop over the filters
-          # 3) Generate "Launch Year" and "Country" too
-            python -c "
+          python -c "
           import os
-          os.environ['DB_HOST'] = '${DB_HOST}'
-          os.environ['DB_NAME'] = '${DB_NAME}'
-          os.environ['DB_USER'] = '${DB_USER}'
-          os.environ['DB_PASSWORD'] = '${DB_PASSWORD}'
-          os.environ['DB_PORT'] = '${DB_PORT}'
-
+          import pandas as pd
+          from sqlalchemy import create_engine
           from backend.app.generate_infographics import filters, generate_infographics
+
+          # ✅ Set up DB connection
+          engine = create_engine(f'postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}')
+
+          # ✅ Fetch Top 20 Countries
+          def get_top_20_countries():
+              query = 'SELECT country, COUNT(*) as count FROM satellites WHERE country IS NOT NULL GROUP BY country ORDER BY count DESC LIMIT 20;'
+              df = pd.read_sql(query, engine)
+              return df['country'].tolist()
+
+          top_countries = get_top_20_countries()
 
           print('🔄 Generating Infographics for all filters...')
           for f_name, f_condition in filters.items():
               generate_infographics(f_name, f_condition)
+
+          print('🔄 Generating Infographics for Select Launch Years...')
+          for year in range(1990, 2026):
+              generate_infographics(f'Launch Year {year}', f'launch_year = {year}')
+
+          print(f'🔄 Generating Infographics for Top 20 Countries: {top_countries}')
+          for country in top_countries:
+              generate_infographics(f'Country {country}', f'country = \"{country}\"')
 
           print('🔄 Generating Infographics for Launch Year (All)...')
           generate_infographics('Launch Year (All)', None)
 
           print('🔄 Generating Infographics for Country (All)...')
           generate_infographics('Country (All)', None)
+
+          print('✅ Infographics Generation Completed!')
           "
+
       - name: Commit & Push Updated Graphs
         run: |
           git config --global user.name "github-actions[bot]"
