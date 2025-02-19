@@ -7,7 +7,7 @@ import urllib.parse
 
 router = APIRouter()
 
-# ✅ Use Railway's mounted volume path
+
 INFOGRAPHICS_DIR = "/app/backend/infographics"
 
 # ✅ Ensure the directory exists

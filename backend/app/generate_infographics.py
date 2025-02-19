@@ -296,13 +296,3 @@ filters = {
 }
 
 
-
-# ✅ Generate infographics for all predefined filters
-for filter_name, filter_condition in filters.items():
-    generate_infographics(filter_name, filter_condition)
-
-# ✅ Generate infographics ONCE for "Launch Year" category (Uses full dataset)
-generate_infographics("Launch Year (All)", None)
-
-# ✅ Generate infographics ONCE for "Country" category (Uses full dataset)
-generate_infographics("Country (All)", None)
