@@ -1,12 +1,20 @@
 name: Update Satellites & Infographics
 
 on:
-  schedule:
-    - cron: "0 6 * * *"  # Runs daily at 06:00 UTC
-  workflow_dispatch:  # Allows manual triggering
+  workflow_dispatch:
+    inputs:
+      run_update_db:
+        description: "Run Satellite Database Update?"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
 
 jobs:
   update_db:
+    if: ${{ inputs.run_update_db == 'true' }}  # ✅ Conditional execution
     runs-on: ubuntu-latest
 
     steps:
@@ -39,7 +47,7 @@ jobs:
 
   generate_infographics:
     runs-on: ubuntu-latest
-    needs: update_db
+    needs: [update_db]
 
     steps:
       - name: Checkout Repo
@@ -73,14 +81,19 @@ jobs:
           from sqlalchemy import create_engine
           from backend.app.generate_infographics import filters, generate_infographics
 
-          # ✅ Set up DB connection
-          engine = create_engine(f'postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}')
+          db_user = os.getenv('DB_USER')
+          db_password = os.getenv('DB_PASSWORD')
+          db_host = os.getenv('DB_HOST')
+          db_port = os.getenv('DB_PORT')
+          db_name = os.getenv('DB_NAME')
 
-          # ✅ Fetch Top 20 Countries
+          engine = create_engine(f'postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}')
+
           def get_top_20_countries():
               query = 'SELECT country, COUNT(*) as count FROM satellites WHERE country IS NOT NULL GROUP BY country ORDER BY count DESC LIMIT 20;'
-              df = pd.read_sql(query, engine)
-              return df['country'].tolist()
+              with engine.connect() as conn:
+                  df = pd.read_sql(query, conn)
+              return df['country'].tolist() if not df.empty else []
 
           top_countries = get_top_20_countries()
 
@@ -92,15 +105,10 @@ jobs:
           for year in range(1990, 2026):
               generate_infographics(f'Launch Year {year}', f'launch_year = {year}')
 
-          print(f'🔄 Generating Infographics for Top 20 Countries: {top_countries}')
-          for country in top_countries:
-              generate_infographics(f'Country {country}', f'country = \"{country}\"')
-
-          print('🔄 Generating Infographics for Launch Year (All)...')
-          generate_infographics('Launch Year (All)', None)
-
-          print('🔄 Generating Infographics for Country (All)...')
-          generate_infographics('Country (All)', None)
+          if top_countries:
+              print(f'🔄 Generating Infographics for Top 20 Countries: {top_countries}')
+              for country in top_countries:
+                  generate_infographics(f'Country {country}', f'country = \"{country}\"')
 
           print('✅ Infographics Generation Completed!')
           "
@@ -110,5 +118,5 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add backend/infographics/*.png
-          git commit -m "📊 Auto-update satellite infographics (Daily)" || echo "No changes to commit"
+          git commit -m "📊 Auto-update satellite infographics" || echo "No changes to commit"
           git push
