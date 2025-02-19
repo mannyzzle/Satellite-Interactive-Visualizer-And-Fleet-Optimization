@@ -8,7 +8,6 @@ import numpy as np
 import os
 from datetime import datetime
 from sqlalchemy import create_engine
-from database import get_db_connection
 import matplotlib.font_manager as fm
 
 # ✅ Set a font that supports emojis (Noto Sans)
