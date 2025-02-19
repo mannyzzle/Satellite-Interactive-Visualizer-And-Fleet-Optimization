@@ -1,6 +1,12 @@
+#app/main.py
+
+
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import satellites, llm, infographics
+from app.generate_infographics import generate_infographics, filters  # or similar
+
 
 app = FastAPI()
 
@@ -17,6 +23,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Routers
 app.include_router(satellites.router, prefix="/api/satellites", tags=["Satellites"])
 app.include_router(llm.router, prefix="/api/llm", tags=["LLM"])
@@ -29,6 +36,12 @@ def root():
 @app.on_event("startup")
 def startup_event():
     print("🚀 Backend is starting...")
+    # Call the infographic generation logic at startup
+    for filter_name, filter_condition in filters.items():
+        generate_infographics(filter_name, filter_condition)
+    generate_infographics("Launch Year (All)", None)
+    generate_infographics("Country (All)", None)
+
 
 @app.on_event("shutdown")
 def shutdown_event():

@@ -1,3 +1,6 @@
+#backend/app/generate_infographics.py
+
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -17,8 +20,8 @@ plt.style.use("dark_background")
 
 
 
-# ✅ Use Railway-mounted volume path directly
 INFOGRAPHICS_DIR = "/app/backend/infographics"
+
 
 # ✅ Ensure the volume is mounted correctly
 if not os.path.exists(INFOGRAPHICS_DIR):
