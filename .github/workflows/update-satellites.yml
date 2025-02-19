@@ -16,7 +16,7 @@ on:
 
 jobs:
   update_db:
-    if: ${{ github.event_name == 'schedule' || inputs.run_update_db == 'true' }}  # ✅ Runs on schedule or if manually set to true
+    if: ${{ github.event_name == 'schedule' || inputs.run_update_db == 'true' }}  # ✅ Runs if scheduled or triggered manually
     runs-on: ubuntu-latest
 
     steps:
@@ -50,7 +50,7 @@ jobs:
   generate_infographics:
     runs-on: ubuntu-latest
     needs: update_db  # ✅ Waits for `update_db` if it runs
-    if: always()  # ✅ Ensures it runs whether update_db is skipped or executed
+    if: always()  # ✅ Ensures it runs even if `update_db` is skipped
 
     steps:
       - name: Checkout Repo
@@ -64,11 +64,10 @@ jobs:
       - name: Install Python Dependencies
         run: |
           pip install -r backend/requirements.txt
-          pip install matplotlib seaborn pandas
+          pip install matplotlib seaborn pandas sqlalchemy psycopg2
 
       - name: Make Infographics Directory
-        run: |
-          mkdir -p backend/infographics
+        run: mkdir -p backend/infographics
 
       - name: Generate Infographics
         env:
@@ -107,8 +106,7 @@ jobs:
           if top_countries:
               print(f'🔄 Generating Infographics for Top 20 Countries: {top_countries}')
               for country in top_countries:
-                  generate_infographics(f'Country {country}', f"country = '{country}'")  
-
+                  generate_infographics(f'Country {country}', f\"country = '{country}'\")
 
           print('✅ Infographics Generation Completed!')
           "
