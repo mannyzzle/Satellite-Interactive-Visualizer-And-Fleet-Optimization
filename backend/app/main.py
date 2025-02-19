@@ -5,7 +5,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import satellites, llm, infographics
-from app.generate_infographics import generate_infographics, filters  # or similar
 
 
 app = FastAPI()
