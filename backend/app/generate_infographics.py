@@ -14,7 +14,7 @@ plt.style.use("dark_background")
 
 # If you prefer a relative path in GH Actions, set INFOGRAPHICS_DIR = "backend/infographics"
 # If you do generate images in Docker, you might want "/app/backend/infographics"
-INFOGRAPHICS_DIR = "/app/backend/infographics"
+INFOGRAPHICS_DIR = "backend/infographics"  # ✅ Use a relative path
 
 # ✅ Automatically create directory if missing (no fail-fast)
 os.makedirs(INFOGRAPHICS_DIR, exist_ok=True)
