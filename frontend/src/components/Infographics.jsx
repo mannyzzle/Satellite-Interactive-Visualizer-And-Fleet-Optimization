@@ -18,21 +18,29 @@ const Infographics = ({ activeFilters }) => {
     if (!activeFilters || activeFilters.length === 0) {
       return "All_Satellites"; // ✅ Default to "All Satellites"
     }
-
+  
     const filterKey = activeFilters[0];
-
+  
+    // Check if the filter is for a specific Launch Year (e.g., "Launch Year:2023")
     if (filterKey.includes("Launch Year")) {
-      const year = filterKey.split(" ")[2]; // Extract year
+      const year = filterKey.split(":")[1].trim(); // Extract year from "Launch Year:2023"
+  
+      // Ensure the extracted year is a valid year in the range (1990-2025)
       return validYears.includes(year) ? `Launch_Year_${year}` : "Launch_Year_All";
     }
-
+  
+    // Handle country filters
     if (filterKey.includes("Country")) {
       const country = filterKey.replace("Country:", "").trim();
-      return topCountries.includes(country) ? `Country_${country}` : "Country_All";
+      return topCountries.includes(country) ? `Country_${country}` : "All_Satellites";
     }
-
+  
+    // For other filters, ensure URL safety
     return encodeURIComponent(filterKey); // ✅ Ensure URL safety
   };
+
+  
+
 
   useEffect(() => {
     async function fetchData() {

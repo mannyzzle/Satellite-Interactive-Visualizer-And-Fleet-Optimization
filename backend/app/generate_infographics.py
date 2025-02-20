@@ -10,7 +10,17 @@ from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 from matplotlib.patches import Patch
 
+# Use a font that's installed (Liberation Sans is included in fonts-liberation)
+plt.rcParams["font.family"] = "Liberation Sans"
+plt.style.use("dark_background")
 
+# If you prefer a relative path in GH Actions, set INFOGRAPHICS_DIR = "backend/infographics"
+# If you do generate images in Docker, you might want "/app/backend/infographics"
+INFOGRAPHICS_DIR = "backend/infographics"  # ✅ Use a relative path
+
+# ✅ Automatically create directory if missing (no fail-fast)
+os.makedirs(INFOGRAPHICS_DIR, exist_ok=True)
+print(f"✅ Infographics will be saved in: {INFOGRAPHICS_DIR}")
 
 # ✅ Set up SQLAlchemy Engine for AWS PostgreSQL
 DB_USER = os.getenv("DB_USER")
@@ -52,8 +62,6 @@ def save_infographic_to_db(filter_name, graph_type, image_data):
         session.add(new_entry)
 
     session.commit()
-
-
 
 
 # ✅ Fetch and Clean Satellite Data
@@ -113,6 +121,7 @@ def fetch_clean_satellite_data(filter_condition=None):
 
     return df
 
+
 # ✅ Function to Remove Outliers
 def remove_outliers(df, column):
     """Removes outliers using the IQR method."""
@@ -126,6 +135,13 @@ def remove_outliers(df, column):
     return df[(df[column] >= lower_bound) & (df[column] <= upper_bound)]
 
 
+# ✅ Function to Save and Overwrite Files
+def save_and_overwrite(fig, file_path):
+    """Ensures old files are deleted before saving new ones."""
+    if os.path.exists(file_path):
+        os.remove(file_path)
+    fig.savefig(file_path)
+    plt.close(fig)
 
 
 # ✅ Save infographic as a BLOB in AWS PostgreSQL
@@ -137,8 +153,6 @@ def save_to_db(fig, filter_name, graph_type):
 
     save_infographic_to_db(filter_name, graph_type, img_buffer.getvalue())
     plt.close(fig)
-
-
 
 
 # ✅ Function to Generate & Store Infographics in AWS PostgreSQL
@@ -242,7 +256,7 @@ def generate_infographics(filter_name, filter_condition=None):
 
     ## 🔥 9. Drag Effects on Satellites (Bubble Chart)
     df_filtered = remove_outliers(df, "bstar")
-    df_filtered = remove_outliers(df, "apogee")
+    df_filtered = remove_outliers(df_filtered, "apogee")
     fig = plt.figure(figsize=(8, 6))
     colors = ["red" if b < 0 else "yellow" if b > 0 else "blue" for b in df_filtered["bstar"]]
     sizes = [60 if b == 0 else 40 for b in df_filtered["bstar"]]
