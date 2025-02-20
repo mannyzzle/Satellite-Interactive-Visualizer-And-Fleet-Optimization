@@ -23,7 +23,7 @@ jobs:
       - name: Build and Run Backend in Docker
         run: |
           docker build -t satellite-backend -f backend/Dockerfile ./backend
-          docker run -d --network host -p 8000:8000 --name satellite-backend \
+          docker run -d -p 8000:8000 --name satellite-backend \
             -e DB_HOST=${{ secrets.DB_HOST }} \
             -e DB_NAME=${{ secrets.DB_NAME }} \
             -e DB_USER=${{ secrets.DB_USER }} \

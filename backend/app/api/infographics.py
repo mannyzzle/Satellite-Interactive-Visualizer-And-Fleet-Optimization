@@ -31,11 +31,11 @@ def get_infographic(filter_name: str, graph_type: str):
         "bstar_altitude",
         "launch_sites",
     }
-    
+
     if graph_type not in valid_graphs:
         raise HTTPException(status_code=400, detail=f"Invalid graph type: {graph_type}")
 
-    # ✅ Decode and sanitize filter name
+    # Decode and sanitize filter name
     decoded_filter_name = urllib.parse.unquote(filter_name)
     safe_filter_name = (
         decoded_filter_name.strip()
@@ -45,14 +45,13 @@ def get_infographic(filter_name: str, graph_type: str):
         .replace(")", "")
     )
 
-    # ✅ Query the database for the image
+    # Adjusted query: Search by both filter_name and graph_type
     file_name = f"{safe_filter_name}_{graph_type}"
     print(f"🔍 Fetching infographic from DB: {file_name}")
 
-    # Query based on filter_name and graph_type, instead of name
-    infographic = session.query(Infographic).filter_by(filter_name=safe_filter_name, graph_type=graph_type).first()
+    infographic = session.query(Infographic).filter_by(name=file_name).first()
 
-    if not infographic or not infographic.image_data:
+    if not infographic or not infographic.image:
         raise HTTPException(status_code=404, detail=f"Infographic not found: {file_name}")
 
     print(f"✅ Successfully retrieved infographic: {file_name}")
