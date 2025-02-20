@@ -23,7 +23,7 @@ jobs:
       - name: Build and Run Backend in Docker
         run: |
           docker build -t satellite-backend -f backend/Dockerfile ./backend
-          docker run -d -p 8000:8000 --name satellite-backend \
+          docker run -d --network host -p 8000:8000 --name satellite-backend \
             -e DB_HOST=${{ secrets.DB_HOST }} \
             -e DB_NAME=${{ secrets.DB_NAME }} \
             -e DB_USER=${{ secrets.DB_USER }} \
@@ -31,8 +31,13 @@ jobs:
             -e DB_PORT=5432 \
             satellite-backend
 
-      # Step 4: Test if API is running
+      # Step 4: Check Docker container logs
+      - name: Check Docker container logs
+        run: |
+          docker logs satellite-backend
+
+      # Step 5: Test if API is running
       - name: Test FastAPI API
         run: |
-          sleep 10  # Wait for API to start
+          sleep 20  # Wait longer for API to start
           curl http://127.0.0.1:8000/ || exit 1  # Check if API responds
