@@ -49,8 +49,8 @@ jobs:
 
   generate_infographics:
     runs-on: ubuntu-latest
-    needs: update_db  # ✅ Waits for `update_db` if it runs
-    if: always()  # ✅ Ensures it runs even if `update_db` is skipped
+    needs: update_db  # ✅ Ensures update_db runs first
+    if: always()
 
     steps:
       - name: Checkout Repo
@@ -66,14 +66,11 @@ jobs:
           pip install -r backend/requirements.txt
           pip install matplotlib seaborn pandas sqlalchemy psycopg2
 
-      - name: Ensure Infographics Directory Exists  # ✅ Fix 1 Added Here
+      # ✅ Fix Permissions Before Running Python
+      - name: Fix Permissions for Infographics Directory
         run: |
-          mkdir -p backend/infographics
-          chmod -R 777 backend/infographics  # Ensure write permissions
-
-      - name: Remove Old Infographics
-        run: rm -rf backend/infographics/*  # ✅ Clears old files to ensure fresh data
-  
+          sudo mkdir -p backend/infographics
+          sudo chmod -R 777 backend/infographics
 
       - name: Generate Infographics
         env:
@@ -126,9 +123,6 @@ jobs:
             git config --global user.name "github-actions[bot]"
             git config --global user.email "github-actions[bot]@users.noreply.github.com"
             
-            git rm --cached -r backend/infographics/  # ✅ Ensures Git resets the directory
-            git add backend/infographics/*.png  # ✅ Adds new files
-            
-            git commit -m "📊 Force update satellite infographics" || echo "No changes to commit"
+            git add -f backend/infographics/*.png
+            git commit -m "📊 Auto-update satellite infographics" || echo "No changes to commit"
             git push --force
-        
