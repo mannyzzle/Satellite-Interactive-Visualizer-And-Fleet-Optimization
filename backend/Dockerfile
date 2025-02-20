@@ -10,17 +10,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy the requirements first for Docker layer caching
+# Copy the requirements file first for Docker layer caching
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy the rest of the repository AFTER installing dependencies
 COPY . /app
 
-# ✅ Ensure infographics directory exists and has correct permissions
-RUN mkdir -p /app/backend/infographics && chmod -R 777 /app/backend/infographics
+# ✅ Ensure the infographics directory exists (inside container)
+RUN mkdir -p /app/backend/infographics
 
-# ✅ No need to copy infographics from local, they will be generated dynamically
+# ✅ Mount this folder as a volume so images persist across builds
+VOLUME ["/app/backend/infographics"]
 
-# Start FastAPI application
+# ✅ Start FastAPI application
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

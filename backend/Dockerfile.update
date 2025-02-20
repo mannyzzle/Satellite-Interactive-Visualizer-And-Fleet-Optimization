@@ -1,27 +1,21 @@
-#Dockerfile.update
-
-
-# Use a minimal Python image
 FROM python:3.10-slim
 
-# Set working directory inside the container
 WORKDIR /app
 
 # Copy the entire backend directory
 COPY . /app
 
-# Ensure logs are displayed in real-time
+# ✅ Ensure logs are displayed in real-time
 ENV PYTHONUNBUFFERED=1
 
-
-# Install dependencies
+# ✅ Install dependencies
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Set permissions to avoid potential permission issues
-RUN chmod -R 755 /app
-
-# ✅ Set PYTHONPATH so Python can locate modules inside the "app" directory
+# ✅ Ensure Python modules are found inside "app" directory
 ENV PYTHONPATH="/app/app"
 
-# ✅ Correct file path: Run the script from the correct directory
+# ✅ Mount infographics directory as a volume so generated images persist
+VOLUME ["/app/backend/infographics"]
+
+# ✅ Run the update script (tle_processor.py)
 CMD ["python", "/app/app/tle_processor.py"]

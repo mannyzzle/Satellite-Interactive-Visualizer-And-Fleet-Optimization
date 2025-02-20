@@ -4,27 +4,23 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:  # Allows manual trigger from GitHub Actions
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Set up Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      # Step 3: Build Backend Docker Image with Infographics
       - name: Build Backend Docker Image
         run: |
           docker build -t satellite-backend -f backend/Dockerfile ./backend
 
-      # Step 4: Run Backend Container with Infographics
       - name: Run Backend Container
         run: |
           docker run -d -p 8000:8000 --name satellite-backend \
@@ -33,16 +29,11 @@ jobs:
             -e DB_USER=${{ secrets.DB_USER }} \
             -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
             -e DB_PORT=5432 \
+            -v ${{ github.workspace }}/backend/infographics:/app/backend/infographics \
             satellite-backend
 
-      # Step 5: Verify Infographics in Container
       - name: Verify Infographics in Container
-        run: |
-          echo "🔍 Checking Infographics Directory..."
-          docker exec satellite-backend ls -l /app/backend/infographics
+        run: docker exec satellite-backend ls -l /app/backend/infographics
 
-      # Step 6: Test FastAPI API
       - name: Test FastAPI API
-        run: |
-          sleep 5  # Wait for API to start
-          curl http://127.0.0.1:8000/ || exit 1  # Check if API responds
+        run: curl http://127.0.0.1:8000/ || exit 1

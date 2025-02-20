@@ -45,11 +45,12 @@ jobs:
             -e DB_PASSWORD=$DB_PASSWORD \
             -e SPACETRACK_USER=$SPACETRACK_USER \
             -e SPACETRACK_PASS=$SPACETRACK_PASS \
+            -v ${{ github.workspace }}/backend/infographics:/app/backend/infographics \
             satellite-updater
 
   generate_infographics:
     runs-on: ubuntu-latest
-    needs: update_db  
+    needs: update_db
     if: always()
 
     steps:
@@ -65,11 +66,6 @@ jobs:
         run: |
           pip install -r backend/requirements.txt
           pip install matplotlib seaborn pandas sqlalchemy psycopg2
-
-      - name: Fix Permissions for Infographics Directory
-        run: |
-          sudo mkdir -p backend/infographics
-          sudo chmod -R 777 backend/infographics
 
       - name: Generate Infographics
         env:
@@ -114,7 +110,7 @@ jobs:
               for country in top_countries:
                   generate_infographics(f'Country {country}', f\"country = '{country}'\")
 
-          print('✅ Infographics Generation Completed!')
+          print('✅ Infographics Generation Completed!")
           "
 
       - name: Commit & Push Updated Graphs
