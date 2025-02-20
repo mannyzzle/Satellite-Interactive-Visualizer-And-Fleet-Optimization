@@ -74,7 +74,7 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_PORT: 5432
         run: |
-          python -c "
+          Run python -c "
           import os
           import pandas as pd
           from sqlalchemy import create_engine
@@ -109,5 +109,5 @@ jobs:
               for country in top_countries:
                   generate_infographics(f'Country {country}', f\"country = '{country}'\")
 
-          print('✅ Infographics Generation Completed!")
+          print('✅ Infographics Generation Completed!')
           "
