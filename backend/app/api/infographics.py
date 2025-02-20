@@ -1,22 +1,22 @@
 #api/infographics.py
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
-import os
+from fastapi.responses import Response
 import urllib.parse
+from sqlalchemy.orm import sessionmaker
+from backend.app.generate_infographics import Infographic, engine
 
 router = APIRouter()
 
-INFOGRAPHICS_DIR = "backend/infographics"  # ✅ Use a relative path
-
-# Ensure directory at runtime (just in case)
-os.makedirs(INFOGRAPHICS_DIR, exist_ok=True)
+# ✅ Set up SQLAlchemy session
+Session = sessionmaker(bind=engine)
+session = Session()
 
 @router.get("/{filter_name}/{graph_type}.png")
 def get_infographic(filter_name: str, graph_type: str):
     """
-    Returns a pre-generated .png from /app/backend/infographics.
-    e.g. /api/infographics/LEO/orbit_distribution.png
+    Fetches an infographic from the AWS PostgreSQL database.
+    Returns the image as a binary response.
     """
 
     valid_graphs = {
@@ -31,9 +31,11 @@ def get_infographic(filter_name: str, graph_type: str):
         "bstar_altitude",
         "launch_sites",
     }
+    
     if graph_type not in valid_graphs:
         raise HTTPException(status_code=400, detail=f"Invalid graph type: {graph_type}")
 
+    # ✅ Decode and sanitize filter name
     decoded_filter_name = urllib.parse.unquote(filter_name)
     safe_filter_name = (
         decoded_filter_name.strip()
@@ -43,11 +45,13 @@ def get_infographic(filter_name: str, graph_type: str):
         .replace(")", "")
     )
 
-    file_name = f"{safe_filter_name}_{graph_type}.png"
-    file_path = os.path.join(INFOGRAPHICS_DIR, file_name)
-    print(f"🔍 Looking for infographic: {file_path}")
+    # ✅ Query the database for the image
+    file_name = f"{safe_filter_name}_{graph_type}"
+    print(f"🔍 Fetching infographic from DB: {file_name}")
 
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail=f"Infographic not found at {file_path}")
+    infographic = session.query(Infographic).filter_by(name=file_name).first()
 
-    return FileResponse(file_path)
+    if not infographic or not infographic.image:
+        raise HTTPException(status_code=404, detail=f"Infographic not found: {file_name}")
+
+    return Response(content=infographic.image, media_type="image/png")

@@ -17,11 +17,11 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # Copy the rest of the repository AFTER installing dependencies
 COPY . /app
 
-# ✅ Ensure the infographics directory exists (inside container)
-RUN mkdir -p /app/backend/infographics
+# ✅ Remove filesystem storage - Use AWS PostgreSQL for infographics
+ENV INFOGRAPHICS_STORAGE="db"
 
-# ✅ Mount this folder as a volume so images persist across builds
-VOLUME ["/app/backend/infographics"]
+# ✅ Ensure all logs are displayed in real-time
+ENV PYTHONUNBUFFERED=1
 
 # ✅ Start FastAPI application
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

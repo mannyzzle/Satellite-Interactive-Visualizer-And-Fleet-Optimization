@@ -14,8 +14,8 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # ✅ Ensure Python modules are found inside "app" directory
 ENV PYTHONPATH="/app/app"
 
-# ✅ Mount infographics directory as a volume so generated images persist
-VOLUME ["/app/backend/infographics"]
+# ✅ Remove local storage - infographics are now stored in AWS PostgreSQL
+ENV INFOGRAPHICS_STORAGE="db"
 
 # ✅ Run the update script (tle_processor.py)
 CMD ["python", "/app/app/tle_processor.py"]

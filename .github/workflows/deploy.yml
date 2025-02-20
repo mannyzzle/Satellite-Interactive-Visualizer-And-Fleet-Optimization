@@ -29,14 +29,8 @@ jobs:
             -e DB_USER=${{ secrets.DB_USER }} \
             -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
             -e DB_PORT=5432 \
-            -v ${{ github.workspace }}/backend/infographics:/app/backend/infographics \
             satellite-backend
 
-      - name: Verify Infographics in Container
-        run: docker exec satellite-backend ls -l /app/backend/infographics
-
-
-      
       - name: Test FastAPI API
         run: |
           sleep 5  # Wait for API to start
