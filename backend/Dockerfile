@@ -2,7 +2,7 @@ FROM python:3.10-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install necessary packages for Matplotlib
+# 1) Install fonts-liberation + fontconfig so matplotlib can find them
 RUN apt-get update && apt-get install -y --no-install-recommends \
     fontconfig \
     fonts-liberation \
@@ -10,18 +10,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy the requirements file first for Docker layer caching
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
-
-# Copy the rest of the repository AFTER installing dependencies
 COPY . /app
 
-# ✅ Remove filesystem storage - Use AWS PostgreSQL for infographics
-ENV INFOGRAPHICS_STORAGE="db"
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# ✅ Ensure all logs are displayed in real-time
-ENV PYTHONUNBUFFERED=1
 
-# ✅ Start FastAPI application
+EXPOSE 8000
+
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
