@@ -51,7 +51,7 @@ def get_infographic(filter_name: str, graph_type: str):
     print(f"🔍 Fetching infographic from DB: {file_name}")
 
     # Query the database for the infographic entry based on the combination of filter_name and graph_type
-    infographic = session.query(Infographic).filter_by(name=file_name).first()
+    infographic = session.query(Infographic).filter_by(filter_name=file_name).first()
 
     # If no infographic is found or it doesn't have image data
     if not infographic or not infographic.image_data:
