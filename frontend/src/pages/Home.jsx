@@ -189,11 +189,15 @@ export default function Home() {
   
     // ✅ Step 2: Choose Orbit Colors
     const orbitColors = {
-      "LEO": 0x4CAF50,  // 🟢 Green for Low Earth Orbit
-      "MEO": 0xFF9800,  // 🟠 Orange for Medium Earth Orbit
-      "GEO": 0x2196F3,  // 🔵 Blue for Geostationary Orbit
-      "HEO": 0x9C27B0,  // 🟣 Purple for Highly Elliptical Orbit
+      "LEO": 0x22A884,  // 🟢 Bright Teal-Green for Low Earth Orbit (Viridis: Green-Teal)
+      "MEO": 0x70CF57,  // 🟡 Vibrant Lime-Green for Medium Earth Orbit (Viridis: Green-Lime)
+      "GEO": 0xF4E61E,  // 🟠 Bold Golden-Yellow for Geostationary Orbit (Viridis: Bright Gold)
+      "HEO": 0x3ECBF5,  // 🔵 Neon Baby Blue for Highly Elliptical Orbit (Bright and Vibrant)
     };
+    
+    
+    
+      
   
     const orbitColor = orbitColors[satellite.orbit_type] || 0x89CFF0; // 🟦 Default Light Blue
   
@@ -1195,7 +1199,7 @@ const getCountryName = (code) => countryMapping[code]?.name || "Unknown";
 const FilterButton = ({ filter }) => (
   <button
     className={`px-4 py-2 text-xs font-semibold rounded-md transition-all duration-200 shadow-md ${
-      activeFilters.includes(filter.name) ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-300"
+      activeFilters.includes(filter.name) ? "bg-teal-500 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-300"
     }`}
     onClick={() => toggleFilter(filter.name)}
   >
@@ -1249,7 +1253,7 @@ return (
           key={sat.norad_number}
           className={`cursor-pointer p-3 rounded-md text-center border border-gray-700 shadow-sm transition-all duration-200 ${
             selectedSatellite?.norad_number === sat.norad_number
-              ? "bg-blue-500 text-white border-blue-600 shadow-md"
+              ? "bg-teal-500 text-white border-teal-500 shadow-md"
               : "bg-gray-800 hover:bg-gray-700"
           }`}
           onClick={() => {
@@ -1312,18 +1316,34 @@ return (
       {/* 🌍 3D UI + Sidebar + Info Box Sticking Together */}
       <div className="relative flex-1 flex flex-col">
         
-        {/* 🛰️ 3D UI - Stays Fixed */}
+        {/* 3D UI - Stays Fixed */}
         <div 
           className="relative w-full h-[100vh] cursor-pointer"
           onClick={enableInteraction} // ✅ Click to enable controls
         >
           <div ref={mountRef} className="absolute top-0 left-0 w-full h-full" />
+
           {!isInteractionEnabled && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-white text-lg font-bold">
-              🔒 Click to Enable 3D Controls
+            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-lg text-white text-lg font-medium tracking-wide transition-opacity duration-300 animate-fadeIn">
+              
+              {/* Rotating Circle with Centered Text */}
+              <div className="relative flex items-center justify-center w-40 h-40 rounded-full">
+                
+                {/* Rotating Perimeter */}
+                <div className="absolute w-52 h-52 border-4 border-transparent border-t-teal-400 border-r-teal-400 rounded-full animate-spin-slow"></div>
+
+                {/* Unlock Text Inside the Circle */}
+                <div className="w-40 h-40 flex items-center justify-center text-center border border-gray-400 rounded-full bg-gray-900 bg-opacity-80 shadow-lg hover:bg-opacity-100 transition-all duration-200 animate-pulse">
+                  Activate 3D Control System
+                </div>
+
+              </div>
             </div>
           )}
         </div>
+
+
+
 
 {/* 📌 Active Filters UI (Fix: Positioned Relative to 3D UI) */}
 <div className="absolute top-24 right-6 bg-gray-900 text-white p-3 rounded-md shadow-lg text-xs z-50">
@@ -1331,7 +1351,7 @@ return (
     {activeFilters.length > 0 ? (
       <ul className="mt-1 space-y-1">
         {activeFilters.map((filter, index) => (
-          <li key={index} className="text-blue-400 flex items-center">
+          <li key={index} className="text-teal-300 flex items-center">
             • {filter}
             <button
               className="ml-2 text-red-500 hover:text-red-700"
@@ -1349,7 +1369,7 @@ return (
 
 
 {/* 🛰️ Satellite Info Box */}
-<div className="absolute bottom-0 bg-gray-900 text-yellow-300 p-3 shadow-lg text-xs border-t border-gray-700 flex flex-col items-center h-36 w-full z-[60] transition-all duration-300 ease-in-out">
+<div className="absolute bottom-0 bg-gray-950 text-yellow-300 p-3 shadow-lg text-xs border-t border-gray-950 flex flex-col items-center h-36 w-full z-[60] transition-all duration-300 ease-in-out">
   {loading ? (
     <div className="flex items-center justify-center h-full">
       <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-yellow-300 border-opacity-75"></div>
@@ -1400,19 +1420,23 @@ return (
 </div>
 </div>
 
- {/* 🛰️ Filter Section Below 3D UI */}
-<div className="flex flex-col items-center p-4 bg-gray-800 shadow-md rounded-md w-full z-50 ax-w-xl mx-auto">
-  <h3 className="text-lg font-semibold text-white mb-2 text-center">Filters</h3>
 
+
+
+ {/* 🛰️ Filter Section Below 3D UI */}
+<div className="flex flex-col items-center p-4 bg-gray-900 shadow-md rounded-md w-full z-50 ax-w-xl mx-auto">
+  <h3 className="text-lg font-medium text-white mb-2 text-center">Filters</h3>
+
+  
   {/* 🌍 Orbital Filters */}
   <div className="w-full text-center mb-3">
-    <h4 className="text-sm font-semibold text-gray-300 mb-2">🌍 Orbital Filters</h4>
+    <h4 className="text-sm font-medium text-green-400 mb-2 tracking-wide">Orbital Categories</h4>
     <div className="flex flex-wrap justify-center gap-2">
       {[
-        { name: "LEO", label: "🛰️ Low Earth Orbit (LEO)" },
-        { name: "MEO", label: "🛰️ Medium Earth Orbit (MEO)" },
-        { name: "GEO", label: "🛰️ Geostationary Orbit (GEO)" },
-        { name: "HEO", label: "🚀 Highly Elliptical Orbit (HEO)" },
+        { name: "LEO", label: "Low Earth Orbit (LEO)" },
+        { name: "MEO", label: "Medium Earth Orbit (MEO)" },
+        { name: "GEO", label: "Geostationary Orbit (GEO)" },
+        { name: "HEO", label: "Highly Elliptical Orbit (HEO)" },
       ].map((filter) => (
         <FilterButton key={filter.name} filter={filter} />
       ))}
@@ -1421,15 +1445,15 @@ return (
 
   {/* 🚀 Velocity & Orbital Characteristics */}
   <div className="w-full text-center mb-3">
-    <h4 className="text-sm font-semibold text-gray-300 mb-2">🚀 Velocity & Orbital Characteristics</h4>
+    <h4 className="text-sm font-medium text-lime-400 mb-2 tracking-wide">Velocity & Orbital Parameters</h4>
     <div className="flex flex-wrap justify-center gap-2">
       {[
-        { name: "High Velocity", label: "🚀 Fast (>7.8 km/s)" },
-        { name: "Low Velocity", label: "🛑 Slow (≤7.8 km/s)" },
-        { name: "Perigee < 500 km", label: "🌍 Perigee < 500 km" },
-        { name: "Apogee > 35,000 km", label: "🌌 Apogee > 35,000 km" },
-        { name: "Eccentricity > 0.1", label: "🔄 High Eccentricity (>0.1)" },
-        { name: "B* Drag Term > 0.0001", label: "🌬️ High Drag (B* > 0.0001)" },
+        { name: "High Velocity", label: "Fast (>7.8 km/s)" },
+        { name: "Low Velocity", label: "Slow (≤7.8 km/s)" },
+        { name: "Perigee < 500 km", label: "Perigee < 500 km" },
+        { name: "Apogee > 35,000 km", label: "Apogee > 35,000 km" },
+        { name: "Eccentricity > 0.1", label: "High Eccentricity (>0.1)" },
+        { name: "B* Drag Term > 0.0001", label: "High Drag (B* > 0.0001)" },
       ].map((filter) => (
         <FilterButton key={filter.name} filter={filter} />
       ))}
@@ -1438,171 +1462,160 @@ return (
 
   {/* 🛰️ Satellite Purpose */}
   <div className="w-full text-center mb-3">
-    <h4 className="text-sm font-semibold text-gray-300 mb-2">🛰️ Satellite Purpose</h4>
+    <h4 className="text-sm font-medium text-yellow-300 mb-2 tracking-wide">Mission Type</h4>
     <div className="flex flex-wrap justify-center gap-2">
       {[
-        { name: "Communications", label: "📡 Communications" },
-        { name: "Navigation", label: "🧭 Navigation" },
-        { name: "Military", label: "🎖️ Military / Recon" },
-        { name: "Weather", label: "🌦️ Weather Monitoring" },
-        { name: "Earth Observation", label: "🛰️ Earth Observation" },
-        { name: "Science", label: "🔬 Scientific Research" },
-        { name: "Human Spaceflight", label: "🚀 Human Spaceflight" },
-        { name: "Technology Demo", label: "🛠️ Technology Demo" },
+        { name: "Communications", label: "Communications" },
+        { name: "Navigation", label: "Navigation" },
+        { name: "Military", label: "Military / Recon" },
+        { name: "Weather", label: "Weather Monitoring" },
+        { name: "Earth Observation", label: "Earth Observation" },
+        { name: "Science", label: "Scientific Research" },
+        { name: "Human Spaceflight", label: "Human Spaceflight" },
+        { name: "Technology Demo", label: "Technology Demo" },
       ].map((filter) => (
         <FilterButton key={filter.name} filter={filter} />
       ))}
     </div>
   </div>
 
-  {/* Combined Row for Launch & Decay Filters, Launch Year, Country, and Reset */}
-<div className="flex flex-wrap items-center justify-center gap-4 w-full text-center mb-3">
-  {/* 🚀 Launch & Decay Filters */}
-  <div className="flex flex-col items-center flex-1">
-    <h4 className="text-sm font-semibold text-gray-300 mb-2">🚀 Launch & Decay Filters</h4>
-    <FilterButton
-      key="Recent Launches"
-      filter={{ name: "Recent Launches", label: "🚀 Recent Launch (30 Days)" }}
-    />
-  </div>
+  {/* 🚀 Launch & Decay Filters, Launch Year, Country, and Reset */}
+  <div className="flex flex-wrap items-center justify-center gap-4 w-full text-center mb-3">
+    
+    {/* 🚀 Launch & Decay Filters */}
+    <div className="flex flex-col items-center flex-1">
+      <h4 className="text-sm font-medium text-teal-300 mb-2 tracking-wide">Launch & Decay Events</h4>
+      <FilterButton
+        key="Recent Launches"
+        filter={{ name: "Recent Launches", label: "Recent Launch (30 Days)" }}
+      />
+    </div>
 
-  {/* 📅 Launch Year Dropdown */}
-  <div className="flex flex-col items-center flex-1">
-    <h4 className="text-sm font-semibold text-gray-300 mb-2">📅 Launch Year</h4>
-    <select
-      className="px-4 py-2 text-xs font-semibold rounded-md bg-gray-700 text-gray-300"
-      onChange={(e) => toggleFilter(`Launch Year:${e.target.value}`)}
-    >
-      <option value="">📅 Select Year</option>
-      {Array.from({ length: 50 }, (_, i) => 2025 - i).map((year) => (
-        <option key={year} value={year}>{year}</option>
-      ))}
-    </select>
-  </div>
+    {/* 📅 Launch Year Dropdown */}
+    <div className="flex flex-col items-center flex-1">
+      <h4 className="text-sm font-medium text-green-400 mb-2 tracking-wide">Launch Year</h4>
+      <select
+        className="px-4 py-2 text-xs font-medium rounded-md bg-gray-700 text-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+        onChange={(e) => toggleFilter(`Launch Year:${e.target.value}`)}
+      >
+        <option value="">Select Year</option>
+        {Array.from({ length: 50 }, (_, i) => 2025 - i).map((year) => (
+          <option key={year} value={year}>{year}</option>
+        ))}
+      </select>
+    </div>
 
-  {/* 🌍 Country Dropdown */}
-  <div className="flex flex-col items-center flex-1">
-    <h4 className="text-sm font-semibold text-gray-300 mb-2">🌍 Select Country</h4>
-    <select
-      className="px-4 py-2 text-xs font-semibold rounded-md bg-gray-700 text-gray-300"
-      onChange={(e) => toggleFilter(`Country:${e.target.value}`)}
-    >
-      <option value="">🌍 Select Country</option>
-      {Object.entries(countryMapping).map(([code, { name, flag }]) => (
-        <option key={code} value={code}>
-          {flag} {name}
-        </option>
-      ))}
-    </select>
-  </div>
+    {/* 🌍 Country Dropdown */}
+    <div className="flex flex-col items-center flex-1">
+      <h4 className="text-sm font-medium text-lime-400 mb-2 tracking-wide">Country of Origin</h4>
+      <select
+        className="px-4 py-2 text-xs font-medium rounded-md bg-gray-700 text-gray-300 focus:outline-none focus:ring-2 focus:ring-lime-500"
+        onChange={(e) => toggleFilter(`Country:${e.target.value}`)}
+      >
+        <option value="">Select Country</option>
+        {Object.entries(countryMapping).map(([code, { name, flag }]) => (
+          <option key={code} value={code}>
+            {flag} {name}
+          </option>
+        ))}
+      </select>
+    </div>
 
-  {/* 🛑 RESET FILTERS */}
-  <div className="flex flex-col items-center flex-1">
-    <button
-      className="px-5 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-md shadow-md"
-      onClick={resetFilters}
-    >
-      🔄 Reset Filters
-    </button>
+    {/* 🔄 RESET FILTERS */}
+    <div className="flex flex-col items-center flex-1">
+      <button
+        className="px-5 py-2 text-sm font-medium bg-yellow-400 hover:bg-yellow-500 text-black rounded-md shadow-md transition-all duration-200 focus:ring-2 focus:ring-yellow-500"
+        onClick={resetFilters}
+      >
+        Reset Filters
+      </button>
+    </div>
   </div>
 </div>
-</div>
-
 
 {/* 📊 Infographics Section */}
-<div className="w-full p-6 bg-gray-900 shadow-md rounded-md text-white">
-  <h3 className="text-lg font-semibold text-center text-blue-400">📊 Satellite Infographics</h3>
-  <p className="text-center text-gray-400 text-sm">Visual analytics based on your selected filters.</p>
+<div className="w-full p-6 bg-gray-950 shadow-md rounded-md text-white font-[Space Grotesk]">
+  <h3 className="text-lg font-medium text-cyan-400 text-center tracking-wide">Data Visualization</h3>
+  <p className="text-center text-gray-400 text-sm">Real-time analytics based on selected filters.</p>
   <Infographics activeFilters={activeFilters} />
 </div>
 
 
 
-{/* 📜 Content Container (Ensures Full Visibility) */}
-<div className="min-h-screen overflow-y-auto bg-gradient-to-b from-gray-900 via-gray-800 to-black text-white px-4 sm:px-8 lg:px-12 py-10 z-60">
+{/* 🌌 Full Page Container */}
+<div className="min-h-screen bg-gradient-to-b from-black via-blue-950 to-gray-900 text-white px-6 sm:px-10 lg:px-16 py-14 z-60 font-[Space Grotesk]">
 
-  {/* 🛰️ Section Container */}
-  <div className="max-w-5xl mx-auto space-y-12 pb-40"> {/* Increased padding-bottom */}
+  {/* 📦 Section Container (Responsive Layout) */}
+  <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-40">
 
-    {/* 🔥 About the Satellite Tracker */}
-    <div className="p-6 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700">
-      <h2 className="text-3xl sm:text-4xl font-extrabold text-blue-400 tracking-wide animate-pulse">🛰️ About the Satellite Tracker</h2>
-      <p className="mt-4 text-lg leading-relaxed">
-        This advanced satellite tracker offers a <strong className="text-yellow-400">real-time 3D visualization</strong> of Earth’s orbiting satellites, dynamically updating based on 
-        precise orbital mechanics. Using <strong className="text-green-400">Three.js</strong> and <strong className="text-purple-400">TLE propagation</strong>, it provides accurate tracking of thousands of satellites, ensuring
-        a realistic space simulation.
+    {/* 🚀 About the Satellite Tracker */}
+    <div className="p-8 bg-gray-900 bg-opacity-95 rounded-xl shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 w-full lg:col-span-2">
+      <h2 className="text-4xl font-medium text-teal-300 tracking-wide animate-fade-in">The Future of Satellite Tracking</h2>
+      <p className="mt-5 text-lg leading-relaxed text-gray-300">
+        Experience a cutting-edge <span className="text-yellow-300 font-medium uppercase tracking-wide">real-time 3D visualization</span> of Earth's satellites with unparalleled accuracy. Built on <span className="text-green-400 font-medium tracking-wide">advanced Keplerian physics</span>, this system dynamically maps orbital mechanics for a hyper-realistic space experience.
       </p>
     </div>
 
-    {/* 🛰️ How It Works */}
-    <div className="p-6 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700">
-      <h2 className="text-3xl sm:text-4xl font-extrabold text-green-400 tracking-wide">⚙️ How It Works</h2>
-      <p className="mt-4 text-lg leading-relaxed">
-        The tracker processes live <strong className="text-yellow-400">Two-Line Element (TLE) data</strong>, which is fed into an orbital mechanics engine. Using Keplerian orbital 
-        elements, it calculates each satellite’s trajectory with extreme accuracy. The <strong className="text-cyan-400">3D visualization</strong> is powered by <strong className="text-blue-400">Three.js</strong>,
-        enabling smooth real-time rendering.
+    {/* ⚙️ How It Works */}
+    <div className="p-7 bg-gray-800 bg-opacity-90 rounded-lg shadow-md border border-gray-700 hover:scale-105 transition-transform duration-300">
+      <h2 className="text-3xl font-medium text-green-400 tracking-wide">The Technology Behind It</h2>
+      <p className="mt-4 text-lg leading-relaxed text-gray-300">
+        Using Two-Line Element (TLE) data, this system calculates precise orbits through a high-fidelity <span className="text-lime-400 font-medium tracking-wide">orbital mechanics engine</span>. The real-time 3D interface is powered by <span className="text-cyan-400 font-medium tracking-wide">GPU-accelerated rendering</span>, ensuring seamless interactivity.
       </p>
     </div>
 
     {/* 🌍 Real-World Applications */}
-    <div className="p-6 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700">
-      <h2 className="text-3xl sm:text-4xl font-extrabold text-yellow-400 tracking-wide">🌎 Real-World Applications</h2>
-      <ul className="mt-4 list-disc pl-6 space-y-3 text-lg">
-        <li>📡 <strong className="text-blue-400">Space Situational Awareness</strong> - Detect and track space debris to prevent collisions.</li>
-        <li>⛈️ <strong className="text-green-400">Weather Monitoring</strong> - Observe satellites like NOAA and GOES for real-time weather data.</li>
-        <li>📍 <strong className="text-red-400">GPS & Navigation</strong> - Track global navigation systems such as GPS, Galileo, and GLONASS.</li>
-        <li>📺 <strong className="text-purple-400">Telecommunications</strong> - Monitor internet, TV, and radio signal satellites.</li>
-        <li>🛡️ <strong className="text-yellow-400">Military & Defense</strong> - Track classified satellites used for national security.</li>
+    <div className="p-9 bg-gray-900 bg-opacity-95 rounded-xl shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 lg:col-span-2">
+      <h2 className="text-4xl font-medium text-yellow-300 tracking-wide">Real-World Impact</h2>
+      <ul className="mt-5 list-disc pl-6 space-y-3 text-lg text-gray-300">
+        <li><span className="text-cyan-400 font-medium">Orbital Debris Management</span> — Prevent catastrophic collisions in low-Earth orbit.</li>
+        <li><span className="text-green-400 font-medium">Global Positioning Systems</span> — Optimize GPS accuracy through precise tracking.</li>
+        <li><span className="text-lime-400 font-medium">High-Speed Telecommunications</span> — Ensure seamless satellite internet and broadcasting.</li>
       </ul>
     </div>
 
     {/* 📡 Technical Features */}
-    <div className="p-6 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700">
-      <h2 className="text-3xl sm:text-4xl font-extrabold text-purple-400 tracking-wide">🔧 Technical Features</h2>
-      <ul className="mt-4 list-disc pl-6 space-y-3 text-lg">
-        <li>🚀 <strong className="text-cyan-400">Real-Time Data Updates</strong> - Fetches & updates satellite positions every few seconds.</li>
-        <li>🌌 <strong className="text-blue-400">Interactive 3D Visualization</strong> - Uses Three.js for realistic rendering.</li>
-        <li>🛰️ <strong className="text-yellow-400">Orbit Path Calculation</strong> - Predicts movement using Keplerian elements.</li>
-        <li>🎯 <strong className="text-green-400">Click & Track</strong> - Select a satellite to focus and get detailed real-time data.</li>
-        <li>🔍 <strong className="text-red-400">Sidebar Filtering</strong> - Advanced search and filter options for easy navigation.</li>
+    <div className="p-8 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300">
+      <h2 className="text-3xl font-medium text-teal-300 tracking-wide">Advanced Features</h2>
+      <ul className="mt-4 list-disc pl-6 space-y-3 text-lg text-gray-300">
+        <li><span className="text-yellow-300 font-medium">Continuous Data Refresh</span> — Fetches & updates satellite positions every few seconds.</li>
+        <li><span className="text-green-400 font-medium">Hyper-Accurate 3D Rendering</span> — Powered by WebGL and Three.js.</li>
+        <li><span className="text-cyan-400 font-medium">Predictive Orbit Analysis</span> — Calculates future movements with high precision.</li>
       </ul>
     </div>
 
     {/* 🚀 Future Enhancements */}
-    <div className="p-6 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700">
-      <h2 className="text-3xl sm:text-4xl font-extrabold text-red-400 tracking-wide">🚀 Future Enhancements</h2>
-      <ul className="mt-4 list-disc pl-6 space-y-3 text-lg">
-        <li>🤖 <strong className="text-cyan-400">AI-Powered Anomaly Detection</strong> - Detects unexpected orbital deviations.</li>
-        <li>🌞 <strong className="text-yellow-400">Space Weather Integration</strong> - Displays solar activity and geomagnetic storm risks.</li>
-        <li>🕰️ <strong className="text-purple-400">Historical Data Replay</strong> - Play back satellite movements over time.</li>
-        <li>📊 <strong className="text-blue-400">Enhanced UI & Analytics</strong> - Improved user control and data visualization.</li>
+    <div className="p-7 bg-gray-900 bg-opacity-95 rounded-xl shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 lg:col-span-2">
+      <h2 className="text-4xl font-medium text-lime-400 tracking-wide">What’s Coming Next</h2>
+      <ul className="mt-5 list-disc pl-6 space-y-3 text-lg text-gray-300">
+        <li><span className="text-teal-300 font-medium">AI-Based Anomaly Detection</span> — Identifies irregular orbital shifts in real time.</li>
+        <li><span className="text-yellow-300 font-medium">Space Weather Integration</span> — Displays real-time solar activity and radiation threats.</li>
+        <li><span className="text-green-400 font-medium">Historical Orbit Playback</span> — Rewind and analyze past satellite movements.</li>
       </ul>
     </div>
 
     {/* 🌌 Space Exploration & New Missions */}
-    <div className="p-6 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700">
-      <h2 className="text-3xl sm:text-4xl font-extrabold text-pink-400 tracking-wide">🌌 Exploring the Future of Space</h2>
-      <p className="mt-4 text-lg leading-relaxed">
-        With the rise of <strong className="text-yellow-400">mega-constellations</strong> like Starlink and OneWeb, and the launch of deep-space missions, tracking satellites is more 
-        important than ever. Future versions of this platform could support real-time monitoring of <strong className="text-green-400">lunar bases</strong>, <strong className="text-cyan-400">interplanetary probes</strong>, 
-        and even <strong className="text-red-400">Mars-bound spacecraft</strong>.
+    <div className="p-10 bg-gray-800 bg-opacity-90 rounded-lg shadow-md border border-gray-700 hover:scale-105 transition-transform duration-300">
+      <h2 className="text-3xl font-medium text-teal-300 tracking-wide">The Next Space Frontier</h2>
+      <p className="mt-4 text-lg leading-relaxed text-gray-300">
+        As humanity ventures beyond Earth, satellite tracking is expanding into <span className="text-yellow-300 font-medium tracking-wide">deep-space missions</span>. Future enhancements will include real-time monitoring of <span className="text-green-400 font-medium tracking-wide">lunar bases</span> and <span className="text-cyan-400 font-medium tracking-wide">Mars exploration vehicles</span>.
       </p>
     </div>
 
     {/* 📜 Additional Resources */}
-    <div className="p-6 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700">
-      <h2 className="text-3xl sm:text-4xl font-extrabold text-cyan-400 tracking-wide">📜 Additional Resources</h2>
-      <ul className="mt-4 list-disc pl-6 space-y-3 text-lg">
-        <li><a href="https://www.celestrak.com/" className="text-blue-400 hover:underline hover:text-blue-300" target="_blank">🌍 <strong>CelesTrak</strong> - Satellite Data & TLE</a></li>
-        <li><a href="https://www.n2yo.com/" className="text-blue-400 hover:underline hover:text-blue-300" target="_blank">🛰️ <strong>N2YO</strong> - Live Satellite Tracking</a></li>
-        <li><a href="https://spaceweather.com/" className="text-blue-400 hover:underline hover:text-blue-300" target="_blank">☀️ <strong>Space Weather Updates</strong></a></li>
-        <li><a href="https://www.nasa.gov/" className="text-blue-400 hover:underline hover:text-blue-300" target="_blank">🚀 <strong>NASA Official Website</strong></a></li>
+    <div className="p-7 bg-gray-900 bg-opacity-95 rounded-xl shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 lg:col-span-2">
+      <h2 className="text-4xl font-medium text-cyan-400 tracking-wide">Resources & Learning</h2>
+      <ul className="mt-5 list-disc pl-6 space-y-3 text-lg text-gray-300">
+        <li><a href="https://www.celestrak.com/" className="text-teal-300 hover:underline hover:text-teal-200" target="_blank">CelesTrak — TLE Data & Orbital Elements</a></li>
+        <li><a href="https://www.n2yo.com/" className="text-green-400 hover:underline hover:text-green-300" target="_blank">N2YO — Live Satellite Tracking</a></li>
       </ul>
     </div>
 
   </div>
+</div>
+
 
 </div>
-</div>
+
 );
 }
