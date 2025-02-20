@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 import urllib.parse
 from sqlalchemy.orm import sessionmaker
-from backend.app.generate_infographics import Infographic, engine
+from app.generate_infographics import Infographic, engine
 
 router = APIRouter()
 
