@@ -26,7 +26,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Set Env Vars
+      - name: Set Environment Variables
         run: |
           echo "DB_HOST=${{ secrets.DB_HOST }}" >> $GITHUB_ENV
           echo "DB_NAME=${{ secrets.DB_NAME }}" >> $GITHUB_ENV
@@ -111,4 +111,3 @@ jobs:
 
           print('✅ Infographics Generation Completed!")
           "
-

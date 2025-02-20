@@ -33,5 +33,5 @@ jobs:
 
       - name: Test FastAPI API
         run: |
-          sleep 15  # Wait for API to start
+          sleep 5  # Wait for API to start
           curl http://127.0.0.1:8000/ || exit 1  # Check if API responds

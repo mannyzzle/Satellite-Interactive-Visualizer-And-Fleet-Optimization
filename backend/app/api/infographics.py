@@ -54,4 +54,6 @@ def get_infographic(filter_name: str, graph_type: str):
     if not infographic or not infographic.image:
         raise HTTPException(status_code=404, detail=f"Infographic not found: {file_name}")
 
+    print(f"✅ Successfully retrieved infographic: {file_name}")
+
     return Response(content=infographic.image, media_type="image/png")

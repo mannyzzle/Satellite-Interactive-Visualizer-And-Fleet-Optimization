@@ -25,31 +25,36 @@ session = Session()
 
 Base = declarative_base()
 
-# ✅ Define the Infographics Table
+# ✅ Define the Infographics Table (matching your SQL schema)
 class Infographic(Base):
     __tablename__ = "infographics"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, unique=True, nullable=False)
-    image = Column(LargeBinary, nullable=False)
+    filter_name = Column(String, nullable=False)
+    graph_type = Column(String, nullable=False)
+    image_data = Column(LargeBinary, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 Base.metadata.create_all(engine)
 
-# ✅ Save Images to AWS PostgreSQL Instead of Filesystem
-def save_infographic_to_db(name, image_data):
+
+# ✅ Save Infographic to DB (matching your table structure)
+def save_infographic_to_db(filter_name, graph_type, image_data):
     """
     Saves an infographic as a BLOB into AWS PostgreSQL.
     If the infographic exists, it updates the image.
     """
-    existing_entry = session.query(Infographic).filter_by(name=name).first()
+    existing_entry = session.query(Infographic).filter_by(filter_name=filter_name, graph_type=graph_type).first()
     if existing_entry:
-        existing_entry.image = image_data
+        existing_entry.image_data = image_data
         existing_entry.created_at = datetime.utcnow()
     else:
-        new_entry = Infographic(name=name, image=image_data)
+        new_entry = Infographic(filter_name=filter_name, graph_type=graph_type, image_data=image_data)
         session.add(new_entry)
 
     session.commit()
+
+
+
 
 # ✅ Fetch and Clean Satellite Data
 def fetch_clean_satellite_data(filter_condition=None):
@@ -121,21 +126,16 @@ def remove_outliers(df, column):
     return df[(df[column] >= lower_bound) & (df[column] <= upper_bound)]
 
 
-# ✅ Function to save infographic as a BLOB in AWS PostgreSQL
-def save_to_db(fig, name):
+
+
+# ✅ Save infographic as a BLOB in AWS PostgreSQL
+def save_to_db(fig, filter_name, graph_type):
     """Converts Matplotlib figures to PNG bytes and saves to AWS PostgreSQL."""
     img_buffer = io.BytesIO()
     fig.savefig(img_buffer, format="png")
     img_buffer.seek(0)
 
-    existing_entry = session.query(Infographic).filter_by(name=name).first()
-    if existing_entry:
-        existing_entry.image = img_buffer.getvalue()
-    else:
-        new_entry = Infographic(name=name, image=img_buffer.getvalue())
-        session.add(new_entry)
-
-    session.commit()
+    save_infographic_to_db(filter_name, graph_type, img_buffer.getvalue())
     plt.close(fig)
 
 
@@ -151,9 +151,6 @@ def generate_infographics(filter_name, filter_condition=None):
     # ✅ Standardize File Names for API
     safe_filter_name = filter_name.replace(" ", "_").replace("(", "").replace(")", "")
 
-    
-
-    
     ## 🛰️ 1. Orbit Type Distribution (Bar Chart)
     fig = plt.figure(figsize=(8, 6))
     sns.countplot(y=df["orbit_type"], order=df["orbit_type"].value_counts().index, hue=df["orbit_type"], palette="Blues_r", legend=False)
@@ -162,7 +159,7 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.xlabel("Number of Satellites", fontsize=12, color="white")
     plt.grid(alpha=0.3)
     plt.tight_layout()
-    save_to_db(fig, f"{safe_filter_name}_orbit_distribution")
+    save_to_db(fig, f"{safe_filter_name}_orbit_distribution", "orbit_distribution")
 
     ## 🚀 2. Velocity Distribution (Histogram) - Outliers Removed
     df_filtered = remove_outliers(df, "velocity")
@@ -175,7 +172,7 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.axvline(df_filtered["velocity"].median(), color='red', linestyle="--", label="Median Velocity")
     plt.legend()
     plt.tight_layout()
-    save_to_db(fig, f"{safe_filter_name}_velocity_distribution")
+    save_to_db(fig, f"{safe_filter_name}_velocity_distribution", "velocity_distribution")
 
     ## 📍 3. Perigee vs. Apogee Scatter Plot - Outliers Removed
     df_filtered = remove_outliers(df, "perigee")
@@ -187,7 +184,7 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.ylabel("Apogee (Farthest Distance, km)", fontsize=12, color="white")
     plt.grid(alpha=0.3)
     plt.tight_layout()
-    save_to_db(fig, f"{safe_filter_name}_perigee_apogee")
+    save_to_db(fig, f"{safe_filter_name}_perigee_apogee", "perigee_apogee")
 
     ## 🔍 4. Satellite Purpose Breakdown (Pie Chart)
     fig = plt.figure(figsize=(8, 6))
@@ -195,7 +192,7 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.pie(purpose_counts, labels=purpose_counts.index, autopct='%1.1f%%', colors=sns.color_palette("Blues_r"))
     plt.title(f"Satellite Purposes in Space ({filter_name})", fontsize=14, color="white")
     plt.tight_layout()
-    save_to_db(fig, f"{safe_filter_name}_purpose_breakdown")
+    save_to_db(fig, f"{safe_filter_name}_purpose_breakdown", "purpose_breakdown")
 
     ## 🌍 5. Top 10 Countries Launching Satellites (Bar Chart)
     fig = plt.figure(figsize=(8, 6))
@@ -205,7 +202,7 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.xlabel("Number of Satellites Launched", fontsize=12, color="white")
     plt.grid(alpha=0.3)
     plt.tight_layout()
-    save_to_db(fig, f"{safe_filter_name}_country_distribution")
+    save_to_db(fig, f"{safe_filter_name}_country_distribution", "country_distribution")
 
     ## ⏳ 6. Cumulative Satellite Launches Over Time
     df["launch_year"] = pd.to_datetime(df["launch_date"], errors="coerce").dt.year
@@ -217,7 +214,7 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.ylabel("Total Satellites Launched", fontsize=12, color="white")
     plt.grid(alpha=0.3)
     plt.tight_layout()
-    save_to_db(fig, f"{safe_filter_name}_cumulative_launch_trend")
+    save_to_db(fig, f"{safe_filter_name}_cumulative_launch_trend", "cumulative_launch_trend")
 
     ## 🔄 7. Orbital Period vs. Mean Motion (Scatter Plot) - Outliers Removed
     df_filtered = remove_outliers(df, "period")
@@ -229,7 +226,7 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.ylabel("Revolutions per Day", fontsize=12, color="white")
     plt.grid(alpha=0.3)
     plt.tight_layout()
-    save_to_db(fig, f"{safe_filter_name}_orbital_period_vs_mean_motion")
+    save_to_db(fig, f"{safe_filter_name}_orbital_period_vs_mean_motion", "orbital_period_vs_mean_motion")
 
     ## 8️⃣. Inclination vs. Mean Motion (Scatter Plot) - Outliers Removed
     df_filtered = remove_outliers(df, "inclination")
@@ -241,7 +238,7 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.ylabel("Revolutions per Day", fontsize=12, color="white")
     plt.grid(alpha=0.3)
     plt.tight_layout()
-    save_to_db(fig, f"{safe_filter_name}_inclination_mean_motion")
+    save_to_db(fig, f"{safe_filter_name}_inclination_mean_motion", "inclination_mean_motion")
 
     ## 🔥 9. Drag Effects on Satellites (Bubble Chart)
     df_filtered = remove_outliers(df, "bstar")
@@ -263,7 +260,7 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.legend(handles=legend_elements, loc="upper left", fontsize=10)
     plt.grid(alpha=0.3)
     plt.tight_layout()
-    save_to_db(fig, f"{safe_filter_name}_bstar_altitude")
+    save_to_db(fig, f"{safe_filter_name}_bstar_altitude", "bstar_altitude")
 
     ## 🏆 10. Most Frequent Satellite Launch Sites (Bar Chart)
     fig = plt.figure(figsize=(8, 6))
@@ -274,7 +271,7 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.xlabel("Number of Launches", fontsize=12, color="white")
     plt.grid(alpha=0.3)
     plt.tight_layout()
-    save_to_db(fig, f"{safe_filter_name}_launch_sites")
+    save_to_db(fig, f"{safe_filter_name}_launch_sites", "launch_sites")
 
 
 # ✅ Full list of filters matching the UI
