@@ -166,55 +166,122 @@ def generate_infographics(filter_name, filter_condition=None):
     safe_filter_name = filter_name.replace(" ", "_").replace("(", "").replace(")", "")
 
     ## 🛰️ 1. Orbit Type Distribution (Bar Chart)
-    fig = plt.figure(figsize=(8, 6))
-    sns.countplot(y=df["orbit_type"], order=df["orbit_type"].value_counts().index, hue=df["orbit_type"], palette="Blues_r", legend=False)
-    plt.title(f"Orbit Distribution by Type ({filter_name})", fontsize=14, color="white")
-    plt.ylabel("Satellite Orbit Type", fontsize=12, color="white")
-    plt.xlabel("Number of Satellites", fontsize=12, color="white")
-    plt.grid(alpha=0.3)
+    fig, ax = plt.subplots(figsize=(11, 7))
+    orbit_counts = df["orbit_type"].value_counts()
+
+    sns.barplot(
+        y=orbit_counts.index, 
+        x=orbit_counts.values, 
+        palette="coolwarm",  # Gradient for better differentiation
+        ax=ax
+    )
+
+    # Add text labels inside bars
+    for i, v in enumerate(orbit_counts.values):
+        ax.text(v + 2, i, f"{v}", color="white", va="center", fontsize=13, fontweight="bold")
+
+    ax.set_title(f"Orbit Type Distribution ({filter_name})", fontsize=16, color="white")
+    ax.set_xlabel("Number of Satellites", fontsize=14, color="white")
+    ax.set_ylabel("Orbit Type", fontsize=14, color="white")
+    ax.grid(alpha=0.3, linestyle="--")
     plt.tight_layout()
     save_to_db(fig, f"{safe_filter_name}_orbit_distribution", "orbit_distribution")
 
+
+
+
     ## 🚀 2. Velocity Distribution (Histogram) - Outliers Removed
     df_filtered = remove_outliers(df, "velocity")
-    fig = plt.figure(figsize=(8, 6))
-    sns.histplot(df_filtered["velocity"], bins=20, kde=True, color="cyan")
-    plt.title(f"Velocity Distribution of Satellites ({filter_name})", fontsize=14, color="white")
-    plt.xlabel("Orbital Velocity (km/s)", fontsize=12, color="white")
-    plt.ylabel("Number of Satellites", fontsize=12, color="white")
-    plt.grid(alpha=0.3)
-    plt.axvline(df_filtered["velocity"].median(), color='red', linestyle="--", label="Median Velocity")
-    plt.legend()
+    fig, ax = plt.subplots(figsize=(11, 7))
+
+    sns.histplot(df_filtered["velocity"], bins="auto", kde=True, color="cyan", alpha=0.8, ax=ax)
+    sns.kdeplot(df_filtered["velocity"], color="red", linestyle="--", ax=ax)  # Second smoothing line
+
+    ax.axvline(df_filtered["velocity"].median(), color='yellow', linestyle="--", linewidth=2, label="Median Velocity")
+    ax.set_xscale("log")  # Log scale for better clarity
+    ax.legend()
+
+    ax.set_title(f"Velocity Distribution of Satellites ({filter_name})", fontsize=16, color="white")
+    ax.set_xlabel("Orbital Velocity (km/s) (log scale)", fontsize=14, color="white")
+    ax.set_ylabel("Number of Satellites", fontsize=14, color="white")
+    ax.grid(alpha=0.3, linestyle="--")
     plt.tight_layout()
     save_to_db(fig, f"{safe_filter_name}_velocity_distribution", "velocity_distribution")
+
+
 
     ## 📍 3. Perigee vs. Apogee Scatter Plot - Outliers Removed
     df_filtered = remove_outliers(df, "perigee")
     df_filtered = remove_outliers(df_filtered, "apogee")
-    fig = plt.figure(figsize=(8, 6))
-    sns.scatterplot(x=df_filtered["perigee"], y=df_filtered["apogee"], alpha=0.6, color="lightblue")
-    plt.title(f"Comparison of Perigee & Apogee Heights ({filter_name})", fontsize=14, color="white")
-    plt.xlabel("Perigee (Closest Approach, km)", fontsize=12, color="white")
-    plt.ylabel("Apogee (Farthest Distance, km)", fontsize=12, color="white")
-    plt.grid(alpha=0.3)
+    fig, ax = plt.subplots(figsize=(11, 7))
+
+    sns.scatterplot(
+        x=df_filtered["perigee"], 
+        y=df_filtered["apogee"], 
+        hue=df_filtered["orbit_type"], 
+        size=df_filtered["velocity"],  # Bubble size based on velocity
+        sizes=(40, 300),
+        palette="coolwarm", 
+        alpha=0.7, 
+        ax=ax
+    )
+
+    ax.set_xscale("log")  # Log scale for more even distribution
+    ax.set_yscale("log")
+    ax.set_title(f"Comparison of Perigee & Apogee Heights ({filter_name})", fontsize=16, color="white")
+    ax.set_xlabel("Perigee (km, log scale)", fontsize=14, color="white")
+    ax.set_ylabel("Apogee (km, log scale)", fontsize=14, color="white")
+    ax.grid(alpha=0.3, linestyle="--")
+    plt.legend(title="Orbit Type", loc="upper right")
     plt.tight_layout()
     save_to_db(fig, f"{safe_filter_name}_perigee_apogee", "perigee_apogee")
 
+
+
+
     ## 🔍 4. Satellite Purpose Breakdown (Pie Chart)
-    fig = plt.figure(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(9, 7))
+
     purpose_counts = df["purpose"].value_counts()
-    plt.pie(purpose_counts, labels=purpose_counts.index, autopct='%1.1f%%', colors=sns.color_palette("Blues_r"))
-    plt.title(f"Satellite Purposes in Space ({filter_name})", fontsize=14, color="white")
+    wedges, texts, autotexts = ax.pie(
+        purpose_counts, 
+        labels=purpose_counts.index, 
+        autopct='%1.1f%%',
+        colors=sns.color_palette("coolwarm", len(purpose_counts)),
+        startangle=140, 
+        wedgeprops={'edgecolor': 'black', 'linewidth': 1.5},
+        pctdistance=0.85,
+        explode=[0.1 if i == purpose_counts.idxmax() else 0 for i in purpose_counts.index]
+    )
+
+    # Create a central circle to make it a doughnut
+    center_circle = plt.Circle((0, 0), 0.70, fc='black')
+    fig.gca().add_artist(center_circle)
+
+    ax.set_title(f"Satellite Purposes ({filter_name})", fontsize=16, color="white")
     plt.tight_layout()
     save_to_db(fig, f"{safe_filter_name}_purpose_breakdown", "purpose_breakdown")
 
+
+
+
+
+
     ## 🌍 5. Top 10 Countries Launching Satellites (Bar Chart)
-    fig = plt.figure(figsize=(8, 6))
-    sns.countplot(y=df["country"], order=df["country"].value_counts().index[:10], hue=df["country"], palette="Blues_r", legend=False)
-    plt.title(f"Top 10 Countries in Satellite Deployment ({filter_name})", fontsize=14, color="white")
-    plt.ylabel("Country", fontsize=12, color="white")
-    plt.xlabel("Number of Satellites Launched", fontsize=12, color="white")
-    plt.grid(alpha=0.3)
+    fig, ax = plt.subplots(figsize=(10, 7))
+    sns.barplot(
+        y=df["country"].value_counts().index[:10],
+        x=df["country"].value_counts().values[:10],
+        hue=df["country"].value_counts().index[:10],
+        palette="viridis",
+        dodge=False,
+        ax=ax
+         )
+
+    ax.set_title(f"Top 10 Countries in Satellite Deployment ({filter_name})", fontsize=16, color="white")
+    ax.set_xlabel("Number of Satellites Launched", fontsize=14, color="white")
+    ax.set_ylabel("Country", fontsize=14, color="white")
+    ax.grid(alpha=0.3)
     plt.tight_layout()
     save_to_db(fig, f"{safe_filter_name}_country_distribution", "country_distribution")
 
@@ -223,41 +290,53 @@ def generate_infographics(filter_name, filter_condition=None):
 
     ## ⏳ 6. Cumulative Satellite Launches Over Time
     df["launch_year"] = pd.to_datetime(df["launch_date"], errors="coerce").dt.year
-    # Determine if the filter is for a single year
+    df["launch_month"] = df["launch_date"].dt.month
+    df["launch_day"] = df["launch_date"].dt.date  # Convert to date format
+
     is_single_year_filter = filter_name.startswith("Launch Year")
-    if is_single_year_filter:
-        year = int(filter_name.split(" ")[2])  # Extract year
-        df = df[df["launch_year"] == year]  # Filter for that year
-    # If it's a single year, plot monthly data instead
-    if is_single_year_filter:
-        df["month"] = df["launch_date"].dt.month
-        launch_trend = df.groupby(["month"]).size()  # Monthly launches
-        fig = plt.figure(figsize=(10, 6))
-        sns.lineplot(x=launch_trend.index, y=launch_trend.values, marker="o", color="cyan")
+    is_recent_launch_filter = filter_name == "Recent Launches"
+
+    fig = plt.figure(figsize=(10, 6))
+
+    if is_recent_launch_filter:
+        # 📅 Show launches per day for the last 30 days
+        last_30_days = df[df["launch_date"] >= pd.Timestamp.now() - pd.DateOffset(days=30)]
+        daily_launches = last_30_days.groupby("launch_day").size()
+
+        sns.lineplot(x=daily_launches.index, y=daily_launches.values, marker="o", color="magenta")
+        plt.xticks(rotation=45)
+        plt.title(f"Recent Satellite Launches (Last 30 Days)", fontsize=14, color="white")
+        plt.xlabel("Date", fontsize=12, color="white")
+        plt.ylabel("Number of Satellites Launched", fontsize=12, color="white")
+
+    elif is_single_year_filter:
+        # 📆 Show monthly launches for that specific year
+        year = int(filter_name.split(" ")[2])
+        df = df[df["launch_year"] == year]
+        monthly_launches = df.groupby("launch_month").size()
+
+        sns.lineplot(x=monthly_launches.index, y=monthly_launches.values, marker="o", color="cyan")
         plt.xticks(ticks=range(1, 13), labels=[
             "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-        ])  # Month labels
+        ])
         plt.title(f"Satellite Launches Per Month ({filter_name})", fontsize=14, color="white")
         plt.xlabel("Month", fontsize=12, color="white")
         plt.ylabel("Number of Satellites Launched", fontsize=12, color="white")
-        plt.grid(alpha=0.3)
-        plt.tight_layout()
+
     else:
-        # Standard cumulative launches over multiple years
+        # 🌍 Show cumulative launches over multiple years
         launch_trend = df["launch_year"].value_counts().sort_index().cumsum()
 
-        fig = plt.figure(figsize=(10, 6))
         sns.lineplot(x=launch_trend.index, y=launch_trend.values, marker="o", color="cyan")
         plt.title(f"Global Satellite Launch Trends ({filter_name})", fontsize=14, color="white")
         plt.xlabel("Year", fontsize=12, color="white")
         plt.ylabel("Total Satellites Launched", fontsize=12, color="white")
-        plt.grid(alpha=0.3)
-        plt.tight_layout()
 
-    # ✅ Save both single-year (monthly) & multi-year graphs under the same name
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+
+    # ✅ Save all variations under the same name
     save_to_db(fig, f"{safe_filter_name}_cumulative_launch_trend", "cumulative_launch_trend")
-
-
 
 
 
@@ -273,6 +352,9 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.tight_layout()
     save_to_db(fig, f"{safe_filter_name}_orbital_period_vs_mean_motion", "orbital_period_vs_mean_motion")
 
+
+
+
     ## 8️⃣. Inclination vs. Mean Motion (Scatter Plot) - Outliers Removed
     df_filtered = remove_outliers(df, "inclination")
     df_filtered = remove_outliers(df_filtered, "mean_motion")
@@ -285,27 +367,36 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.tight_layout()
     save_to_db(fig, f"{safe_filter_name}_inclination_mean_motion", "inclination_mean_motion")
 
+
+
+
     ## 🔥 9. Drag Effects on Satellites (Bubble Chart)
     df_filtered = remove_outliers(df, "bstar")
     df_filtered = remove_outliers(df_filtered, "apogee")
-    fig = plt.figure(figsize=(8, 6))
-    colors = ["red" if b < 0 else "yellow" if b > 0 else "blue" for b in df_filtered["bstar"]]
-    sizes = [60 if b == 0 else 40 for b in df_filtered["bstar"]]
-    plt.scatter(df_filtered["bstar"], df_filtered["apogee"], c=colors, alpha=0.6, s=sizes)
-    plt.xscale("symlog", linthresh=1e-7)
-    plt.yscale("log")
-    plt.title(f"Drag Effects on Satellite Orbits ({filter_name})", fontsize=14, color="white")
-    plt.xlabel("Atmospheric Drag (B* Term, symlog scale)", fontsize=12, color="white")
-    plt.ylabel("Maximum Altitude (km, log scale)", fontsize=12, color="white")
-    legend_elements = [
-        Patch(facecolor="red", edgecolor="black", label="Negative Drag (B* < 0)"),
-        Patch(facecolor="yellow", edgecolor="black", label="Positive Drag (B* > 0)"),
-        Patch(facecolor="blue", edgecolor="black", label="No Drag (B* = 0)")
-    ]
-    plt.legend(handles=legend_elements, loc="upper left", fontsize=10)
-    plt.grid(alpha=0.3)
+    fig, ax = plt.subplots(figsize=(11, 7))
+
+    sns.scatterplot(
+        x=df_filtered["bstar"], 
+        y=df_filtered["apogee"], 
+        hue=df_filtered["orbit_type"], 
+        size=df_filtered["apogee"], 
+        sizes=(30, 300),
+        palette="coolwarm",
+        alpha=0.6,
+        ax=ax
+    )
+
+    ax.set_xscale("symlog", linthresh=1e-7)
+    ax.set_yscale("log")
+    ax.set_title(f"Drag Effects on Satellite Orbits ({filter_name})", fontsize=16, color="white")
+    ax.set_xlabel("Atmospheric Drag (B* Term, symlog scale)", fontsize=14, color="white")
+    ax.set_ylabel("Maximum Altitude (km, log scale)", fontsize=14, color="white")
+    ax.grid(alpha=0.3, linestyle="--")
     plt.tight_layout()
     save_to_db(fig, f"{safe_filter_name}_bstar_altitude", "bstar_altitude")
+
+
+
 
     ## 🏆 10. Most Frequent Satellite Launch Sites (Bar Chart)
     fig = plt.figure(figsize=(8, 6))
