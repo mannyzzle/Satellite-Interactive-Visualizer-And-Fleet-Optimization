@@ -49,11 +49,12 @@ def get_infographic(filter_name: str, graph_type: str):
     file_name = f"{safe_filter_name}_{graph_type}"
     print(f"🔍 Fetching infographic from DB: {file_name}")
 
-    infographic = session.query(Infographic).filter_by(name=file_name).first()
+    # Query based on filter_name and graph_type, instead of name
+    infographic = session.query(Infographic).filter_by(filter_name=safe_filter_name, graph_type=graph_type).first()
 
-    if not infographic or not infographic.image:
+    if not infographic or not infographic.image_data:
         raise HTTPException(status_code=404, detail=f"Infographic not found: {file_name}")
 
     print(f"✅ Successfully retrieved infographic: {file_name}")
 
-    return Response(content=infographic.image, media_type="image/png")
+    return Response(content=infographic.image_data, media_type="image/png")
