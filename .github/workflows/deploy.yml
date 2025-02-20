@@ -35,5 +35,9 @@ jobs:
       - name: Verify Infographics in Container
         run: docker exec satellite-backend ls -l /app/backend/infographics
 
+
+      
       - name: Test FastAPI API
-        run: curl http://127.0.0.1:8000/ || exit 1
+        run: |
+          sleep 5  # Wait for API to start
+          curl http://127.0.0.1:8000/ || exit 1  # Check if API responds
