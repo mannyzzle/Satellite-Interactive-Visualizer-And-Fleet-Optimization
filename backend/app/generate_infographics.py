@@ -218,17 +218,48 @@ def generate_infographics(filter_name, filter_condition=None):
     plt.tight_layout()
     save_to_db(fig, f"{safe_filter_name}_country_distribution", "country_distribution")
 
+
+
+
     ## ⏳ 6. Cumulative Satellite Launches Over Time
     df["launch_year"] = pd.to_datetime(df["launch_date"], errors="coerce").dt.year
-    launch_trend = df["launch_year"].value_counts().sort_index().cumsum()
-    fig = plt.figure(figsize=(8, 6))
-    sns.lineplot(x=launch_trend.index, y=launch_trend.values, marker="o", color="cyan")
-    plt.title(f"Global Satellite Launch Trends ({filter_name})", fontsize=14, color="white")
-    plt.xlabel("Year", fontsize=12, color="white")
-    plt.ylabel("Total Satellites Launched", fontsize=12, color="white")
-    plt.grid(alpha=0.3)
-    plt.tight_layout()
+    # Determine if the filter is for a single year
+    is_single_year_filter = filter_name.startswith("Launch Year")
+    if is_single_year_filter:
+        year = int(filter_name.split(" ")[2])  # Extract year
+        df = df[df["launch_year"] == year]  # Filter for that year
+    # If it's a single year, plot monthly data instead
+    if is_single_year_filter:
+        df["month"] = df["launch_date"].dt.month
+        launch_trend = df.groupby(["month"]).size()  # Monthly launches
+        fig = plt.figure(figsize=(10, 6))
+        sns.lineplot(x=launch_trend.index, y=launch_trend.values, marker="o", color="cyan")
+        plt.xticks(ticks=range(1, 13), labels=[
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+        ])  # Month labels
+        plt.title(f"Satellite Launches Per Month ({filter_name})", fontsize=14, color="white")
+        plt.xlabel("Month", fontsize=12, color="white")
+        plt.ylabel("Number of Satellites Launched", fontsize=12, color="white")
+        plt.grid(alpha=0.3)
+        plt.tight_layout()
+    else:
+        # Standard cumulative launches over multiple years
+        launch_trend = df["launch_year"].value_counts().sort_index().cumsum()
+
+        fig = plt.figure(figsize=(10, 6))
+        sns.lineplot(x=launch_trend.index, y=launch_trend.values, marker="o", color="cyan")
+        plt.title(f"Global Satellite Launch Trends ({filter_name})", fontsize=14, color="white")
+        plt.xlabel("Year", fontsize=12, color="white")
+        plt.ylabel("Total Satellites Launched", fontsize=12, color="white")
+        plt.grid(alpha=0.3)
+        plt.tight_layout()
+
+    # ✅ Save both single-year (monthly) & multi-year graphs under the same name
     save_to_db(fig, f"{safe_filter_name}_cumulative_launch_trend", "cumulative_launch_trend")
+
+
+
+
 
     ## 🔄 7. Orbital Period vs. Mean Motion (Scatter Plot) - Outliers Removed
     df_filtered = remove_outliers(df, "period")
