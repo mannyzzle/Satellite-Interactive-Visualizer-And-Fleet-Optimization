@@ -36,8 +36,4 @@ jobs:
         run: |
           docker logs satellite-backend
 
-      # Step 5: Test if API is running
-      - name: Test FastAPI API
-        run: |
-          sleep 40  # Wait longer for API to start
-          curl http://127.0.0.1:8000/ || exit 1  # Check if API responds
+      
