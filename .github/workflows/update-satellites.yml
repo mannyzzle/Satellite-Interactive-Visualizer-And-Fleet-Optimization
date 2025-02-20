@@ -74,7 +74,7 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_PORT: 5432
         run: |
-          Run python -c "
+          python -c "
           import os
           import pandas as pd
           from sqlalchemy import create_engine
