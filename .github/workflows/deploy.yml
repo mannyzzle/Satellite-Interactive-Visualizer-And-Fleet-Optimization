@@ -31,9 +31,8 @@ jobs:
             -e DB_PORT=5432 \
             satellite-backend
 
-      - name: 🚀 Trigger Railway Deployment via API
+      # Step 4: Test if API is running
+      - name: Test FastAPI API
         run: |
-          curl -X POST \
-          -H "Authorization: Bearer ${{ secrets.RAILWAY_API_TOKEN }}" \
-          -H "Content-Type: application/json" \
-          "https://backboard.railway.app/v1/projects/${{ secrets.RAILWAY_PROJECT_ID }}/services/${{ secrets.RAILWAY_SERVICE_ID }}/deploy"
+          sleep 5  # Wait for API to start
+          curl http://127.0.0.1:8000/ || exit 1  # Check if API responds
