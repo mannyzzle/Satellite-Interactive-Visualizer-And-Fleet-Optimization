@@ -19,10 +19,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      # Step 3: Build and Run Backend (FastAPI) in Docker
-      - name: Build and Run Backend in Docker
+      # Step 3: Build Backend Docker Image with Infographics
+      - name: Build Backend Docker Image
         run: |
           docker build -t satellite-backend -f backend/Dockerfile ./backend
+
+      # Step 4: Run Backend Container with Infographics
+      - name: Run Backend Container
+        run: |
           docker run -d -p 8000:8000 --name satellite-backend \
             -e DB_HOST=${{ secrets.DB_HOST }} \
             -e DB_NAME=${{ secrets.DB_NAME }} \
@@ -31,7 +35,13 @@ jobs:
             -e DB_PORT=5432 \
             satellite-backend
 
-      # Step 4: Test if API is running
+      # Step 5: Verify Infographics in Container
+      - name: Verify Infographics in Container
+        run: |
+          echo "🔍 Checking Infographics Directory..."
+          docker exec satellite-backend ls -l /app/backend/infographics
+
+      # Step 6: Test FastAPI API
       - name: Test FastAPI API
         run: |
           sleep 5  # Wait for API to start
