@@ -20,5 +20,5 @@ COPY . /app
 # Ensure the infographics directory exists & clear old files before running
 RUN mkdir -p /app/backend/infographics && chmod -R 777 /app/backend/infographics
 
-# Force-clear old images at startup to prevent stale images
-CMD rm -rf /app/backend/infographics/* && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+# ✅ Ensure stale images are cleared & FastAPI always starts
+CMD bash -c "rm -rf /app/backend/infographics/* || echo 'No old images to clear' && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"

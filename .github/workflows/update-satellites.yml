@@ -123,10 +123,12 @@ jobs:
 
       - name: Commit & Push Updated Graphs
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git rm --cached -r backend/infographics/  # ✅ Forces Git to re-track changes
-          git add backend/infographics/*.png
-          git commit -m "📊 Auto-update satellite infographics (Force update)" || echo "No changes to commit"
-          git commit --allow-empty -m "📊 Force redeploy"  # ✅ Ensures an empty commit if needed
-          git push --force  # ✅ Ensures changes go through
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            
+            git rm --cached -r backend/infographics/  # ✅ Ensures Git resets the directory
+            git add backend/infographics/*.png  # ✅ Adds new files
+            
+            git commit -m "📊 Force update satellite infographics" || echo "No changes to commit"
+            git push --force
+        
