@@ -2,7 +2,7 @@ FROM python:3.10-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 1) Install fonts-liberation + fontconfig so matplotlib can find them
+# Install fonts-liberation + fontconfig so matplotlib can find them
 RUN apt-get update && apt-get install -y --no-install-recommends \
     fontconfig \
     fonts-liberation \
@@ -10,12 +10,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY . /app
-
+# Force cache busting by copying requirements first
+COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
+# THEN copy the rest of the application
+COPY . /app
+
+# Ensure the infographics directory exists & clear old files before running
 RUN mkdir -p /app/backend/infographics && chmod -R 777 /app/backend/infographics
 
-EXPOSE 8000
-
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Force-clear old images at startup to prevent stale images
+CMD rm -rf /app/backend/infographics/* && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
