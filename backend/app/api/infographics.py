@@ -46,7 +46,7 @@ def get_infographic(filter_name: str, graph_type: str):
         .replace(")", "")
     )
 
-    # Construct the file name to match the format in the database
+    # Construct the file name to match the format in the database (combine filter_name and graph_type)
     file_name = f"{safe_filter_name}_{graph_type}"
     print(f"🔍 Fetching infographic from DB: {file_name}")
 
