@@ -11,10 +11,10 @@ import Infographics from "../components/Infographics"; // Ensure correct path
 import { twoline2satrec, propagate, gstime, eciToGeodetic, degreesLong, degreesLat } from "satellite.js";
 
 
-const dayTexture = "/assets/earth_day.jpg";
-const nightTexture = "/assets/earth_night.jpg";
-const satelliteModelPath = "/assets/satellite.glb";
-const cloudTexture = "/assets/clouds.png";
+const dayTexture = "/earth_day.jpg";
+const nightTexture = "/earth_night.jpg";
+const satelliteModelPath = "/satellite.glb";
+const cloudTexture = "/clouds.png";
 
 
 export default function Home() {
@@ -63,7 +63,7 @@ export default function Home() {
   const dayMap = textureLoader.load(dayTexture);
   const nightMap = textureLoader.load(nightTexture);
   const clouds = textureLoader.load(cloudTexture);
-  const sunTexture = textureLoader.load("/assets/sun_texture.jpg");
+  const sunTexture = textureLoader.load("/sun_texture.jpg");
 
 
 
