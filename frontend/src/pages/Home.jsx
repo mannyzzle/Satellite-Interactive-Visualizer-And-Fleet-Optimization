@@ -10,12 +10,14 @@ import { fetchSatellites } from "../api/satelliteService";
 import Infographics from "../components/Infographics"; // Ensure correct path
 import { twoline2satrec, propagate, gstime, eciToGeodetic, degreesLong, degreesLat } from "satellite.js";
 
+const basePath = import.meta.env.BASE_URL;  // ✅ Dynamically fetch the base URL
 
-const dayTexture = "/earth_day.jpg";
-const nightTexture = "/earth_night.jpg";
-const satelliteModelPath = "/satellite.glb";
-const cloudTexture = "/clouds.png";
 
+const dayTexture = `${basePath}earth_day.jpg`;
+const nightTexture = `${basePath}earth_night.jpg`;
+const satelliteModelPath = `${basePath}satellite.glb`;
+const cloudTexture = `${basePath}clouds.png`;
+ 
 
 export default function Home() {
   const globeRef = useRef(null);
@@ -63,8 +65,8 @@ export default function Home() {
   const dayMap = textureLoader.load(dayTexture);
   const nightMap = textureLoader.load(nightTexture);
   const clouds = textureLoader.load(cloudTexture);
-  const sunTexture = textureLoader.load("/sun_texture.jpg");
-
+  const sunTexture = textureLoader.load(`${basePath}sun_texture.jpg`);
+  const moonTexture = textureLoader.load(`${basePath}moon_texture.jpg`);
 
 
 
@@ -194,9 +196,7 @@ export default function Home() {
 
 
   function createMoon(scene) {
-    const textureLoader = new THREE.TextureLoader();
-    const moonTexture = textureLoader.load("/assets/moon_texture.jpg");
-  
+
     const moonGeometry = new THREE.SphereGeometry(1.27, 32, 32); // 🌙 Size ~1/4th of Earth
     const moonMaterial = new THREE.MeshStandardMaterial({
       map: moonTexture,
