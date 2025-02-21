@@ -1,0 +1,113 @@
+name: Update Satellites & Infographics
+
+on:
+  schedule:
+    - cron: "0 6 * * *"  # ✅ Runs every day at 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      run_update_db:
+        description: "Run Satellite Database Update?"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+jobs:
+  update_db:
+    if: ${{ github.event_name == 'schedule' || inputs.run_update_db == 'true' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Set Environment Variables
+        run: |
+          echo "DB_HOST=${{ secrets.DB_HOST }}" >> $GITHUB_ENV
+          echo "DB_NAME=${{ secrets.DB_NAME }}" >> $GITHUB_ENV
+          echo "DB_USER=${{ secrets.DB_USER }}" >> $GITHUB_ENV
+          echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> $GITHUB_ENV
+          echo "SPACETRACK_USER=${{ secrets.SPACETRACK_USER }}" >> $GITHUB_ENV
+          echo "SPACETRACK_PASS=${{ secrets.SPACETRACK_PASS }}" >> $GITHUB_ENV
+
+      - name: Build & Run Updater
+        run: |
+          docker build -t satellite-updater -f backend/Dockerfile.update ./backend
+          docker run --rm \
+            -e DB_HOST=$DB_HOST \
+            -e DB_NAME=$DB_NAME \
+            -e DB_USER=$DB_USER \
+            -e DB_PASSWORD=$DB_PASSWORD \
+            -e SPACETRACK_USER=$SPACETRACK_USER \
+            -e SPACETRACK_PASS=$SPACETRACK_PASS \
+            satellite-updater
+
+  generate_infographics:
+    runs-on: ubuntu-latest
+    needs: update_db
+    if: always()
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install Python Dependencies
+        run: |
+          pip install -r backend/requirements.txt
+          pip install matplotlib seaborn pandas sqlalchemy psycopg2
+
+      - name: Generate Infographics & Store in DB
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_PORT: 5432
+        run: |
+          python -c "
+          import os
+          import pandas as pd
+          from sqlalchemy import create_engine
+          from backend.app.generate_infographics import generate_infographics, filters
+
+          db_user = os.getenv('DB_USER')
+          db_password = os.getenv('DB_PASSWORD')
+          db_host = os.getenv('DB_HOST')
+          db_port = os.getenv('DB_PORT')
+          db_name = os.getenv('DB_NAME')
+
+          engine = create_engine(f'postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}')
+
+          def get_top_20_countries():
+              query = 'SELECT country, COUNT(*) as count FROM satellites WHERE country IS NOT NULL GROUP BY country ORDER BY count DESC LIMIT 20;'
+              with engine.connect() as conn:
+                  df = pd.read_sql(query, conn)
+              return df['country'].tolist() if not df.empty else []
+
+          top_countries = get_top_20_countries()
+
+          print('🔄 Generating Infographics for All Filters...')
+          for name, condition in filters.items():
+              generate_infographics(name, condition)
+
+          print('🔄 Generating Infographics for Select Launch Years...')
+          for year in range(1990, 2026):
+              generate_infographics(f'Launch Year {year}', f'EXTRACT(YEAR FROM launch_date) = {year}')
+
+          if top_countries:
+              print(f'🔄 Generating Infographics for Top 20 Countries: {top_countries}')
+              for country in top_countries:
+                  generate_infographics(f'Country {country}', f\"country = '{country}'\")
+
+          print('✅ Infographics Generation Completed!')
+          "
