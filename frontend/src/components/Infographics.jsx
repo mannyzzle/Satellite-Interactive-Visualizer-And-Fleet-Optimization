@@ -7,7 +7,7 @@ const Infographics = ({ activeFilters }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
-  // 🎯 Define valid launch years (1990-2025) and top 20 countries
+  // 🎯 Define valid launch years (1990-2025) and top spacefaring nations
   const validYears = Array.from({ length: 2026 - 1990 }, (_, i) => (1990 + i).toString());
   const topCountries = [
     "US", "PRC", "UK", "CIS", "TBD", "JPN", "IND", "ESA", "FR", "CA",
@@ -21,26 +21,21 @@ const Infographics = ({ activeFilters }) => {
   
     const filterKey = activeFilters[0];
   
-    // Check if the filter is for a specific Launch Year (e.g., "Launch Year:2023")
+    // Handle Launch Year Filters
     if (filterKey.includes("Launch Year")) {
-      const year = filterKey.split(":")[1].trim(); // Extract year from "Launch Year:2023"
-  
-      // Ensure the extracted year is a valid year in the range (1990-2025)
-      return validYears.includes(year) ? `Launch_Year_${year}` : "Launch_Year_All";
+      const year = filterKey.split(":")[1].trim();
+      return validYears.includes(year) ? `Launch_Year_${year}` : "All_Satellites";
     }
   
-    // Handle country filters
+    // Handle Country Filters
     if (filterKey.includes("Country")) {
       const country = filterKey.replace("Country:", "").trim();
       return topCountries.includes(country) ? `Country_${country}` : "All_Satellites";
     }
   
-    // For other filters, ensure URL safety
-    return encodeURIComponent(filterKey); // ✅ Ensure URL safety
+    // Other Filters - Ensure URL Safety
+    return encodeURIComponent(filterKey);
   };
-
-  
-
 
   useEffect(() => {
     async function fetchData() {
@@ -64,11 +59,11 @@ const Infographics = ({ activeFilters }) => {
   }, [activeFilters]); // ✅ Re-fetch when filters change
 
   if (loading) {
-    return <p className="text-center text-gray-400 animate-pulse">Loading infographics...</p>;
+    return <p className="text-center text-gray-400 animate-pulse">Retrieving Infographics...</p>;
   }
 
   if (error) {
-    return <p className="text-center text-red-400">No infographics found. Try another filter.</p>;
+    return <p className="text-center text-red-400">No data available for this filter. Please try another selection.</p>;
   }
 
   // ✅ Ensure 3 items per row & fill last row with placeholders if needed
@@ -77,9 +72,11 @@ const Infographics = ({ activeFilters }) => {
   const itemsToAdd = remainder === 0 ? 0 : 3 - remainder;
 
   return (
-    <div className="w-full max-w-screen-xl mx-auto px-6 py-10 bg-gray-900 rounded-lg shadow-lg border border-gray-700">
+    <div className="w-full max-w-screen-xl mx-auto px-6 py-10 bg-gray-900 rounded-lg shadow-lg border border-gray-700 font-[Space Grotesk]">
     
-      {/* ✅ 3-Column Grid for Full Width */}
+    
+
+      {/* ✅ 3-Column Grid for Displaying Infographics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8 w-full">
         {infographics.map((item, index) => (
           <div key={index} className="flex flex-col items-center w-full">
@@ -89,7 +86,7 @@ const Infographics = ({ activeFilters }) => {
               className="rounded-lg shadow-md w-full max-w-[400px] h-auto border border-gray-600 cursor-pointer hover:opacity-80 transition"
               onClick={() => setSelectedImage(item)}
             />
-            <p className="text-sm text-gray-300 mt-2 text-center font-semibold">
+            <p className="text-sm text-gray-300 mt-2 text-center font-medium">
               {item.name.replace(/_/g, " ")}
             </p>
           </div>
@@ -99,13 +96,13 @@ const Infographics = ({ activeFilters }) => {
         {Array.from({ length: itemsToAdd }).map((_, idx) => (
           <div key={`placeholder-${idx}`} className="flex flex-col items-center w-full">
             <div className="w-full max-w-[400px] h-[250px] bg-gray-700 rounded-lg shadow-md border border-gray-600 flex items-center justify-center">
-              <span className="text-gray-400 font-semibold">🚀 More Data Coming Soon</span>
+              <span className="text-gray-400 font-medium">New Data Coming Soon</span>
             </div>
           </div>
         ))}
       </div>
 
-      {/* ✅ Image Modal */}
+      {/* ✅ Image Modal for Full-Size Infographics */}
       {selectedImage && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-80 z-50">
           <div className="relative p-4 bg-gray-900 rounded-lg shadow-lg max-w-3xl">
@@ -116,7 +113,7 @@ const Infographics = ({ activeFilters }) => {
               ✖
             </button>
             <img src={selectedImage.url} alt={selectedImage.name} className="max-w-full max-h-[80vh] rounded-lg" />
-            <p className="text-center text-gray-300 mt-3 font-semibold">
+            <p className="text-center text-gray-300 mt-3 font-medium">
               {selectedImage.name.replace(/_/g, " ")}
             </p>
           </div>

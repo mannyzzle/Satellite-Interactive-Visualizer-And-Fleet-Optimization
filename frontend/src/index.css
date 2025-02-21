@@ -135,3 +135,12 @@ nav {
 .animate-spin-slow {
   animation: spin-slow 3s linear infinite;
 }
+
+@keyframes jump {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.animate-jump {
+  animation: jump 1.5s ease-in-out infinite;
+}

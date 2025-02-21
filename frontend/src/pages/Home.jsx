@@ -8,6 +8,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { fetchSatellites } from "../api/satelliteService";
 import Infographics from "../components/Infographics"; // Ensure correct path
+import { twoline2satrec, propagate, gstime, eciToGeodetic, degreesLong, degreesLat } from "satellite.js";
 
 
 const dayTexture = "/assets/earth_day.jpg";
@@ -76,60 +77,28 @@ export default function Home() {
 
   
   function computeSatellitePosition(satellite, time) {
-    const { inclination, raan, arg_perigee, semi_major_axis, eccentricity, epoch } = satellite;
+    const { tle_line1, tle_line2 } = satellite;
+    
+    // ✅ Convert TLE to SGP4 satellite record
+    const satrec = twoline2satrec(tle_line1, tle_line2);
+    
+    // ✅ Convert time to Date object
+    const currentTime = new Date(time * 1000); // Convert from UNIX timestamp to JS Date
+    
+    // ✅ Calculate sidereal time for Earth rotation
+    const julianDate = gstime(currentTime);
   
-    const mu = 398600.4418; // Earth's gravitational parameter (km^3/s^2)
-    const a = semi_major_axis; // Semi-major axis in km
-    const n = Math.sqrt(mu / Math.pow(a, 3)); // Mean motion in rad/s
-    const M = n * (time - new Date(epoch).getTime() / 1000); // Mean anomaly
+    // ✅ Propagate satellite position
+    const positionAndVelocity = propagate(satrec, currentTime);
+    if (!positionAndVelocity.position) return null; // ❌ Return null if no position found
   
-    // ✅ Convert angles to radians
-    const i = inclination * (Math.PI / 180);  // Inclination
-    const Ω = raan * (Math.PI / 180);         // RAAN
-    const ω = arg_perigee * (Math.PI / 180);  // Argument of Perigee
+    const { x, y, z } = positionAndVelocity.position; // ECI coordinates (km)
   
-    // ✅ Solve Kepler's Equation for Eccentric Anomaly (E)
-    let E = M;
-    for (let j = 0; j < 10; j++) {
-      E = M + eccentricity * Math.sin(E);
-    }
-  
-    // ✅ Compute True Anomaly (ν)
-    const nu = 2 * Math.atan2(
-      Math.sqrt(1 + eccentricity) * Math.sin(E / 2),
-      Math.sqrt(1 - eccentricity) * Math.cos(E / 2)
-    );
-  
-    // ✅ Compute Orbital Distance
-    const r = a * (1 - eccentricity * Math.cos(E));
-  
-    // ✅ Perifocal (Orbital) Coordinates
-    const x_orb = r * Math.cos(nu);
-    const y_orb = r * Math.sin(nu);
-    const z_orb = 0; // No z-component in perifocal frame
-  
-    // ✅ Transformation from Perifocal to ECI (Earth-Centered Inertial) Coordinates
-  
-    // **Rotation Matrices**
-    const cos_Ω = Math.cos(Ω);
-    const sin_Ω = Math.sin(Ω);
-    const cos_i = Math.cos(i);
-    const sin_i = Math.sin(i);
-    const cos_ω = Math.cos(ω);
-    const sin_ω = Math.sin(ω);
-  
-    // **Transformation Equations**
-    const x_final = (cos_Ω * cos_ω - sin_Ω * sin_ω * cos_i) * x_orb +
-                    (-cos_Ω * sin_ω - sin_Ω * cos_ω * cos_i) * y_orb;
-  
-    const y_final = (sin_Ω * cos_ω + cos_Ω * sin_ω * cos_i) * x_orb +
-                    (-sin_Ω * sin_ω + cos_Ω * cos_ω * cos_i) * y_orb;
-  
-    const z_final = (sin_ω * sin_i) * x_orb +
-                    (cos_ω * sin_i) * y_orb;  // ✅ Now properly transformed!
-  
-    return new THREE.Vector3(-x_final / 1000,  z_final / 1000, y_final / 1000); // Scale down for visualization
+    // ✅ Convert ECI coordinates to a `THREE.Vector3` for visualization
+    return new THREE.Vector3(x/500, z/500, -y/500); // ✅ Swap axes to align with THREE.js
   }
+
+
   
   const addOrbitPaths = () => {
     console.log("🛰️ Updating orbit paths...");
@@ -251,7 +220,7 @@ export default function Home() {
 function animateMoon() {
   if (moonRef.current) {
     const time = Date.now() / 1000;
-    const moonOrbitRadius = 90; // Adjusted for visualization
+    const moonOrbitRadius = 150; // Adjusted for visualization
     const moonSpeed = 0.001; // Adjust speed to match real orbit
 
     // 🌙 Compute circular orbit
@@ -320,52 +289,55 @@ const loadSatelliteModel = (satellite) => {
 
 
 
-
-  // ✅ Smooth Camera Transition Function
-  // ✅ Improved Camera Transition Function
+// ✅ Smooth Camera Transition Function (Now Fixed)
 function smoothCameraTransition(targetPosition, satellite) {
   if (!cameraRef.current) return;
 
   const startPos = cameraRef.current.position.clone();
-  let zoomFactor = 1.1; // Default zoom for MEO/Mid-range
+  let zoomFactor = 0.8; // Default zoom-in (closer)
 
-  // 🎯 Adjust Zoom Based on Satellite Altitude (Apogee)
+  // ✅ Adjust Zoom Based on Satellite Altitude (Dynamic Scaling)
   if (satellite) {
-      const altitude = (satellite.perigee + satellite.apogee) / 2; // Average altitude
-      if (altitude < 2000) {
-          zoomFactor = 1.3; // Closer for LEO
-      } else if (altitude >= 2000 && altitude < 35000) {
-          zoomFactor = 1.1; // Medium for MEO
-      } else {
-          zoomFactor = 1.1; // Further for GEO & HEO
-      }
+    const altitude = (satellite.perigee + satellite.apogee) / 2; // Compute average altitude
+
+    // 🌍 Adjust zoom factor based on altitude range
+    if (altitude < 2000) {
+      zoomFactor = 0.6;  // Even closer for LEO
+    } else if (altitude >= 2000 && altitude < 20000) {
+      zoomFactor = 0.75; // Moderate zoom for MEO
+    } else if (altitude >= 20000 && altitude < 40000) {
+      zoomFactor = 0.85; // Medium zoom for GEO
+    } else {
+      zoomFactor = 0.9; // Slight zoom-in for HEO
+    }
   }
 
-  const targetPos = targetPosition.clone().multiplyScalar(zoomFactor);
+  // ✅ Correct the zooming behavior (divide instead of multiply)
+  const targetPos = targetPosition.clone().divideScalar(zoomFactor); // Move camera **closer**
 
   let t = 0;
   function moveCamera() {
-      t += 0.1;
+    t += 0.05; // Reduce speed for smoother movement
 
-      const distance = startPos.distanceTo(targetPos);
-      const speedFactor = distance > 50 ? 0.2 : distance > 20 ? 0.1 : 0.05;
+    const distance = startPos.distanceTo(targetPos);
+    const speedFactor = distance > 50 ? 0.2 : distance > 20 ? 0.1 : 0.05; // Adjust speed dynamically
 
-      cameraRef.current.position.lerpVectors(startPos, targetPos, t * speedFactor);
+    // ✅ Lerp the camera smoothly to the target position
+    cameraRef.current.position.lerpVectors(startPos, targetPos, t * speedFactor);
+    cameraRef.current.lookAt(targetPosition);
+
+    // ✅ Stop movement once fully zoomed
+    if (t < 1) {
+      requestAnimationFrame(moveCamera);
+    } else {
+      cameraRef.current.position.copy(targetPos);
       cameraRef.current.lookAt(targetPosition);
-
-      if (t < 1) {
-          requestAnimationFrame(moveCamera);
-      } else {
-          cameraRef.current.position.copy(targetPos);
-          cameraRef.current.lookAt(targetPosition);
-          console.log("✅ Camera transition complete!");
-      }
+      console.log("✅ Camera transition complete!");
+    }
   }
 
   moveCamera();
 }
-
-
 
 
 
@@ -896,7 +868,7 @@ useEffect(() => {
   sceneRef.current = scene;
 
   const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.5, 9000);
-  camera.position.set(0, 5, 15);
+  camera.position.set(0, 5, 35);
   cameraRef.current = camera;
 
   const renderer = new THREE.WebGLRenderer({ antialias: true , precision: "highp" });
@@ -910,8 +882,8 @@ useEffect(() => {
   controls.enableDamping = true;
   controls.dampingFactor = 0.1;
   controls.rotateSpeed = 0.8;
-  controls.minDistance = 7;
-  controls.maxDistance = 100;
+  controls.minDistance = 16;
+  controls.maxDistance = 1000;
   controlsRef.current = controls;
 
   const light = new THREE.DirectionalLight(0xffffff, 4.5);
@@ -922,7 +894,7 @@ useEffect(() => {
   
   // 🌍 **Create Earth**
   const globe = new THREE.Mesh(
-    new THREE.SphereGeometry(5, 64, 64),
+    new THREE.SphereGeometry(13, 64, 64),
     new THREE.MeshStandardMaterial({
       map: dayMap,
       emissiveMap: nightMap,
@@ -936,17 +908,10 @@ useEffect(() => {
   globeRef.current = globe;
   scene.add(globe);
 
-  
-
-
-  
-  
-  
-
 
   // ☁️ **Cloud Layer**
   const cloudMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(5.05, 64, 64),
+    new THREE.SphereGeometry(13.05, 64, 64),
     new THREE.MeshStandardMaterial({
       map: clouds,
       transparent: true,
@@ -959,12 +924,6 @@ useEffect(() => {
   scene.add(cloudMesh);
 
 
-
-  
-  
-  
-
-  
 
   // 🔄 **Handle Window Resize**
   const resizeRenderer = () => {
@@ -982,7 +941,7 @@ useEffect(() => {
 
   // 🌫 **Atmosphere Glow**
   const atmosphere = new THREE.Mesh(
-    new THREE.SphereGeometry(5.05, 64, 64),
+    new THREE.SphereGeometry(13.05, 64, 64),
     new THREE.MeshBasicMaterial({
       color: 0x3399ff,
       transparent: true,
@@ -1011,20 +970,41 @@ useEffect(() => {
       emissiveMap: sunTexture,
     })
   );
-  sun.position.set(600, 50, 0);
+  sun.position.set(2000, 50, 0);
   sunRef.current = sun;
   scene.add(sun);
 
-  // 🌌 **Create Star Field**
-  const starGeometry = new THREE.BufferGeometry();
-  const starVertices = [];
-  for (let i = 0; i < 140000; i++) {
-    starVertices.push((Math.random() - 0.5) * 1000, (Math.random() - 0.5) * 1000, (Math.random() - 0.5) * 1000);
-  }
-  starGeometry.setAttribute("position", new THREE.Float32BufferAttribute(starVertices, 3));
-  const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.02 });
-  scene.add(new THREE.Points(starGeometry, starMaterial));
+ 
 
+  // 🌌 **Create Larger Star Field**
+const starGeometry = new THREE.BufferGeometry();
+const starVertices = [];
+
+// ✅ Increase star count and expand volume
+const starCount = 200000;  // More stars
+const starFieldSize = 30000; // Increase field size
+
+for (let i = 0; i < starCount; i++) {
+  starVertices.push(
+    (Math.random() - 0.5) * starFieldSize,  // Spread over larger area
+    (Math.random() - 0.5) * starFieldSize,
+    (Math.random() - 0.5) * starFieldSize
+  );
+}
+
+starGeometry.setAttribute("position", new THREE.Float32BufferAttribute(starVertices, 3));
+
+// ✅ Adjust Material to Improve Appearance
+const starMaterial = new THREE.PointsMaterial({
+  color: 0xffffff,
+  size: 0.03,  // Slightly larger stars
+  transparent: true,
+  opacity: 0.8,
+  depthWrite: false
+});
+
+const stars = new THREE.Points(starGeometry, starMaterial);
+scene.add(stars);
 
 
 
@@ -1045,11 +1025,11 @@ useEffect(() => {
   const animate = () => {
     requestAnimationFrame(animate);
 
-    if (globeRef.current) globeRef.current.rotation.y += 0.0000727;
-    if (cloudRef.current) cloudRef.current.rotation.y += 0.00009;
+    if (globeRef.current) globeRef.current.rotation.y += 0.00000727;
+    if (cloudRef.current) cloudRef.current.rotation.y += 0.000009;
 
     const time = Date.now() / 1000;
-    const timeFactor = 60;
+    const timeFactor = 1;
 
     // 🛰️ Force all satellites to recalculate position
   Object.values(satelliteObjectsRef.current).forEach((satelliteModel) => {
@@ -1091,8 +1071,71 @@ useEffect(() => {
 }, []); // ✅ Runs only once!
 
 
+const [realTimeData, setRealTimeData] = useState({
+  latitude: "N/A",
+  longitude: "N/A",
+  altitude: "N/A",
+  velocity: "N/A",
+});
+
+  const satrecRef = useRef(null); // ✅ Store TLE propagation object
+  const intervalRef = useRef(null); // ✅ Store interval reference
 
 
+  useEffect(() => {
+    if (!selectedSatellite || !selectedSatellite.tle_line1 || !selectedSatellite.tle_line2) return;
+
+    console.log(`🌍 Updating Satellite: ${selectedSatellite.name}`);
+
+    satrecRef.current = twoline2satrec(selectedSatellite.tle_line1, selectedSatellite.tle_line2);
+
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    
+    const updateInfoBox = () => {
+      if (!satrecRef.current) return;
+
+      const now = new Date();
+      const julianDate = gstime(now);
+
+      // ✅ Propagate position using SGP4
+      const positionAndVelocity = propagate(satrecRef.current, now);
+      if (!positionAndVelocity.position || !positionAndVelocity.velocity) return;
+
+      const { x, y, z } = positionAndVelocity.position;
+      const { x: vx, y: vy, z: vz } = positionAndVelocity.velocity;
+
+      // ✅ Convert ECI to Geodetic (Latitude, Longitude, Altitude)
+      const geodetic = eciToGeodetic({ x, y, z }, julianDate);
+
+      // ✅ Convert Radians to Degrees
+      const latitude = degreesLat(geodetic.latitude).toFixed(6);
+      const longitude = degreesLong(geodetic.longitude).toFixed(6);
+
+      // ✅ Convert Altitude from Meters to Kilometers
+      const altitudeKm = (geodetic.height * 1000) / 1000;
+      const altitudeFormatted = altitudeKm.toFixed(6); // Keep six decimal places
+
+      // ✅ Compute real velocity from velocity components
+      const velocity = Math.sqrt(vx ** 2 + vy ** 2 + vz ** 2).toFixed(6); // Keep six decimal places
+
+      console.log(`🔄 Updating Data | Latitude: ${latitude}° | Longitude: ${longitude}° | Velocity: ${velocity} km/s | Altitude: ${altitudeFormatted} km`);
+
+      setRealTimeData({
+        latitude,
+        longitude,
+        altitude: altitudeFormatted,
+        velocity,
+      });
+    };
+
+
+
+    updateInfoBox(); // ✅ Initial update
+
+    intervalRef.current = setInterval(updateInfoBox, 1000); // ✅ Update every second
+
+    return () => clearInterval(intervalRef.current); // ✅ Clean up on unmount
+  }, [selectedSatellite]);
 
 // ✅ Separate useEffect for Tracking (Fixes tracking while keeping satellites visible)
 useEffect(() => {
@@ -1196,6 +1239,7 @@ const countryMapping = {
 const getCountryFlag = (code) => countryMapping[code]?.flag || "🌍";
 const getCountryName = (code) => countryMapping[code]?.name || "Unknown";
 
+
 const FilterButton = ({ filter }) => (
   <button
     className={`px-4 py-2 text-xs font-semibold rounded-md transition-all duration-200 shadow-md ${
@@ -1225,7 +1269,7 @@ return (
 {/* 📌 Sidebar (Satellite List, Search & Pagination) */}
 <div className="relative flex flex-col h-[90vh]">
   <div
-    className={`absolute top-20 left-0 h-[60vh] bg-gray-900 bg-opacity-90 backdrop-blur-md text-white p-4 shadow-xl border-r border-gray-700 transition-transform duration-300 ease-in-out w-60 md:w-1/8 z-40 rounded-r-xl ${
+    className={`absolute top-20 left-0 h-[80vh] bg-gray-900 bg-opacity-90 backdrop-blur-md text-white p-4 shadow-xl border-r border-gray-700 transition-transform duration-300 ease-in-out w-60 md:w-1/8 z-40 rounded-r-xl ${
       sidebarOpen ? "translate-x-0" : "-translate-x-full"
     }`}
   >
@@ -1241,7 +1285,7 @@ return (
       className="w-full p-2 mb-3 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-600 shadow-sm"
     />
 {/* 🚀 Satellite List (Two Columns) */}
-<div className="overflow-y-auto max-h-[30vh] pr-2">
+<div className="overflow-y-auto max-h-[50vh] pr-2">
   {loading ? (
     <p className="text-center text-gray-400">Loading...</p>
   ) : displayedSatellites.length === 0 ? (
@@ -1368,65 +1412,76 @@ return (
   </div>
 
 
-{/* 🛰️ Satellite Info Box */}
-<div className="absolute bottom-0 bg-gray-950 text-yellow-300 p-3 shadow-lg text-xs border-t border-gray-950 flex flex-col items-center h-36 w-full z-[60] transition-all duration-300 ease-in-out">
-  {loading ? (
-    <div className="flex items-center justify-center h-full">
-      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-yellow-300 border-opacity-75"></div>
-    </div>
-  ) : !selectedSatellite ? (
-    <div className="flex items-center justify-center h-full text-yellow-400 font-semibold">
-      <p>🔍 Make a selection to view details</p>
-    </div>
-  ) : (
-    <>
-      {/* Satellite Name, Country & Last Update */}
-      <div className="flex flex-col items-center w-full text-center pb-1">
-        <div className="flex items-center space-x-2">
-          <span className="text-lg font-bold text-yellow-400">{selectedSatellite.name}</span>
-          <span className="text-sm flex items-center">
-            {getCountryFlag(selectedSatellite.country)} {getCountryName(selectedSatellite.country)}
-          </span>
+  <div className="absolute bottom-6 right-6 bg-gray-950 text-yellow-300 p-3 shadow-lg text-xs border-l border-yellow-500 flex flex-col items-center w-56 max-h-[85vh] overflow-hidden z-[50] transition-all duration-300 ease-in-out">
+      {!selectedSatellite ? (
+        <div className="flex items-center justify-center h-full text-yellow-400 font-semibold text-center px-3">
+          <p>Select a satellite for real-time tracking</p>
         </div>
-        <span className="text-yellow-500 text-xs">
-          <strong>Last Update:</strong> {new Date(selectedSatellite.epoch).toLocaleString()}
-        </span>
-      </div>
+      ) : (
+        <>
+          {/* ✅ Satellite Header */}
+          <div className="w-full text-center border-b border-yellow-500 pb-2">
+            <div className="text-sm font-bold text-yellow-400 truncate">{selectedSatellite.name}</div>
+            <div className="text-xs flex items-center justify-center mt-1 space-x-1">
+              <span className="text-lg">{getCountryFlag(selectedSatellite.country)}</span>
+              <span>{getCountryName(selectedSatellite.country)}</span>
+            </div>
+          </div>
 
-      {/* Satellite Details */}
-      <div className="flex flex-wrap justify-center items-center space-x-4 overflow-x-auto whitespace-nowrap w-full px-4 text-center">
-        <span><strong>NORAD:</strong> {selectedSatellite.norad_number}</span>
-        <span><strong>Orbit:</strong> {selectedSatellite.orbit_type}</span>
-        <span className={selectedSatellite.velocity > 7.8 ? "text-red-400" : "text-green-400"}>
-          <strong>Velocity:</strong> {selectedSatellite.velocity} km/s
-        </span>
-        <span><strong>Inclination:</strong> {selectedSatellite.inclination}°</span>
-        <span><strong>Latitude:</strong> {selectedSatellite.latitude?.toFixed(4)}°</span>
-        <span><strong>Longitude:</strong> {selectedSatellite.longitude?.toFixed(4)}°</span>
-        <span><strong>Altitude:</strong> {selectedSatellite.perigee} - {selectedSatellite.apogee} km</span>
-        <span><strong>Eccentricity:</strong> {selectedSatellite.eccentricity?.toFixed(4)}</span>
-        <span><strong>B* Drag:</strong> {selectedSatellite.bstar}</span>
-      </div>
+          {/* ✅ Real-Time Data (Updated Every Second) */}
+          <div className="flex flex-col w-full text-center space-y-2 py-2">
+            <div>
+              <span className="text-yellow-500 text-[10px] font-semibold uppercase">Velocity</span>
+              <div className="text-xs">{realTimeData.velocity} km/s</div>
+            </div>
+            <div>
+              <span className="text-yellow-500 text-[10px] font-semibold uppercase">Altitude</span>
+              <div className="text-xs">{realTimeData.altitude} km</div>
+            </div>
+            <div>
+              <span className="text-yellow-500 text-[10px] font-semibold uppercase">Position</span>
+              <div className="text-xs">
+                {realTimeData.latitude}°, {realTimeData.longitude}°
+              </div>
+            </div>
+          </div>
 
-      {/* Additional Info: Purpose, Status, Launch Date */}
-      <div className="flex flex-wrap justify-center items-center space-x-4 overflow-x-auto whitespace-nowrap w-full px-4 text-center mt-2">
-        <span><strong>Type:</strong> {selectedSatellite.purpose || "Unknown"}</span>
-        <span><strong>Launch:</strong> {selectedSatellite.launch_date ? new Date(selectedSatellite.launch_date).toLocaleDateString() : "N/A"}</span>
-        <span><strong>Size:</strong> {selectedSatellite.rcs < 0.1 ? "🛰️ Small" : selectedSatellite.rcs < 1.0 ? "📡 Medium" : "🚀 Large"}</span>
-      </div>
-    </>
-  )}
+          {/* ✅ Categorical Data (Static, but Useful for Context) */}
+          <div className="flex flex-col w-full border-t border-yellow-500 pt-2 space-y-2">
+            <div>
+              <span className="text-yellow-500 text-[10px] font-semibold uppercase">NORAD ID</span>
+              <div className="text-xs">{selectedSatellite.norad_number}</div>
+            </div>
+            <div>
+              <span className="text-yellow-500 text-[10px] font-semibold uppercase">Orbit Type</span>
+              <div className="text-xs">{selectedSatellite.orbit_type}</div>
+            </div>
+            <div>
+              <span className="text-yellow-500 text-[10px] font-semibold uppercase">Purpose</span>
+              <div className="text-xs">{selectedSatellite.purpose || "Unknown"}</div>
+            </div>
+            <div>
+              <span className="text-yellow-500 text-[10px] font-semibold uppercase">Launch Date</span>
+              <div className="text-xs">{selectedSatellite.launch_date ? new Date(selectedSatellite.launch_date).toLocaleDateString() : "N/A"}</div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
 </div>
 </div>
-</div>
-
 
 
 
  {/* 🛰️ Filter Section Below 3D UI */}
 <div className="flex flex-col items-center p-4 bg-gray-900 shadow-md rounded-md w-full z-50 ax-w-xl mx-auto">
-  <h3 className="text-lg font-medium text-white mb-2 text-center">Filters</h3>
 
+{/* Box-Styled Title - Reduced Size */}
+<div className="px-4 py-1 border border-teal-400 bg-gray-800 rounded-lg shadow-md animate-jump max-w-sm">
+    <h3 className="text-base font-medium text-teal-300 text-center tracking-wide">
+      Satellite Data Filters & Orbital Selection
+    </h3>
+  </div>
   
   {/* 🌍 Orbital Filters */}
   <div className="w-full text-center mb-3">
@@ -1445,7 +1500,7 @@ return (
 
   {/* 🚀 Velocity & Orbital Characteristics */}
   <div className="w-full text-center mb-3">
-    <h4 className="text-sm font-medium text-lime-400 mb-2 tracking-wide">Velocity & Orbital Parameters</h4>
+    <h4 className="text-sm font-medium text-green-400 mb-2 tracking-wide">Velocity & Orbital Parameters</h4>
     <div className="flex flex-wrap justify-center gap-2">
       {[
         { name: "High Velocity", label: "Fast (>7.8 km/s)" },
@@ -1462,7 +1517,7 @@ return (
 
   {/* 🛰️ Satellite Purpose */}
   <div className="w-full text-center mb-3">
-    <h4 className="text-sm font-medium text-yellow-300 mb-2 tracking-wide">Mission Type</h4>
+    <h4 className="text-sm font-medium text-green-400 mb-2 tracking-wide">Mission Type</h4>
     <div className="flex flex-wrap justify-center gap-2">
       {[
         { name: "Communications", label: "Communications" },
@@ -1484,7 +1539,7 @@ return (
     
     {/* 🚀 Launch & Decay Filters */}
     <div className="flex flex-col items-center flex-1">
-      <h4 className="text-sm font-medium text-teal-300 mb-2 tracking-wide">Launch & Decay Events</h4>
+      <h4 className="text-sm font-medium text-green-400 mb-2 tracking-wide">Launch & Decay Events</h4>
       <FilterButton
         key="Recent Launches"
         filter={{ name: "Recent Launches", label: "Recent Launch (30 Days)" }}
@@ -1507,9 +1562,9 @@ return (
 
     {/* 🌍 Country Dropdown */}
     <div className="flex flex-col items-center flex-1">
-      <h4 className="text-sm font-medium text-lime-400 mb-2 tracking-wide">Country of Origin</h4>
+      <h4 className="text-sm font-medium text-green-400 mb-2 tracking-wide">Country of Origin</h4>
       <select
-        className="px-4 py-2 text-xs font-medium rounded-md bg-gray-700 text-gray-300 focus:outline-none focus:ring-2 focus:ring-lime-500"
+        className="px-4 py-2 text-xs font-medium rounded-md bg-gray-700 text-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
         onChange={(e) => toggleFilter(`Country:${e.target.value}`)}
       >
         <option value="">Select Country</option>
@@ -1533,10 +1588,15 @@ return (
   </div>
 </div>
 
+
 {/* 📊 Infographics Section */}
 <div className="w-full p-6 bg-gray-950 shadow-md rounded-md text-white font-[Space Grotesk]">
-  <h3 className="text-lg font-medium text-cyan-400 text-center tracking-wide">Data Visualization</h3>
-  <p className="text-center text-gray-400 text-sm">Real-time analytics based on selected filters.</p>
+  <h3 className="text-lg font-medium text-teal-300 text-center tracking-wide animate-jump">
+    Data Visualization & Satellite Analytics
+  </h3>
+  <p className="text-center text-gray-400 text-sm">
+    Real-time analytics based on selected filters.
+  </p>
   <Infographics activeFilters={activeFilters} />
 </div>
 
