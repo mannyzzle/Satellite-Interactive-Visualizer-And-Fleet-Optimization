@@ -1,5 +1,4 @@
-// src/App.jsx
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import { useState } from "react";
 import Navbar from "./components/Navbar"; 
 import Home from "./pages/Home";
@@ -12,7 +11,7 @@ function App() {
   const [isLiveTracking, setIsLiveTracking] = useState(true);
 
   return (
-    <Router>
+    <>
       <Navbar
         onSearch={setSearchQuery}
         toggleLiveTracking={() => setIsLiveTracking((prev) => !prev)}
@@ -24,7 +23,7 @@ function App() {
         <Route path="/satellites/:name" element={<SatelliteDetails />} />
         <Route path="/about" element={<About />} />
       </Routes>
-    </Router>
+    </>
   );
 }
 
