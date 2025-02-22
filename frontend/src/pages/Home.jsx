@@ -26,6 +26,7 @@ export default function Home() {
   const sunRef = useRef(null);
   const moonRef = useRef(null);
   let isFetching = false;  // Prevent duplicate fetch calls
+  const [is3DEnabled, setIs3DEnabled] = useState(false);
 
 
 
@@ -220,7 +221,7 @@ export default function Home() {
 function animateMoon() {
   if (moonRef.current) {
     const time = Date.now() / 1000;
-    const moonOrbitRadius = 150; // Adjusted for visualization
+    const moonOrbitRadius = 300; // Adjusted for visualization
     const moonSpeed = 0.001; // Adjust speed to match real orbit
 
     // 🌙 Compute circular orbit
@@ -241,6 +242,8 @@ function animateMoon() {
 
 
 const loadSatelliteModel = (satellite) => {
+  if (!is3DEnabled) return; // 🚨 Do NOT load if 3D is disabled
+
   console.log(`🔄 Attempting to load model for: ${satellite.name} (${satellite.norad_number})`);
 
   // ✅ Prevent duplicate loading
@@ -291,6 +294,7 @@ const loadSatelliteModel = (satellite) => {
 
 // ✅ Smooth Camera Transition Function (Now Fixed)
 function smoothCameraTransition(targetPosition, satellite) {
+  if (!is3DEnabled) return;
   if (!cameraRef.current) return;
 
   const startPos = cameraRef.current.position.clone();
@@ -351,6 +355,7 @@ function smoothCameraTransition(targetPosition, satellite) {
 
 
 const focusOnSatellite = useCallback((sat) => {
+  if (!is3DEnabled) return;
   if (!sat) return;
 
   console.log(`🚀 Focusing on satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
@@ -400,7 +405,7 @@ const focusOnSatellite = useCallback((sat) => {
 
 
   checkModelLoaded();
-}, [setSelectedSatellite, setIsTracking, sceneRef, selectedPointerRef, cameraRef]);
+}, [setSelectedSatellite, setIsTracking, sceneRef, selectedPointerRef, cameraRef, is3DEnabled]);
 
 
 
@@ -409,6 +414,7 @@ const focusOnSatellite = useCallback((sat) => {
 
 
   const toggleFilter = async (filterType) => {
+    if (!is3DEnabled) return;
     console.log(`🔍 Selecting filter: ${filterType}`);
   
     setActiveFilters([filterType]); // ✅ Only one active filter at a time
@@ -425,7 +431,10 @@ const focusOnSatellite = useCallback((sat) => {
   
 
 
+
+  
   const removeAllSatelliteModels = () => {
+    if (!is3DEnabled) return;
     console.log("🗑️ Removing all satellite models...");
     console.log("🚀 Before cleanup, satelliteObjectsRef:", Object.keys(satelliteObjectsRef.current));
     console.log("🛰️ Satellites in Scene (before cleanup):", sceneRef.current.children.length);
@@ -468,6 +477,7 @@ const focusOnSatellite = useCallback((sat) => {
 
   
   const removeAllOrbitPaths = () => {
+    if (!is3DEnabled) return;
     console.log("🗑️ Removing all orbit paths...");
   
     if (orbitPathsRef.current.length > 0) {
@@ -486,6 +496,7 @@ const focusOnSatellite = useCallback((sat) => {
 
 
   const resetFilters = async () => {
+    if (!is3DEnabled) return;
     console.log("🔄 Resetting filters...");
   
     setActiveFilters([]);
@@ -512,7 +523,10 @@ const focusOnSatellite = useCallback((sat) => {
     }
   };
   
+
+
   const fetchAndUpdateSatellites = async (updatedFilters, newPage = 1) => {
+    if (!is3DEnabled) return;
     if (loading || isFetching || (satellites.length > 0 && page === newPage)) {
         console.log("⚠️ Skipping redundant satellite fetch.");
         return;
@@ -550,7 +564,16 @@ const focusOnSatellite = useCallback((sat) => {
 };
 
 
+
+
+
 const updateSceneWithFilteredSatellites = (satellites) => {
+  if (!is3DEnabled) return;
+  if (!sceneRef.current) {
+    console.warn("⚠️ Scene is not ready yet. Skipping satellite update.");
+    return;
+  }
+  
   console.log(`🛰️ Updating scene with ${satellites.length} satellites...`);
   console.log("🚀 Current satelliteObjectsRef (before update):", Object.keys(satelliteObjectsRef.current));
   console.log("🛰️ Satellites in Scene (before update):", sceneRef.current.children.length);
@@ -597,6 +620,7 @@ const updateSceneWithFilteredSatellites = (satellites) => {
   
 
 useEffect(() => {
+  if (!is3DEnabled) return;
   if (!satellites.length) {
       console.warn("⚠️ No satellites to load, waiting for fetch...");
       return;
@@ -627,11 +651,14 @@ useEffect(() => {
       }
   });
 
-  addOrbitPaths(); // ✅ Ensure orbit paths are updated
+  setTimeout(() => {
+    addOrbitPaths();  // 🚀 Ensure orbits are added after everything else
+    console.log("✅ Orbit paths manually added after delay.");
+  }, 500); // ⏳ Small delay ensures everything is loaded before orbits are drawn
 
   console.log("🚀 Current satelliteObjectsRef (after update):", Object.keys(satelliteObjectsRef.current));
   console.log("🛰️ Satellites in Scene (after update):", sceneRef.current.children.length);
-}, [satellites]);
+}, [satellites,is3DEnabled]);
 
   
 
@@ -639,6 +666,7 @@ useEffect(() => {
 
 
   useEffect(() => {
+    if (!is3DEnabled) return;
     if (satellites.length > 0) {
       console.log("⚠️ Skipping fetch, satellites already loaded.");
       return;
@@ -646,13 +674,14 @@ useEffect(() => {
   
     console.log(`📡 Fetching satellites for page ${page} (filters: ${activeFilters.length > 0 ? activeFilters.join(", ") : "None"})...`);
     fetchAndUpdateSatellites(activeFilters, page);
-  }, [page, activeFilters]); // Ensures it only runs when `page` or `activeFilters` change
+  }, [page, activeFilters,is3DEnabled]); // Ensures it only runs when `page` or `activeFilters` change
 
   
 
 
 
   useEffect(() => {
+    if (!is3DEnabled) return;
     const getSatellites = async () => {
       setLoading(true);
       try {
@@ -676,13 +705,13 @@ useEffect(() => {
     };
   
     getSatellites();
-  }, [page, limit, activeFilters]); // ✅ Runs when page, limit, or filter changes
+  }, [page, limit, activeFilters,is3DEnabled]); // ✅ Runs when page, limit, or filter changes
   
 
 
 
 
-//console.log("🔍 Tracking useEffect dependencies: ", { page, limit, activeFilter });
+console.log(" 🛑 Tracking useEffect dependencies: ", { page, limit, activeFilters, loading, selectedSatellite, isTracking });
 
 
 
@@ -692,15 +721,17 @@ useEffect(() => {
 
 
 useEffect(() => {
+  if (!is3DEnabled) return;
   if (selectedSatellite && isTracking) {
     console.log(`📌 Tracking satellite: ${selectedSatellite.name} (NORAD: ${selectedSatellite.norad_number})`);
   }
-}, [selectedSatellite, isTracking]);
+}, [selectedSatellite, isTracking,is3DEnabled]);
 
 
 
 
 const changePage = async (newPage) => {
+  if (!is3DEnabled) return;
   if (newPage < 1 || loading) return;
 
   console.log(`📡 Changing to page ${newPage}...`);
@@ -737,6 +768,7 @@ const changePage = async (newPage) => {
 
 
 useEffect(() => {
+  if (!is3DEnabled) return;
   if (loading) {
     console.log("⏳ Waiting for satellites...");
   } else if (!loading) {
@@ -746,17 +778,18 @@ useEffect(() => {
       console.warn("⚠️ Sidebar has no satellites, waiting for fetch...");
     }
   }
-}, [satellites, loading]);
+}, [satellites, loading,is3DEnabled]);
 
 
 
 useEffect(() => {
+  if (!is3DEnabled) return;
   console.log("📌 Page changed! Resetting selection and tracking.");
   setSelectedSatellite(null);
   setIsTracking(false); // ✅ Reset tracking so new selections work properly
   localStorage.removeItem("selectedSatellite");
   selectedPointerRef.current = null; // ✅ Clear any lingering tracking
-}, [page]);
+}, [page,is3DEnabled]);
 
 
 
@@ -764,6 +797,7 @@ useEffect(() => {
 
 // ✅ Restore Last Selected Satellite After Refresh (Without Duplicates)
 useEffect(() => {
+  if (!is3DEnabled) return;
   const savedSatellite = localStorage.getItem("selectedSatellite");
   if (!savedSatellite) return;
 
@@ -797,13 +831,14 @@ useEffect(() => {
   };
 
   checkModelLoaded();
-}, [satellites]); // ✅ Runs only when satellites update
+}, [satellites,is3DEnabled]); // ✅ Runs only when satellites update
 
 
 
 
 
 useEffect(() => {
+  if (!is3DEnabled) return;
   if (!controlsRef.current) return;
 
   let isDragging = false;
@@ -840,6 +875,7 @@ useEffect(() => {
 
 
 const enableInteraction = () => {
+  if (!is3DEnabled) return;
   setIsInteractionEnabled(true);
   if (controlsRef.current) controlsRef.current.enabled = true;
 };
@@ -850,6 +886,7 @@ const enableInteraction = () => {
 
 // ✅ Ensure Tracking Stops When Camera is Moved
 useEffect(() => {
+  if (!is3DEnabled) return;
   if (!controlsRef.current) return;
 
   controlsRef.current.enabled = !isTracking; // 🔄 Disable controls when tracking is enabled
@@ -862,7 +899,9 @@ useEffect(() => {
 // ✅ Scene & Animation Setup (Runs Once)
 
 useEffect(() => {
-  if (!mountRef.current) return;
+  if (!is3DEnabled || !mountRef.current) return; // ✅ Only run if 3D is enabled
+
+  console.log("🚀 Initializing 3D Scene...");
 
   const scene = new THREE.Scene();
   sceneRef.current = scene;
@@ -875,7 +914,6 @@ useEffect(() => {
   renderer.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
   mountRef.current.appendChild(renderer.domElement);
-
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableZoom = true;
   controls.enablePan = false;
@@ -1023,6 +1061,7 @@ scene.add(stars);
 
   // 🔄 **Animation Loop**
   const animate = () => {
+    
     requestAnimationFrame(animate);
 
     if (globeRef.current) globeRef.current.rotation.y += 0.00000727;
@@ -1068,7 +1107,7 @@ scene.add(stars);
       mountRef.current.removeChild(renderer.domElement);
     }
   };  
-}, []); // ✅ Runs only once!
+}, [is3DEnabled]); // ✅ Runs only once!
 
 
 const [realTimeData, setRealTimeData] = useState({
@@ -1135,7 +1174,7 @@ const [realTimeData, setRealTimeData] = useState({
     intervalRef.current = setInterval(updateInfoBox, 1000); // ✅ Update every second
 
     return () => clearInterval(intervalRef.current); // ✅ Clean up on unmount
-  }, [selectedSatellite]);
+  }, [selectedSatellite,is3DEnabled]);
 
 // ✅ Separate useEffect for Tracking (Fixes tracking while keeping satellites visible)
 useEffect(() => {
@@ -1154,7 +1193,7 @@ useEffect(() => {
   const interval = setInterval(trackSatellite, 15);
 
   return () => clearInterval(interval);
-}, [isTracking, selectedSatellite]); // ✅ Runs only when tracking state or satellite selection changes
+}, [isTracking, selectedSatellite,is3DEnabled]); // ✅ Runs only when tracking state or satellite selection changes
 
 
 
@@ -1178,7 +1217,7 @@ useEffect(() => {
   return () => {
     document.removeEventListener("pointerdown", handleUserInteraction);
   };
-}, [isTracking]);
+}, [isTracking, is3DEnabled]);
 
 
 
@@ -1250,6 +1289,10 @@ const FilterButton = ({ filter }) => (
     {filter.label}
   </button>
 );
+
+
+
+
 
 
 
@@ -1357,36 +1400,23 @@ return (
 
 </div>
 
-      {/* 🌍 3D UI + Sidebar + Info Box Sticking Together */}
-      <div className="relative flex-1 flex flex-col">
-        
-        {/* 3D UI - Stays Fixed */}
-        <div 
-          className="relative w-full h-[100vh] cursor-pointer"
-          onClick={enableInteraction} // ✅ Click to enable controls
-        >
-          <div ref={mountRef} className="absolute top-0 left-0 w-full h-full" />
+{/* 🌍 3D UI + Sidebar + Info Box Sticking Together */}
 
-          {!isInteractionEnabled && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-lg text-white text-lg font-medium tracking-wide transition-opacity duration-300 animate-fadeIn">
-              
-              {/* Rotating Circle with Centered Text */}
-              <div className="relative flex items-center justify-center w-40 h-40 rounded-full">
-                
-                {/* Rotating Perimeter */}
-                <div className="absolute w-52 h-52 border-4 border-transparent border-t-teal-400 border-r-teal-400 rounded-full animate-spin-slow"></div>
+<div className="relative flex-1 flex flex-col">
+      <div
+        className="relative w-full h-[100vh] cursor-pointer"
+        onClick={() => setIs3DEnabled(true)}
+      >
+        <div ref={mountRef} className="absolute top-0 left-0 w-full h-full" />
 
-                {/* Unlock Text Inside the Circle */}
-                <div className="w-40 h-40 flex items-center justify-center text-center border border-gray-400 rounded-full bg-gray-900 bg-opacity-80 shadow-lg hover:bg-opacity-100 transition-all duration-200 animate-pulse">
-                  Activate 3D Control System
-                </div>
-
-              </div>
-            </div>
-          )}
-        </div>
-
-
+        {!is3DEnabled && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-black via-gray-900 to-black text-white text-xl font-bold tracking-wide transition-opacity duration-300 animate-fadeIn">
+            <div className="text-4xl mb-4 animate-pulse">Welcome to Sat-Track</div>
+            <div className="text-lg text-gray-400">Tap to Enter</div>
+          </div>
+        )}
+      </div>
+   
 
 
 {/* 📌 Active Filters UI (Fix: Positioned Relative to 3D UI) */}

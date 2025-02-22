@@ -92,6 +92,7 @@ const Infographics = ({ activeFilters }) => {
           </div>
         ))}
 
+
         {/* ✅ Fill last row with placeholders if needed */}
         {Array.from({ length: itemsToAdd }).map((_, idx) => (
           <div key={`placeholder-${idx}`} className="flex flex-col items-center w-full">
