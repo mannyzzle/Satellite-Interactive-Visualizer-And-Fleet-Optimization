@@ -21,14 +21,28 @@ export default function Navbar({ toggleLiveTracking, isLiveTracking }) {
 
         {/* 🚀 App Logo & Title */}
         <div className="flex items-center space-x-3">
-          {/* Custom Satellite Icon (Hovering Animation) */}
-          <div className="w-6 h-6 bg-teal-300 rounded-full animate-bounce"></div>
+          {/* 🌍 Animated Spinning Globe Icon */}
+          <div className="relative w-8 h-8">
+            <svg
+              className="w-full h-full animate-rotateGlobe"
+              viewBox="0 0 100 100"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <circle cx="50" cy="50" r="40" stroke="teal" strokeWidth="5" fill="none" />
+              <line x1="50" y1="10" x2="50" y2="90" stroke="teal" strokeWidth="3" />
+              <line x1="10" y1="50" x2="90" y2="50" stroke="teal" strokeWidth="3" />
+              <path d="M 10 50 Q 50 90, 90 50" stroke="teal" strokeWidth="3" fill="none" />
+              <path d="M 10 50 Q 50 10, 90 50" stroke="teal" strokeWidth="3" fill="none" />
+            </svg>
+          </div>
 
           {/* App Title */}
           <h1 className="text-xl md:text-2xl font-medium tracking-wide">
             Sat-Track
           </h1>
         </div>
+
+
 
         {/* 📱 Mobile Menu Toggle */}
         <button 
@@ -157,3 +171,18 @@ export default function Navbar({ toggleLiveTracking, isLiveTracking }) {
     </nav>
   );
 }
+
+
+
+/* 🔄 Custom Animation for Rotating Globe */
+<style>
+  {`
+  @keyframes rotateGlobe {
+    0% { transform: rotateY(0deg); }
+    100% { transform: rotateY(360deg); }
+  }
+  .animate-rotateGlobe {
+    animation: rotateGlobe 5s linear infinite;
+  }
+  `}
+</style>

@@ -1,4 +1,5 @@
-# /backend/api/satellites.py
+#api/satellites.py
+
 
 from fastapi import APIRouter, HTTPException, Query
 from app.database import get_db_connection
@@ -6,13 +7,11 @@ import math
 
 router = APIRouter()
 
-
 def sanitize_value(value):
     """Replace NaN and Infinity with None for JSON serialization"""
     if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
         return None
     return value
-
 
 @router.get("/")
 def get_all_satellites(
@@ -26,6 +25,7 @@ def get_all_satellites(
 
     try:
         print("🔍 Fetching total satellite count...")
+        
         if filter:
             cursor.execute(f"SELECT COUNT(*) AS count FROM satellites WHERE {get_filter_condition(filter)}")
         else:
@@ -38,6 +38,7 @@ def get_all_satellites(
         total_count = result["count"]
         print(f"✅ Total satellites found: {total_count}")
 
+        # ✅ Query satellites sorted by `launch_date DESC`
         query = """
             SELECT id, name, norad_number, orbit_type, inclination, velocity, 
                    latitude, longitude, bstar, rev_num, ephemeris_type, 
@@ -48,15 +49,12 @@ def get_all_satellites(
             FROM satellites
         """
 
+        # ✅ Apply filter if provided
         if filter:
             query += f" WHERE {get_filter_condition(filter)}"
 
-        # ✅ Move ORDER BY launch_date DESC outside of WHERE
-        if filter == "Recent Launches":
-            query += " ORDER BY launch_date DESC"
-        else:
-            query += " ORDER BY id"
-
+        # ✅ Order results by `launch_date DESC`
+        query += " ORDER BY launch_date DESC"
 
         query += " LIMIT %s OFFSET %s"
         cursor.execute(query, (limit, offset))
@@ -112,9 +110,8 @@ def get_all_satellites(
         conn.close()
 
 
-
-
 def get_filter_condition(filter):
+    """Generate SQL filter conditions based on the selected filter."""
     filter_conditions = {
         # 🌍 Orbital Regions
         "LEO": "orbit_type = 'LEO'",
@@ -148,7 +145,7 @@ def get_filter_condition(filter):
         "Decayed": "decay_date IS NOT NULL",
         "Active Satellites": "decay_date IS NULL"
     }
-    
+
     conditions = []
     launch_years = []  # Store multiple launch years
     countries = []  # Store multiple country selections
@@ -179,7 +176,6 @@ def get_filter_condition(filter):
         conditions.append(f"country IN ({', '.join(countries)})")
 
     return " AND ".join(conditions) if conditions else "1=1"  # Default: No filter applied
-
 
 
 

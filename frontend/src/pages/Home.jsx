@@ -39,6 +39,7 @@ export default function Home() {
   const satelliteObjectsRef = useRef({}); // ✅ Use a ref for real-time updates
   const [selectedSatellite, setSelectedSatellite] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingComplete, setLoadingComplete] = useState(false);
   const [page, setPage] = useState(1); // 🚀 Current page of satellites
   const [satellites, setSatellites] = useState([]);
   const [limit, setLimit] = useState(100);
@@ -409,26 +410,64 @@ const focusOnSatellite = useCallback((sat) => {
 
 
 
+const toggleFilter = async (filterType) => {
+  if (!is3DEnabled) return;
+  console.log(`🔍 Selecting filter: ${filterType}`);
 
+  setActiveFilters([filterType]); // ✅ Only one active filter at a time
+  setPage(1); // ✅ Reset pagination
+  window.scrollTo({ top: 0, behavior: "smooth" });
 
+  setLoading(true); // ✅ Show loading screen
 
+  try {
+      resetMarker(); // ✅ Remove previous marker
+      await removeAllSatelliteModels(); // ✅ Clear satellites
+      await removeAllOrbitPaths(); // ✅ Clear orbits
 
-  const toggleFilter = async (filterType) => {
-    if (!is3DEnabled) return;
-    console.log(`🔍 Selecting filter: ${filterType}`);
-  
-    setActiveFilters([filterType]); // ✅ Only one active filter at a time
-  
-    setPage(1); // ✅ Reset pagination
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  
-    setSatellites([]); // ✅ Clear previous satellite models
-    setFilteredSatellites([]); // ✅ Clear sidebar list
-    removeAllSatelliteModels(); // ✅ Remove old Three.js models
-  
-    fetchAndUpdateSatellites([filterType], 1); // ✅ Fetch satellites for new filter
-  };
-  
+      setSatellites([]);
+      setFilteredSatellites([]);
+
+      await new Promise((resolve) => setTimeout(resolve, 2000)); // ⏳ 2s delay for full cleanup
+      await fetchAndUpdateSatellites([filterType], 1); // ✅ Fetch satellites
+  } catch (error) {
+      console.error("❌ Error applying filter:", error);
+  } finally {
+      setTimeout(() => setLoading(false), 2500); // ⏳ Extra delay to ensure scene is fully updated
+  }
+};
+
+const changePage = async (newPage) => {
+  if (!is3DEnabled) return;
+  if (newPage < 1 || loading) return;
+
+  console.log(`📡 Changing to page ${newPage}...`);
+  setLoading(true); // ✅ Show loading screen
+  setPage(newPage);
+
+  try {
+      resetMarker(); // ✅ Remove previous marker
+      await removeAllSatelliteModels(); // ✅ Clear satellites
+      await removeAllOrbitPaths(); // ✅ Clear orbits
+
+      await new Promise((resolve) => setTimeout(resolve, 2500)); // ⏳ Extra delay for cleanup
+      const data = await fetchSatellites(newPage, limit, activeFilters.length > 0 ? activeFilters.join(",") : null);
+
+      if (data?.satellites?.length) {
+          const limitedSatellites = data.satellites.slice(0, 100);
+          setFilteredSatellites(limitedSatellites);
+          setSatellites(limitedSatellites);
+          updateSceneWithFilteredSatellites(limitedSatellites);
+      } else {
+          console.warn("⚠️ No satellites found for page.");
+          setFilteredSatellites([]);
+      }
+  } catch (error) {
+      console.error("❌ Error fetching new page:", error);
+  } finally {
+      setTimeout(() => setLoading(false), 3000); // ⏳ Extra delay before hiding loading screen
+  }
+};
 
 
 
@@ -729,41 +768,6 @@ useEffect(() => {
 
 
 
-
-const changePage = async (newPage) => {
-  if (!is3DEnabled) return;
-  if (newPage < 1 || loading) return;
-
-  console.log(`📡 Changing to page ${newPage}...`);
-  setLoading(true);
-  setPage(newPage);
-
-  try {
-      resetMarker(); // ✅ Remove previous selection
-
-      // ✅ **Ensure FULL Scene Cleanup Before Fetching New Data**
-      await removeAllSatelliteModels(); // 🔥 Ensure complete removal
-      await removeAllOrbitPaths(); // 🔥 Orbit cleanup
-
-      const data = await fetchSatellites(newPage, limit, activeFilters.length > 0 ? activeFilters.join(",") : null);
-
-      if (data?.satellites?.length) {
-          const limitedSatellites = data.satellites.slice(0, 100);
-          
-          setFilteredSatellites(limitedSatellites);
-          setSatellites(limitedSatellites);
-          
-          updateSceneWithFilteredSatellites(limitedSatellites);
-      } else {
-          console.warn("⚠️ No satellites found for page.");
-          setFilteredSatellites([]);
-      }
-  } catch (error) {
-      console.error("❌ Error fetching new page:", error);
-  } finally {
-      setLoading(false);
-  }
-};
 
 
 
@@ -1298,209 +1302,283 @@ const FilterButton = ({ filter }) => (
 
 
 
-
-
 return (
-  <div className="flex flex-col min-h-screen w-screen overflow-hidden">
+  <div className="flex flex-col min-h-screen w-screen overflow-hidden border-gray-950">
     {/* 📌 Navbar */}
     <Navbar />
 
-
     {/* 🌍 Main Layout: Sidebar + 3D UI */}
     <div className="relative flex flex-1">
+      
+      {/* 🌍 3D UI + Sidebar + Info Box (All Together) */}
+      <div className="relative flex-1 flex border-[50px] border-gray-950 shadow-2xl overflow-hidden">
 
-{/* 📌 Sidebar (Satellite List, Search & Pagination) */}
-<div className="relative flex flex-col h-[90vh]">
-  <div
-    className={`absolute top-20 left-0 h-[80vh] bg-gray-900 bg-opacity-90 backdrop-blur-md text-white p-4 shadow-xl border-r border-gray-700 transition-transform duration-300 ease-in-out w-60 md:w-1/8 z-40 rounded-r-xl ${
-      sidebarOpen ? "translate-x-0" : "-translate-x-full"
-    }`}
-  >
-    {/* 🛰️ Sidebar Header */}
-    <h2 className="text-lg font-bold mb-3 text-center border-b border-gray-700 pb-2">Satellite List</h2>
+        {/* 📌 Sidebar (Hidden Until Unlocked) */}
+        {is3DEnabled && (
+          <div
+            className={`absolute top-1/2 left-0 transform -translate-y-1/2 ${
+              window.innerWidth < 768 ? "h-[60vh] w-40" : "h-[70vh] w-48"
+            } bg-gray-900 bg-opacity-90 backdrop-blur-md text-white p-3 shadow-xl border-r border-gray-700 rounded-r-xl transition-all duration-300 ease-in-out z-50 ${
+              sidebarOpen ? "translate-x-0" : "-translate-x-48"
+            }`}
+          >
+            {/* 🛰️ Sidebar Header */}
+            <h2 className="text-md font-bold mb-2 text-center border-b border-gray-700 pb-1">
+              Satellites
+            </h2>
 
-    {/* 🔍 Search Input */}
-    <input
-      type="text"
-      placeholder="🔍 Search satellites..."
-      value={searchQuery}
-      onChange={(e) => setSearchQuery(e.target.value)}
-      className="w-full p-2 mb-3 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-600 shadow-sm"
-    />
-{/* 🚀 Satellite List (Two Columns) */}
-<div className="overflow-y-auto max-h-[50vh] pr-2">
-  {loading ? (
-    <p className="text-center text-gray-400">Loading...</p>
-  ) : displayedSatellites.length === 0 ? (
-    <p className="text-center text-yellow-400 font-semibold">⚠️ No satellites available</p>
-  ) : (
-    <ul className="grid grid-cols-2 gap-2"> {/* ✅ Two-column grid layout */}
-      {displayedSatellites.map((sat) => (
-        <li
-          key={sat.norad_number}
-          className={`cursor-pointer p-3 rounded-md text-center border border-gray-700 shadow-sm transition-all duration-200 ${
-            selectedSatellite?.norad_number === sat.norad_number
-              ? "bg-teal-500 text-white border-teal-500 shadow-md"
-              : "bg-gray-800 hover:bg-gray-700"
-          }`}
-          onClick={() => {
-            console.log(`📡 Selecting satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
-            focusOnSatellite(sat);
-            enableInteraction();
-          }}
-        >
-          <span className="block w-full">
-            {sat.name} {getCountryFlag(sat.country)}
-          </span>
-        </li>
-      ))}
-    </ul>
+            {/* 🔍 Search Input */}
+            <input
+              type="text"
+              placeholder="🔍 Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full p-1 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-600 shadow-sm text-sm"
+            />
+
+            {/* 🚀 Satellite List (Two Columns) */}
+            <div className="overflow-y-auto max-h-[40vh] mt-2">
+              {loading ? (
+                <p className="text-center text-gray-400 text-sm">Loading...</p>
+              ) : displayedSatellites.length === 0 ? (
+                <p className="text-center text-yellow-400 font-semibold text-sm">
+                  ⚠️ No satellites
+                </p>
+              ) : (
+                <ul className="grid grid-cols-2 gap-1">
+                  {displayedSatellites.map((sat) => (
+                    <li
+                      key={sat.norad_number}
+                      className={`cursor-pointer p-2 rounded-md text-center border border-gray-700 shadow-sm transition-all duration-200 text-xs ${
+                        selectedSatellite?.norad_number === sat.norad_number
+                          ? "bg-teal-500 text-white border-teal-500 shadow-md"
+                          : "bg-gray-800 hover:bg-gray-700"
+                      }`}
+                      onClick={() => {
+                        console.log(`📡 Selecting satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
+                        focusOnSatellite(sat);
+                        enableInteraction();
+                      }}
+                    >
+                      <span className="block w-full">
+                        {sat.name} {getCountryFlag(sat.country)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          {/* 🌍 Pagination Controls (Now Includes Total Pages) */}
+          {total > limit && (
+              <div className="flex flex-col items-center mt-3 border-t border-gray-700 pt-3">
+                <span className="text-xs text-gray-300 mb-2">
+                  Page {page} of {Math.ceil(total / limit)}
+                </span>
+                <div className="flex justify-between w-full">
+                  <button
+                    onClick={() => changePage(page - 1)}
+                    disabled={page === 1 || loading}
+                    className={`px-3 py-1 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
+                      page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
+                  >
+                    ← Prev
+                  </button>
+
+                  <button
+                    onClick={() => changePage(page + 1)}
+                    disabled={loading || page * limit >= total}
+                    className={`px-3 py-1 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
+                      loading || satellites.length < limit ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+
+        {/* 📌 Sidebar Toggle (Fixed Position & Now Responsive) */}
+        {is3DEnabled && (
+          <button
+            onClick={() => setSidebarOpen((prev) => !prev)}
+            className={`absolute top-1/2 transform -translate-y-1/2 bg-gray-800 text-white px-3 py-4 rounded-r-lg shadow-md hover:bg-gray-700 transition-all duration-300 z-[100] ${
+              sidebarOpen ? "left-[12rem]" : "left-0"
+            }`}
+          >
+            {sidebarOpen ? "←" : "→"}
+          </button>
+        )}
+
+        {/* 🌍 3D UI Scene (Now Adaptive for Mobile with Spinning Globe) */}
+<div
+  className={`relative flex-1 ${window.innerWidth < 768 ? "h-[75vh]" : "h-[90vh]"} cursor-pointer`}
+  onClick={() => setIs3DEnabled(true)}
+>
+  <div ref={mountRef} className="absolute top-0 left-0 w-full h-full" />
+
+  {/* 🔄 Cool Loading Screen (Appears During Fetching) */}
+  {loading && (
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-80 text-white z-[100]">
+      <div className="flex flex-col items-center">
+        {/* 🔄 Spinning Loader */}
+        <div className="w-12 h-12 border-t-4 border-b-4 border-teal-400 rounded-full animate-spin"></div>
+
+        {/* 🛰️ Animated Loading Text */}
+        <div className="mt-4 text-lg font-bold animate-pulse">Loading Data...</div>
+      </div>
+    </div>
+  )}
+
+  {/* 🌍 Welcome Screen with Animated Globe */}
+  {!is3DEnabled && !loading && (
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center 
+      bg-gradient-to-br from-black via-gray-900 to-black text-white 
+      text-xl font-bold tracking-wide transition-opacity duration-300 
+      animate-fadeIn"
+    >
+      {/* 🛰️ Spinning Globe Icon */}
+      <div className="relative w-24 h-24 mb-4">
+        <div className="absolute inset-0 flex items-center justify-center">
+          <svg
+            className="w-full h-full animate-rotateGlobe"
+            viewBox="0 0 100 100"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <circle cx="50" cy="50" r="40" stroke="teal" strokeWidth="5" fill="none" />
+            <line x1="50" y1="10" x2="50" y2="90" stroke="teal" strokeWidth="3" />
+            <line x1="10" y1="50" x2="90" y2="50" stroke="teal" strokeWidth="3" />
+            <path
+              d="M 10 50 Q 50 90, 90 50"
+              stroke="teal"
+              strokeWidth="3"
+              fill="none"
+            />
+            <path
+              d="M 10 50 Q 50 10, 90 50"
+              stroke="teal"
+              strokeWidth="3"
+              fill="none"
+            />
+          </svg>
+        </div>
+      </div>
+
+      <div className={`${window.innerWidth < 768 ? "text-2xl" : "text-4xl"} mb-4 animate-pulse`}>
+        Welcome to Sat-Track
+      </div>
+      <div className={`${window.innerWidth < 768 ? "text-sm" : "text-lg"} text-gray-400`}>
+        Tap to Enter
+      </div>
+    </div>
   )}
 </div>
 
+{/* 🔄 Custom Animation for Rotating Globe */}
+<style>
+  {`
+  @keyframes rotateGlobe {
+    0% { transform: rotateY(0deg); }
+    100% { transform: rotateY(360deg); }
+  }
+  .animate-rotateGlobe {
+    animation: rotateGlobe 5s linear infinite;
+  }
+  `}
+</style>
 
-    {/* 🌍 Pagination Controls */}
-    {(total > limit) && (
-      <div className="flex justify-between items-center mt-4 border-t border-gray-700 pt-3">
-        <button
-          onClick={() => changePage(page - 1)}
-          disabled={page === 1 || loading}
-          className={`px-4 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-            page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
-          }`}
-        >
-          ← Prev
-        </button>
-
-        <span className="text-sm text-gray-300">Page {page}</span>
-
-        <button
-          onClick={() => changePage(page + 1)}
-          disabled={loading || page * limit >= total}
-          className={`px-4 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-            loading || satellites.length < limit ? "opacity-50 cursor-not-allowed" : ""
-          }`}
-        >
-          Next →
-        </button>
-      </div>
-    )}
-  </div>
-
-  {/* 📌 Sidebar Toggle */}
-  <button
-  onClick={() => setSidebarOpen((prev) => !prev)}
-  className={`absolute top-1/2 transform -translate-y-1/2 bg-gray-800 text-white px-2 py-12 rounded-lg shadow-md hover:bg-gray-700 transition-all duration-300 z-50 ${
-    sidebarOpen ? "left-[15rem] md:left-1/6" : "left-0"
-  }`}
->
-  {sidebarOpen ? "←" : "→"}
-</button>
-
-
-</div>
-
-{/* 🌍 3D UI + Sidebar + Info Box Sticking Together */}
-
-<div className="relative flex-1 flex flex-col">
-      <div
-        className="relative w-full h-[100vh] cursor-pointer"
-        onClick={() => setIs3DEnabled(true)}
-      >
-        <div ref={mountRef} className="absolute top-0 left-0 w-full h-full" />
-
-        {!is3DEnabled && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-black via-gray-900 to-black text-white text-xl font-bold tracking-wide transition-opacity duration-300 animate-fadeIn">
-            <div className="text-4xl mb-4 animate-pulse">Welcome to Sat-Track</div>
-            <div className="text-lg text-gray-400">Tap to Enter</div>
-          </div>
-        )}
-      </div>
-   
-
-
-{/* 📌 Active Filters UI (Fix: Positioned Relative to 3D UI) */}
-<div className="absolute top-24 right-6 bg-gray-900 text-white p-3 rounded-md shadow-lg text-xs z-50">
-    <h3 className="text-sm font-semibold text-gray-300">Active Filters:</h3>
-    {activeFilters.length > 0 ? (
-      <ul className="mt-1 space-y-1">
-        {activeFilters.map((filter, index) => (
-          <li key={index} className="text-teal-300 flex items-center">
-            • {filter}
-            <button
-              className="ml-2 text-red-500 hover:text-red-700"
-              onClick={() => toggleFilter(filter)}
-            >
-              ✖
-            </button>
-          </li>
-        ))}
-      </ul>
-    ) : (
-      <p className="text-gray-400">None</p>
-    )}
-  </div>
-
-
-  <div className="absolute bottom-6 right-6 bg-gray-950 text-yellow-300 p-3 shadow-lg text-xs border-l border-yellow-500 flex flex-col items-center w-56 max-h-[85vh] overflow-hidden z-[50] transition-all duration-300 ease-in-out">
-      {!selectedSatellite ? (
-        <div className="flex items-center justify-center h-full text-yellow-400 font-semibold text-center px-3">
-          <p>Select a satellite for real-time tracking</p>
+{/* 📌 Active Filters UI */}
+{is3DEnabled && (
+        <div className="absolute top-24 right-6 bg-gray-900 text-white p-3 rounded-md shadow-lg text-xs z-50">
+          <h3 className="text-sm font-semibold text-gray-300">Active Filters:</h3>
+          {activeFilters.length > 0 ? (
+            <ul className="mt-1 space-y-1">
+              {activeFilters.map((filter, index) => (
+                <li key={index} className="text-teal-300 flex items-center">
+                  • {filter}
+                  <button
+                    className="ml-2 text-red-500 hover:text-red-700"
+                    onClick={() => toggleFilter(filter)}
+                  >
+                    ✖
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-gray-400">None</p>
+          )}
         </div>
-      ) : (
-        <>
-          {/* ✅ Satellite Header */}
-          <div className="w-full text-center border-b border-yellow-500 pb-2">
-            <div className="text-sm font-bold text-yellow-400 truncate">{selectedSatellite.name}</div>
-            <div className="text-xs flex items-center justify-center mt-1 space-x-1">
-              <span className="text-lg">{getCountryFlag(selectedSatellite.country)}</span>
-              <span>{getCountryName(selectedSatellite.country)}</span>
-            </div>
-          </div>
-
-          {/* ✅ Real-Time Data (Updated Every Second) */}
-          <div className="flex flex-col w-full text-center space-y-2 py-2">
-            <div>
-              <span className="text-yellow-500 text-[10px] font-semibold uppercase">Velocity</span>
-              <div className="text-xs">{realTimeData.velocity} km/s</div>
-            </div>
-            <div>
-              <span className="text-yellow-500 text-[10px] font-semibold uppercase">Altitude</span>
-              <div className="text-xs">{realTimeData.altitude} km</div>
-            </div>
-            <div>
-              <span className="text-yellow-500 text-[10px] font-semibold uppercase">Position</span>
-              <div className="text-xs">
-                {realTimeData.latitude}°, {realTimeData.longitude}°
-              </div>
-            </div>
-          </div>
-
-          {/* ✅ Categorical Data (Static, but Useful for Context) */}
-          <div className="flex flex-col w-full border-t border-yellow-500 pt-2 space-y-2">
-            <div>
-              <span className="text-yellow-500 text-[10px] font-semibold uppercase">NORAD ID</span>
-              <div className="text-xs">{selectedSatellite.norad_number}</div>
-            </div>
-            <div>
-              <span className="text-yellow-500 text-[10px] font-semibold uppercase">Orbit Type</span>
-              <div className="text-xs">{selectedSatellite.orbit_type}</div>
-            </div>
-            <div>
-              <span className="text-yellow-500 text-[10px] font-semibold uppercase">Purpose</span>
-              <div className="text-xs">{selectedSatellite.purpose || "Unknown"}</div>
-            </div>
-            <div>
-              <span className="text-yellow-500 text-[10px] font-semibold uppercase">Launch Date</span>
-              <div className="text-xs">{selectedSatellite.launch_date ? new Date(selectedSatellite.launch_date).toLocaleDateString() : "N/A"}</div>
-            </div>
-          </div>
-        </>
       )}
-    </div>
-</div>
-</div>
+      
+{/* 📌 Info Box (Fully Responsive & Mobile-Friendly) */}
+{is3DEnabled && (
+  <div
+    className={`absolute bottom-3 sm:bottom-6 ${
+      window.innerWidth < 768 ? "left-1/2 transform -translate-x-1/2 w-[90%]" : "right-6 w-64"
+    } bg-gray-900 bg-opacity-90 text-yellow-300 p-3 sm:p-4 shadow-2xl text-xs sm:text-sm border-l-4 border-yellow-500 flex flex-col items-center max-h-[70vh] sm:max-h-[85vh] overflow-hidden rounded-lg z-[50] transition-all duration-300 ease-in-out`}
+  >
+    {!selectedSatellite ? (
+      <div className="flex flex-col items-center justify-center h-full text-yellow-400 font-semibold text-center px-3 sm:px-4 py-4 sm:py-6">
+        <span className="text-2xl sm:text-3xl">📡</span>
+        <p className="mt-2 text-sm sm:text-base">Select a satellite for real-time tracking</p>
+      </div>
+    ) : (
+      <>
+        {/* ✅ Satellite Header */}
+        <div className="w-full text-center border-b border-yellow-500 pb-2 sm:pb-3">
+          <div className="text-base sm:text-lg font-bold text-yellow-400 truncate">{selectedSatellite.name}</div>
+          <div className="text-xs sm:text-sm flex items-center justify-center mt-1 space-x-1 sm:space-x-2">
+            <span className="text-lg sm:text-xl">{getCountryFlag(selectedSatellite.country)}</span>
+            <span>{getCountryName(selectedSatellite.country)}</span>
+          </div>
+        </div>
 
+        {/* ✅ Real-Time Data (Smooth Updates) */}
+        <div className="flex flex-col w-full text-center space-y-2 sm:space-y-3 py-2 sm:py-3 animate-fadeIn">
+          <div className="flex justify-between w-full">
+            <span className="text-yellow-500 text-[10px] sm:text-xs font-semibold uppercase">Velocity</span>
+            <span className="text-xs sm:text-sm">{realTimeData.velocity} km/s</span>
+          </div>
+          <div className="flex justify-between w-full">
+            <span className="text-yellow-500 text-[10px] sm:text-xs font-semibold uppercase">Altitude</span>
+            <span className="text-xs sm:text-sm">{realTimeData.altitude} km</span>
+          </div>
+          <div className="flex justify-between w-full">
+            <span className="text-yellow-500 text-[10px] sm:text-xs font-semibold uppercase">Position</span>
+            <span className="text-xs sm:text-sm">{realTimeData.latitude}°, {realTimeData.longitude}°</span>
+          </div>
+        </div>
+
+        {/* ✅ Additional Details (Compact & Structured) */}
+        <div className="flex flex-col w-full border-t border-yellow-500 pt-2 sm:pt-3 space-y-2 sm:space-y-3">
+          <div className="flex justify-between w-full">
+            <span className="text-yellow-500 text-[10px] sm:text-xs font-semibold uppercase">NORAD ID</span>
+            <span className="text-xs sm:text-sm">{selectedSatellite.norad_number}</span>
+          </div>
+          <div className="flex justify-between w-full">
+            <span className="text-yellow-500 text-[10px] sm:text-xs font-semibold uppercase">Orbit Type</span>
+            <span className="text-xs sm:text-sm">{selectedSatellite.orbit_type}</span>
+          </div>
+          <div className="flex justify-between w-full">
+            <span className="text-yellow-500 text-[10px] sm:text-xs font-semibold uppercase">Purpose</span>
+            <span className="text-xs sm:text-sm">{selectedSatellite.purpose || "Unknown"}</span>
+          </div>
+          <div className="flex justify-between w-full">
+            <span className="text-yellow-500 text-[10px] sm:text-xs font-semibold uppercase">Launch Date</span>
+            <span className="text-xs sm:text-sm">{selectedSatellite.launch_date ? new Date(selectedSatellite.launch_date).toLocaleDateString() : "N/A"}</span>
+          </div>
+        </div>
+      </>
+    )}
+  </div>
+)}
+ </div>
+ </div>
 
 
  {/* 🛰️ Filter Section Below 3D UI */}
