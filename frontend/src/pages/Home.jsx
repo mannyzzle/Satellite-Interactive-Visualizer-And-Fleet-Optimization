@@ -80,6 +80,8 @@ export default function Home() {
 
 
   
+
+
   function computeSatellitePosition(satellite, time) {
     const { tle_line1, tle_line2 } = satellite;
     
@@ -103,6 +105,8 @@ export default function Home() {
   }
 
 
+
+  
   
   const addOrbitPaths = () => {
     console.log("🛰️ Updating orbit paths...");
@@ -1179,6 +1183,10 @@ const [realTimeData, setRealTimeData] = useState({
 
     return () => clearInterval(intervalRef.current); // ✅ Clean up on unmount
   }, [selectedSatellite,is3DEnabled]);
+
+
+
+
 
 // ✅ Separate useEffect for Tracking (Fixes tracking while keeping satellites visible)
 useEffect(() => {

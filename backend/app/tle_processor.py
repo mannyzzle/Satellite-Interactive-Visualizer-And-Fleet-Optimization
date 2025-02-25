@@ -897,103 +897,92 @@ def get_max_norad_number():
 
 
 
-def fetch_all_spacetrack_norads(session, batch_size=500):
+
+def fetch_new_payload_norads(session, max_norad):
     """
-    Fetches all NORAD numbers available on Space-Track.
-    Returns a set of NORAD numbers.
+    Fetches NORAD numbers **ONLY for new payload satellites**
+    that have NORAD numbers greater than max_norad.
+    Returns a set of new NORAD numbers.
     """
     spacetrack_url = f"https://www.space-track.org/basicspacedata/query/class/satcat/format/json"
-    all_norads = set()
 
-    print("📡 Fetching all NORAD numbers from Space-Track...")
+    print(f"📡 Fetching new payload satellites with NORAD > {max_norad}...")
 
     response = rate_limited_get(session, spacetrack_url)
 
+    new_norads = set()
+
     if response.status_code == 200 and response.json():
         for metadata in response.json():
+            try:
+                norad_number = int(metadata.get("NORAD_CAT_ID", -1))
+                
+                # ✅ Only add NORADs greater than max_norad
+                if norad_number > max_norad:
+                    new_norads.add(norad_number)
+            except Exception as e:
+                print(f"⚠️ Error processing NORAD {metadata.get('NORAD_CAT_ID', 'Unknown')}: {e}")
+
+        print(f"✅ Successfully found {len(new_norads)} new payload NORADs.")
+    else:
+        print(f"❌ API error {response.status_code} while fetching new payload NORADs.")
+
+    return new_norads
+
+
+
+
+
+
+def fetch_missing_gp_norads(session, existing_norads):
+    """
+    Fetches all NORAD numbers from both SATCAT (metadata) and GP-class (TLEs).
+    Returns a set of new NORAD numbers that are NOT in the database.
+    """
+    satcat_url = "https://www.space-track.org/basicspacedata/query/class/satcat/format/json"
+    gp_url = "https://www.space-track.org/basicspacedata/query/class/gp/format/json"
+
+    all_norads = set()
+
+    print("📡 Fetching all SATCAT and GP-class NORAD numbers from Space-Track...")
+
+    # ✅ Fetch SATCAT NORADs
+    response_satcat = rate_limited_get(session, satcat_url)
+    if response_satcat.status_code == 200 and response_satcat.json():
+        for metadata in response_satcat.json():
             try:
                 norad_number = int(metadata.get("NORAD_CAT_ID", -1))
                 if norad_number > 0:
                     all_norads.add(norad_number)
             except Exception as e:
-                print(f"⚠️ Error processing NORAD {metadata.get('NORAD_CAT_ID', 'Unknown')}: {e}")
-    
-        print(f"✅ Successfully fetched {len(all_norads)} NORAD numbers from Space-Track.")
-    else:
-        print(f"❌ API error {response.status_code} while fetching NORAD numbers.")
+                print(f"⚠️ Error processing SATCAT NORAD {metadata.get('NORAD_CAT_ID', 'Unknown')}: {e}")
 
-    return all_norads
-
-
-
-
-
-
-def fetch_new_payload_norads(session, max_norad):
-    """
-    Fetches NORAD numbers **ONLY for new payload satellites**
-    that have NORAD numbers greater than max_norad.
-    Returns a set of new NORAD numbers.
-    """
-    spacetrack_url = f"https://www.space-track.org/basicspacedata/query/class/satcat/format/json"
-
-    print(f"📡 Fetching new payload satellites with NORAD > {max_norad}...")
-
-    response = rate_limited_get(session, spacetrack_url)
-
-    new_norads = set()
-
-    if response.status_code == 200 and response.json():
-        for metadata in response.json():
+    # ✅ Fetch GP-class NORADs
+    response_gp = rate_limited_get(session, gp_url)
+    if response_gp.status_code == 200 and response_gp.json():
+        for metadata in response_gp.json():
             try:
                 norad_number = int(metadata.get("NORAD_CAT_ID", -1))
-                
-                # ✅ Only add NORADs greater than max_norad
-                if norad_number > max_norad:
-                    new_norads.add(norad_number)
+                if norad_number > 0:
+                    all_norads.add(norad_number)  # ✅ Ensure GP-class NORADs are also considered
             except Exception as e:
-                print(f"⚠️ Error processing NORAD {metadata.get('NORAD_CAT_ID', 'Unknown')}: {e}")
+                print(f"⚠️ Error processing GP-class NORAD {metadata.get('NORAD_CAT_ID', 'Unknown')}: {e}")
 
-        print(f"✅ Successfully found {len(new_norads)} new payload NORADs.")
-    else:
-        print(f"❌ API error {response.status_code} while fetching new payload NORADs.")
+    # ✅ Identify new NORADs by subtracting existing ones
+    new_norads = all_norads - existing_norads
 
+    print(f"✅ Found {len(new_norads)} new GP-class and SATCAT NORADs not in the database.")
     return new_norads
 
 
 
 
 
-def fetch_new_payload_norads(session, max_norad):
-    """
-    Fetches NORAD numbers **ONLY for new payload satellites**
-    that have NORAD numbers greater than max_norad.
-    Returns a set of new NORAD numbers.
-    """
-    spacetrack_url = f"https://www.space-track.org/basicspacedata/query/class/satcat/format/json"
 
-    print(f"📡 Fetching new payload satellites with NORAD > {max_norad}...")
 
-    response = rate_limited_get(session, spacetrack_url)
 
-    new_norads = set()
 
-    if response.status_code == 200 and response.json():
-        for metadata in response.json():
-            try:
-                norad_number = int(metadata.get("NORAD_CAT_ID", -1))
-                
-                # ✅ Only add NORADs greater than max_norad
-                if norad_number > max_norad:
-                    new_norads.add(norad_number)
-            except Exception as e:
-                print(f"⚠️ Error processing NORAD {metadata.get('NORAD_CAT_ID', 'Unknown')}: {e}")
 
-        print(f"✅ Successfully found {len(new_norads)} new payload NORADs.")
-    else:
-        print(f"❌ API error {response.status_code} while fetching new payload NORADs.")
-
-    return new_norads
 
 
 def update_satellite_data():
@@ -1012,7 +1001,6 @@ def update_satellite_data():
 
     # ✅ Fetch existing NORAD numbers
     existing_norads = get_existing_norad_numbers()
-    max_norad = get_max_norad_number()
 
     if not existing_norads:
         print("⚠️ No NORAD numbers found in the database. Skipping update.")
@@ -1072,7 +1060,7 @@ def update_satellite_data():
     print(f"✅ Updated TLE data for {len(existing_tles)} satellites.")
 
     # ✅ Fetch new payload NORADs **ONLY if they are greater than max_norad**
-    new_norads = fetch_new_payload_norads(session, max_norad)
+    new_norads = fetch_missing_gp_norads(session, existing_norads)
     print(f"🚀 Found {len(new_norads)} new payload satellites to be added.")
 
     if not new_norads:
@@ -1126,9 +1114,6 @@ def update_satellite_data():
 
     # ✅ Insert only new satellites (with valid TLEs)
     for sat in tqdm(new_satellites, desc="🚀 Adding new payload satellites"):
-        if "R/B" in sat["name"] or "DEB" in sat["name"]:  # ✅ Skip debris
-            print(f"🗑️ Skipping debris: {sat['name']} (NORAD {sat['norad_number']})")
-            continue
 
         norad = sat.get("norad_number")
 
