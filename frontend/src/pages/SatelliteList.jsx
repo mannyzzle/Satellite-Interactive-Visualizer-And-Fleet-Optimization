@@ -1,148 +1,151 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { fetchSatellites } from "../api/satelliteService";
+import { Link } from "react-router-dom";
 
 export default function SatelliteList() {
   const [satelliteData, setSatelliteData] = useState({});
-  const [categoryPages, setCategoryPages] = useState({});
-  const [loading, setLoading] = useState({});
-  const [error, setError] = useState({});
-  const limit = 100;
+  const [loadingCategories, setLoadingCategories] = useState({});
+  const [error, setError] = useState(null);
+  const limit = 100; // Fetch 100 per category but show 8 at a time
 
-  // ✅ Categories for Filtering
-  const categories = {
-    "🛰️ Recent Launches (Last 30 Days)": "launch_date > NOW() - INTERVAL '30 days'",
-    "📡 Communications": "purpose = 'Communications'",
-    "🛰️ Navigation": "purpose = 'Navigation'",
-    "🌍 Earth Observation": "purpose = 'Earth Observation'",
-    "🌦️ Weather Monitoring": "purpose = 'Weather Monitoring'",
-    "🛡️ Military & Recon": "purpose = 'Military/Reconnaissance'",
-    "🔬 Science & Research": "purpose = 'Scientific Research'",
-    "🚀 Human Spaceflight": "purpose = 'Human Spaceflight'",
-    "🧪 Technology Demo": "purpose = 'Technology Demonstration'",
-    "🔥 High Velocity (>7.8 km/s)": "velocity > 7.8",
-    "🌍 LEO (Low Earth Orbit)": "orbit_type = 'LEO'",
-    "🛰️ GEO (Geostationary Orbit)": "orbit_type = 'GEO'",
-    "🚀 HEO (Highly Elliptical Orbit)": "orbit_type = 'HEO'",
-  };
+  const categories = [
+    { name: "LEO", label: "Low Earth Orbit (LEO)", description: "Satellites in Low Earth Orbit (LEO) operate between 160km and 2,000km above Earth. They are commonly used for communications, imaging, and scientific missions." },
+    { name: "MEO", label: "Medium Earth Orbit (MEO)", description: "Satellites in Medium Earth Orbit (MEO) reside between LEO and GEO, typically used for navigation and communications, like GPS satellites." },
+    { name: "GEO", label: "Geostationary Orbit (GEO)", description: "Geostationary satellites maintain a fixed position above the equator at 35,786 km. They are widely used for weather monitoring and global communications." },
+    { name: "HEO", label: "Highly Elliptical Orbit (HEO)", description: "Satellites in Highly Elliptical Orbit (HEO) follow elongated paths, useful for long-duration coverage over specific areas." },
+    { name: "High Velocity", label: "Fast Satellites", description: "Satellites moving faster than 7.8 km/s, typically in lower orbits where high speeds are required to maintain trajectory." },
+    { name: "Low Velocity", label: "Slow Satellites", description: "Satellites with speeds at or below 7.8 km/s, often in higher orbits where slower movement balances gravitational pull." },
+    { name: "Recent Launches", label: "Recently Launched Satellites", description: "Track satellites launched within the last 30 days, highlighting the newest additions to Earth's orbital environment." },
+    { name: "Communications", label: "Communications Satellites", description: "Satellites used for telecommunication services, internet connectivity, and data transmission across the globe." },
+    { name: "Navigation", label: "Navigation Satellites", description: "Essential for GPS, GLONASS, Galileo, and BeiDou systems that provide global positioning services." },
+    { name: "Military", label: "Military & Reconnaissance", description: "Satellites used for national security, surveillance, and defense-related intelligence gathering." },
+    { name: "Weather", label: "Weather Monitoring", description: "Satellites dedicated to climate monitoring, storm tracking, and atmospheric analysis." },
+    { name: "Earth Observation", label: "Earth Observation Satellites", description: "Used for imaging, environmental monitoring, and mapping Earth's surface in high resolution." },
+    { name: "Science", label: "Scientific Research Satellites", description: "Satellites supporting space-based experiments, astrophysics, and planetary studies." },
+    { name: "Human Spaceflight", label: "Human Spaceflight Missions", description: "Satellites or modules supporting human space exploration and operations, such as the ISS." },
+    { name: "Technology Demo", label: "Technology Demonstration", description: "Experimental satellites designed to test new technologies before full-scale deployment." }
+  ];
+  
+  const [pageNumbers, setPageNumbers] = useState({});
 
-  // ✅ Fetch Each Category Separately (Separate API Calls, 100 Each)
   useEffect(() => {
-    const fetchCategoryData = async () => {
-      let newSatelliteData = {};
-      let newLoading = {};
-      let newError = {};
+    setError(null);
 
-      for (const [category, condition] of Object.entries(categories)) {
-        newLoading[category] = true;
-        setLoading((prev) => ({ ...prev, [category]: true }));
-
-        try {
-          const response = await fetchSatellites(1, limit, condition);
-          if (response?.satellites) {
-            newSatelliteData[category] = response.satellites.sort(
-              (a, b) => new Date(b.launch_date) - new Date(a.launch_date)
-            );
-          } else {
-            newSatelliteData[category] = [];
+    const fetchData = async () => {
+      for (const category of categories) {
+        if (!satelliteData[category.name]) {
+          setLoadingCategories(prev => ({ ...prev, [category.name]: true }));
+          try {
+            const response = await fetchSatellites(1, limit, category.name);
+            if (response?.satellites) {
+              setSatelliteData(prev => ({
+                ...prev,
+                [category.name]: response.satellites
+              }));
+            } else {
+              setSatelliteData(prev => ({ ...prev, [category.name]: [] }));
+            }
+          } catch (err) {
+            console.error(`❌ Error fetching ${category.name} satellites:`, err);
+            setError("Failed to fetch satellite data.");
+          } finally {
+            setLoadingCategories(prev => ({ ...prev, [category.name]: false }));
           }
-        } catch (err) {
-          console.error(`❌ API Fetch Error for ${category}:`, err);
-          newError[category] = "Failed to fetch satellites.";
-        } finally {
-          newLoading[category] = false;
         }
       }
-
-      setSatelliteData(newSatelliteData);
-      setLoading(newLoading);
-      setError(newError);
-
-      // ✅ Initialize pagination state for each category
-      setCategoryPages(
-        Object.keys(newSatelliteData).reduce((acc, key) => {
-          acc[key] = 1;
-          return acc;
-        }, {})
-      );
     };
 
-    fetchCategoryData();
+    fetchData();
   }, []);
 
-  // ✅ Handle Pagination for Each Category
-  const changeCategoryPage = (category, newPage) => {
-    setCategoryPages((prev) => ({ ...prev, [category]: newPage }));
+  const handlePageChange = (category, newPage) => {
+    setPageNumbers(prev => ({ ...prev, [category]: newPage }));
   };
 
   return (
     <div className="p-6 pt-[80px] bg-gray-900 text-white min-h-screen">
-      <h2 className="text-3xl font-bold mb-6 text-center">🛰️ Satellite Categories</h2>
+      {/* 🔹 Animated Title - Now More Immediate & Relevant */}
+      <div className="text-center mb-10">
+        <h1 className="text-4xl md:text-5xl font-bold text-white tracking-wide">
+           Satellite Launches
+        </h1>
+        <p className="text-gray-400 text-lg mt-2">
+          Track all the satellites launched into orbit.
+        </p>
+      </div>
 
-      {/* 🛰️ Render Each Category in a Section */}
-      {Object.entries(categories).map(([category, _]) => {
-        const page = categoryPages[category] || 1;
-        const totalPages = Math.ceil((satelliteData[category]?.length || 0) / 10);
-        const displayedSatellites = satelliteData[category]?.slice((page - 1) * 10, page * 10) || [];
+      {error && <p className="text-red-500 text-center">{error}</p>}
 
-        return (
-          <div key={category} className="mb-12">
-            {/* 📌 Category Title */}
-            <h3 className="text-lg font-semibold text-green-400 border-b border-gray-700 pb-2 mb-2">
-              {category}
-            </h3>
+      {/* 📌 Categories Layout - Multi-Column Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+        {categories.map(category => {
+          const satellites = satelliteData[category.name] || [];
+          const page = pageNumbers[category.name] || 1;
+          const paginatedSatellites = satellites.slice((page - 1) * 8, page * 8);
+          const totalPages = Math.ceil(satellites.length / 8);
 
-            {/* 🔄 Show Loading State */}
-            {loading[category] && <p className="text-center text-gray-400">Loading {category}...</p>}
-            {error[category] && <p className="text-red-500">{error[category]}</p>}
+          return (
+            <div key={category.name} className="bg-gray-800 p-6 rounded-lg shadow-lg flex flex-col">
+              {/* 📌 Category Title & Description */}
+              <h3 className="text-lg font-semibold text-green-400 mb-1 text-center">
+                {category.label} ({satellites.length} total)
+              </h3>
+              <p className="text-gray-300 text-xs mb-3 text-center">
+                {category.description}
+              </p>
 
-            {/* 📋 Satellite List (8x8 Grid - Fully Utilizing Screen Space) */}
-            <ul className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
-              {displayedSatellites.map((sat) => (
-                <li
-                  key={sat.id}
-                  className="bg-gray-800 p-2 rounded-md text-center border border-gray-700 shadow-sm text-xs"
-                >
-                  <Link
-                    to={`/satellites/${encodeURIComponent(sat.name)}`}
-                    className="text-blue-400 hover:text-blue-300"
+              {loadingCategories[category.name] && satellites.length === 0 ? (
+                <p className="text-yellow-400 text-center">Loading...</p>
+              ) : paginatedSatellites.length === 0 ? (
+                <p className="text-yellow-400 text-center">No satellites found.</p>
+              ) : (
+                <div className="grid grid-cols-4 gap-3">
+                  {paginatedSatellites.map(sat => (
+                    <div
+                      key={sat.norad_number}
+                      className="p-3 bg-gray-700 rounded-lg text-center text-xs 
+                        border border-gray-600 hover:bg-gray-600 transition-all flex flex-col justify-between"
+                      style={{ minHeight: "120px" }} // Ensures all boxes are same height
+                    >
+                      <Link to={`/satellites/${encodeURIComponent(sat.name)}`} className="text-blue-300 hover:text-blue-200 font-medium">
+                        {sat.name}
+                      </Link>
+                      <p className="text-gray-300 text-xs mt-1">NORAD: {sat.norad_number}</p>
+                      <p className="text-gray-400 text-xs">{sat.launch_date ? new Date(sat.launch_date).toLocaleDateString() : "N/A"}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+
+
+              {totalPages > 1 && (
+                <div className="flex justify-between items-center mt-4">
+                  <button
+                    onClick={() => handlePageChange(category.name, page - 1)}
+                    disabled={page === 1}
+                    className="px-3 py-1 bg-gray-700 text-white rounded-md text-xs shadow-md hover:bg-gray-600 
+                      transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {sat.name}
-                  </Link>
-                  <p className="text-xs text-gray-400 mt-1">
-                    🚀 {sat.launch_date ? new Date(sat.launch_date).toLocaleDateString() : "Unknown"}
-                  </p>
-                </li>
-              ))}
-            </ul>
+                    ← Prev
+                  </button>
 
-            {/* 🔄 Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="flex justify-between items-center mt-4 border-t border-gray-700 pt-3">
-                <button
-                  onClick={() => changeCategoryPage(category, page - 1)}
-                  disabled={page === 1}
-                  className="px-4 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  ← Prev
-                </button>
+                  <span className="text-gray-300 text-xs">Page {page} of {totalPages}</span>
 
-                <span className="text-gray-300">
-                  Page {page} of {totalPages}
-                </span>
-
-                <button
-                  onClick={() => changeCategoryPage(category, page + 1)}
-                  disabled={page >= totalPages}
-                  className="px-4 py-2 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next →
-                </button>
-              </div>
-            )}
-          </div>
-        );
-      })}
+                  <button
+                    onClick={() => handlePageChange(category.name, page + 1)}
+                    disabled={page >= totalPages}
+                    className="px-3 py-1 bg-gray-700 text-white rounded-md text-xs shadow-md hover:bg-gray-600 
+                      transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next →
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

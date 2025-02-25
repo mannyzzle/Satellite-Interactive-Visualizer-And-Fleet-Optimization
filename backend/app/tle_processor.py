@@ -12,6 +12,9 @@ import requests
 import time
 from database import get_db_connection  # ✅ Use get_db_connection()
 from math import isfinite
+from math import isfinite, sqrt, pi
+from skyfield.api import EarthSatellite
+
 
 # Load environment variables
 load_dotenv()
@@ -21,6 +24,9 @@ ts = load.timescale()
 SPACETRACK_USER = os.getenv("SPACETRACK_USER")
 SPACETRACK_PASS = os.getenv("SPACETRACK_PASS")
 COOKIES_FILE = "cookies.txt"  # Ensure this is the correct cookie file path
+
+CDM_API_URL = "https://www.space-track.org/basicspacedata/query/class/cdm_public/format/json"
+
 
 
 API_WAIT_TIME = 3  # ✅ Complies with API rate limits
@@ -55,6 +61,112 @@ def get_spacetrack_session():
 
     return None
 
+
+
+
+
+def remove_expired_cdms():
+    """Deletes CDM events with TCA (Time of Closest Approach) in the past."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM cdm_events WHERE tca < NOW();")
+    deleted_count = cursor.rowcount  # Count rows deleted
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    print(f"🗑️ Removed {deleted_count} expired CDM events.")
+
+
+def fetch_cdm_data(session):
+    """Fetches the latest CDM data from Space-Track."""
+    response = session.get(CDM_API_URL)
+
+    if response.status_code != 200:
+        print(f"❌ API Error {response.status_code}: Unable to fetch CDM data.")
+        return []
+
+    cdm_data = response.json()
+    print(f"📡 Retrieved {len(cdm_data)} CDM records from Space-Track.")
+
+    return cdm_data
+
+
+def insert_new_cdms(cdm_data):
+    """Inserts new CDM events into the database, avoiding duplicates."""
+    if not cdm_data:
+        print("⚠️ No new CDM events to insert.")
+        return
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    print(f"📥 Inserting {len(cdm_data)} new CDM events...")
+    for cdm in tqdm(cdm_data, desc="📡 Processing CDM data", unit="CDM"):
+        try:
+            cursor.execute("""
+                INSERT INTO cdm_events (
+                    cdm_id, created, tca, min_rng, pc, 
+                    sat_1_id, sat_1_name, sat_1_type, sat_1_rcs, sat_1_excl_vol,
+                    sat_2_id, sat_2_name, sat_2_type, sat_2_rcs, sat_2_excl_vol,
+                    emergency_reportable, is_active
+                )
+                VALUES (
+                    %(CDM_ID)s, %(CREATED)s, %(TCA)s, %(MIN_RNG)s, %(PC)s,
+                    %(SAT_1_ID)s, %(SAT_1_NAME)s, %(SAT1_OBJECT_TYPE)s, %(SAT1_RCS)s, %(SAT_1_EXCL_VOL)s,
+                    %(SAT_2_ID)s, %(SAT_2_NAME)s, %(SAT2_OBJECT_TYPE)s, %(SAT2_RCS)s, %(SAT_2_EXCL_VOL)s,
+                    %(EMERGENCY_REPORTABLE)s, FALSE
+                )
+                ON CONFLICT (cdm_id) DO NOTHING;
+            """, {
+                "CDM_ID": int(cdm.get("CDM_ID", -1)),
+                "CREATED": cdm.get("CREATED"),
+                "TCA": cdm.get("TCA"),
+                "MIN_RNG": float(cdm.get("MIN_RNG", 0)),
+                "PC": float(cdm.get("PC", 0)),
+                "SAT_1_ID": int(cdm.get("SAT_1_ID", -1)),
+                "SAT_1_NAME": cdm.get("SAT_1_NAME", "Unknown"),
+                "SAT1_OBJECT_TYPE": cdm.get("SAT1_OBJECT_TYPE", "Unknown"),
+                "SAT1_RCS": cdm.get("SAT1_RCS", "Unknown"),
+                "SAT_1_EXCL_VOL": float(cdm.get("SAT_1_EXCL_VOL", 0)),
+                "SAT_2_ID": int(cdm.get("SAT_2_ID", -1)),
+                "SAT_2_NAME": cdm.get("SAT_2_NAME", "Unknown"),
+                "SAT2_OBJECT_TYPE": cdm.get("SAT2_OBJECT_TYPE", "Unknown"),
+                "SAT2_RCS": cdm.get("SAT2_RCS", "Unknown"),
+                "SAT_2_EXCL_VOL": float(cdm.get("SAT_2_EXCL_VOL", 0)),
+                "EMERGENCY_REPORTABLE": True if cdm.get("EMERGENCY_REPORTABLE") == "Y" else False
+            })
+
+        except Exception as e:
+            print(f"⚠️ Error inserting CDM ID {cdm.get('CDM_ID', 'Unknown')}: {e}")
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    print(f"✅ Inserted {len(cdm_data)} new CDM events.")
+
+
+def update_cdm_data():
+    """Main function to update CDM data: remove expired & insert new."""
+    print("\n🚀 Updating CDM data...")
+    session = get_spacetrack_session()
+    
+    if not session:
+        print("❌ Could not authenticate with Space-Track. Exiting update process.")
+        return
+
+    # Step 1: Remove expired CDM events
+    remove_expired_cdms()
+
+    # Step 2: Fetch latest CDM data
+    cdm_data = fetch_cdm_data(session)
+
+    # Step 3: Insert new CDMs
+    insert_new_cdms(cdm_data)
+
+    print("✅ CDM update completed.\n")
 
 
 
@@ -321,46 +433,182 @@ def fetch_spacetrack_data_batch(session, norad_ids, batch_size=500):
 
 
 
+
 def infer_purpose(metadata):
     """
     Infers the purpose of the satellite based on its name, type, and operational status.
     """
     name = metadata.get("OBJECT_NAME", "").upper()
     object_type = metadata.get("OBJECT_TYPE", "").upper()
-    
-    # Communications satellites
-    if any(keyword in name for keyword in ["STARLINK", "IRIDIUM", "SES", "INTELSAT", "VIASAT", "EUTELSAT"]):
+
+    # 🛰️ Starlink Constellation (Distinguishing Variants)
+    if "STARLINK" in name:
+        return "Starlink Constellation"
+
+        # 🌐 **Communications Satellites**  
+    if any(keyword in name for keyword in [
+        "IRIDIUM", "SES", "INTELSAT", "VIASAT", "EUTELSAT", "INMARSAT", "THURAYA", "HUGHES",
+        "ONEWEB", "O3B", "JCSAT", "SKYNET", "TDRS", "ANIK", "ASTRA", "TELSTAR", "TDRSS", "ECHO",
+        "MARISAT", "OPTUS", "CHINASAT", "YAMAL", "LORAL", "AMOS", "SHINASAT", "TELKOM", "GSAT",
+        "TIBA", "KACIFIC", "HYLAS", "NBN", "NORSAT", "SESAT", "JUPITER", "TURKSAT", "ARABSAT",
+        "NILESAT", "TANGO", "ABS", "KA-SAT", "CINAHASAT", "ST-2", "MEASAT", "BULSATCOM",
+        "ECO-STAR", "SPACEWAY", "EUTELSAT KONNECT", "SES-4", "SYRACUSE", "TAMPA", "ECO-1",
+        "VHTS", "VINASAT", "ES'HAIL", "JDRS", "SIRIUS", "GALAXY", "STARONE", "AUSSAT",
+        "C-COM", "MOLNIYA", "ECHO", "HORIZONS", "INTELBIRD", "TELENOR", "MERCURY",
+        "WGS", "EQUANT", "SES-17", "SES-22", "TURKSAT 5A", "TURKSAT 5B", "GSAT-30",
+        "TURKSAT-6A", "THAICOM", "ASTARTE", "ORBCOMM", "TERRASAR", "HISPASAT"
+    ]):
         return "Communications"
 
-    # Navigation satellites
-    if any(keyword in name for keyword in ["GPS", "GLONASS", "GALILEO", "BEIDOU", "NAVSTAR"]):
+    # 📡 **Navigation Satellites**  
+    if any(keyword in name for keyword in [
+        "GPS", "GLONASS", "GALILEO", "BEIDOU", "NAVSTAR", "QZSS", "COSPAS-SARSAT", "IRNSS",
+        "COMPASS", "EGNOS", "WAAS", "MSAS", "GAGAN", "DORIS", "LAGEOS", "NANJING", "ZHY",
+        "TUPL", "BDS", "NASS", "NAVIC", "DRAGONFLY", "MICROSCOPE", "PRN", "KASS",
+        "PAS-10", "OMNISTAR", "DORIS-2", "NAVSTAR-66", "PAS-12", "NAVIC-9", "GLONASS-K"
+    ]):
         return "Navigation"
 
-    # Weather monitoring satellites
-    if any(keyword in name for keyword in ["WEATHER", "METEOR", "NOAA", "GOES", "HIMAWARI"]):
+    # 🌦️ **Weather Monitoring Satellites**  
+    if any(keyword in name for keyword in [
+        "WEATHER", "METEOR", "NOAA", "GOES", "HIMAWARI", "METOP", "DMSP", "FENGYUN", "GOMS",
+        "INSAT", "SCATSAT", "TIROS", "NIMBUS", "GPM", "SMAP", "TROPICS", "OMI", "OCO", "COSMIC",
+        "JPSS", "SUOMI", "HY-2", "FY-4", "SEVIRI", "MTSAT", "NPOESS", "NSCAT", "CALIPSO",
+        "CLOUDSAT", "GCOM", "GOSAT", "I-5 F4", "MSG-3", "MSG-4", "SCISAT", "OMPS", "LAGRANGE-1",
+        "CYGNSS", "AURA", "GOSAT-2", "GRACE-FO", "SMOS", "TANSAT", "GRACE", "OCO-3", "VIIRS",
+        "JASON", "CRYOSAT", "AMSR", "TRMM", "ERS", "ENVISAT", "OZONE"
+    ]):
         return "Weather Monitoring"
 
-    # Military and reconnaissance satellites
-    if any(keyword in name for keyword in ["SPY", "NROL", "RECON", "USA", "KH-11", "ONYX"]):
+    # 🛰️ **Military & Reconnaissance Satellites**  
+    if any(keyword in name for keyword in [
+        "SPY", "NROL", "RECON", "USA", "KH-11", "ONYX", "LACROSSE", "MISTY", "DIA", "SATCOM",
+        "DSP", "ORION", "SBIRS", "ADVANCED", "MILSTAR", "SICRAL", "YAOGAN", "GEO-IK", "TITAN",
+        "GRU", "ZUMA", "GAOFEN", "JL-1", "JL-2", "XHSAT", "SHIJIAN", "NAVY", "ARSENAL",
+        "GRUMMAN", "KOSMOS", "SICH", "RORSAT", "SATCOM", "QIAN", "TIANCHENG", "SPIRA",
+        "TITAN-2", "ORION-5", "GEO-11", "FIREBIRD", "EWS", "MUSIS", "UFO", "AEHF", "KOSMOS-2549",
+        "ALOUETTE", "ORBIT-1", "ZONAL", "SKYMED", "KOMETA", "GOVSAT", "VORTEX", "NOSS"
+    ]):
         return "Military/Reconnaissance"
 
-    # Earth observation satellites
-    if any(keyword in name for keyword in ["EARTH", "SENTINEL", "LANDSAT", "TERRA", "AQUA", "SPOT"]):
+    # 🏞️ **Earth Observation Satellites**  
+    if any(keyword in name for keyword in [
+        "EARTH", "SENTINEL", "LANDSAT", "TERRA", "AQUA", "SPOT", "RADARSAT", "ICEYE", "PLEIADES",
+        "CARTOSAT", "KOMPSAT", "NUSAT", "HYSIS", "HYPERSAT", "CUBESAT", "BLACKSKY", "PLANET",
+        "WORLDVIEW", "QUICKBIRD", "ORBVIEW", "DOVE", "SKYSAT", "BIRD", "RESURS", "PHOTON",
+        "VHR", "EOSAT", "LAGEOS", "TANDEM", "PAZ", "SWOT", "TET-1", "GEOEYE", "FASAT", "KASAT",
+        "TUBIN", "VNREDSAT", "HYPERSAT-2", "MOROCCO", "NUSAT-7", "HYPSO", "RESOURCESAT",
+        "IKONOS", "THEOS", "SIRIS", "IRS", "OHSAT", "HISUI", "PLEIADES-NEO", "BILSAT",
+        "FLOCK", "SPECTRA", "AEROSAT", "SARSAT", "GRACE-2", "CHRIS", "MOS-1"
+    ]):
         return "Earth Observation"
 
-    # Scientific research satellites
-    if any(keyword in name for keyword in ["HUBBLE", "JWST", "X-RAY", "FERMI", "GAIA", "KEPLER", "TESS"]):
+
+        # 🔬 **Scientific Research Satellites**
+    if any(keyword in name for keyword in [
+        "HUBBLE", "JWST", "X-RAY", "FERMI", "GAIA", "KEPLER", "TESS", "WISE", "SPITZER",
+        "HINODE", "FUSE", "RHESSI", "SOHO", "YOHKOH", "PARKER", "VIKING", "CASSINI",
+        "NEW HORIZONS", "VOYAGER", "JUNO", "ROSETTA", "AKARI", "IXPE", "FUSE", "SUOMI",
+        "ASTROSAT", "INSPIRE", "EXOMARS", "HERSCHEL", "PLANCK", "BICEP", "LIGO",
+        "EUCLID", "HAYABUSA", "LISA", "GRAIL", "WFIRST", "ATHENA", "HERSCHEL", "PLANCK",
+        "SOLAR ORBITER", "MARS EXPRESS", "MRO", "MAVEN", "INSIGHT", "DAWN", "BICEP",
+        "XMM-NEWTON", "SWIFT", "GEMS", "NUSTAR", "PLATO", "SPICA", "GONG", "HELIO",
+        "MAGELLAN", "CHANDRA", "ULYSSES", "HITOMI", "EXTREME UNIVERSE SPACE OBSERVATORY",
+        "SUNRISE", "HELIOPHYSICS", "KECK ARRAY", "NICER", "GONG", "HELIOS", "SOLAR-B",
+        "BICEP ARRAY", "JAMES WEBB", "QUANTUM", "XMM", "ASTRO-H", "LARES", "IRIS", "MICE"
+    ]):
         return "Scientific Research"
 
-    # Technology demonstration satellites
-    if any(keyword in name for keyword in ["EXPERIMENT", "TEST", "TECHNOLOGY", "DEMO"]):
+
+    # 🛠️ **Technology Demonstration Satellites**
+    if any(keyword in name for keyword in [
+        "EXPERIMENT", "TEST", "TECHNOLOGY", "DEMO", "TECHSAT", "PROTOTYPE", "EXOSAT",
+        "BEESAT", "FIREBIRD", "STPSAT", "ASTERIX", "MICROSAT", "NANOSAT", "PHASE 4",
+        "LITE", "TSS", "X-SAT", "SKYLARK", "ANGELS", "GENESIS", "TOM", "TECHNOSAT",
+        "SPECTRUM-X", "LARES", "NEUDOSE", "ETB", "E-TB", "TECHDOME", "TRITON", "RAVAN",
+        "ECHO", "NANOSAIL", "VCLS", "CUBERIDER", "LUME", "FIREBIRD", "COPPER", "STPSAT-6",
+        "OSCAR", "ICECUBE", "RAVAN", "HIT-SAT", "QUBIK", "V-BAND", "DISCOSAT", "GOMX",
+        "GOMX-4", "EQUULEUS", "PICSAT", "CANYVAL-X", "INSPIRATION", "NANORACKS"
+    ]):
         return "Technology Demonstration"
 
-    # Human spaceflight
-    if any(keyword in name for keyword in ["ISS", "CREW", "TIANGONG", "SHENZHOU", "SOYUZ"]):
+
+
+    # 🚀 **Human Spaceflight / Crewed Missions**
+    if any(keyword in name for keyword in [
+        "ISS", "CREW", "TIANGONG", "SHENZHOU", "SOYUZ", "DRAGON", "STARLINER", 
+        "APOLLO", "GAGANYAAN", "TYPHOON", "LUNAR GATEWAY", "ARTEMIS", "COLUMBIA",
+        "CHALLENGER", "SATURN V", "ORION", "VOSTOK", "MERCURY", "GEMINI",
+        "ZVEZDA", "UNITY", "TRANQUILITY", "MIR", "POLYUS", "CRV", "B330", "HERMES",
+        "XCOR", "SNAPSHOT", "LUNOKHOD", "LUNAR MODULE", "NOVA", "SPACEX", "DEARMOON",
+        "BOEING CST-100", "BLUE ORIGIN", "SPACESHIPTWO", "X-37B", "ORION MPCV",
+        "ASTRONAUT", "INTERNATIONAL SPACE STATION", "BAIKONUR", "LUNOKHOD", "X-15",
+        "LUNAR MODULE", "MOONWALK", "MOON LANDER"
+    ]):
         return "Human Spaceflight"
 
-    # Default classification based on type
+
+
+    # 🛠️ **Space Infrastructure (Relay, Experimental, Interplanetary)**
+    if any(keyword in name for keyword in [
+        "TDRS", "RELAY", "GEO-COM", "GEO-TEST", "LAGRANGE", "LUCY", "HAYABUSA",
+        "MARS", "VENUS", "JUPITER", "SATURN", "PLUTO", "KUIPER", "DEEP SPACE",
+        "EXPLORER", "MOON", "LUNAR", "INSIGHT", "ODYSSEY", "MAVEN", "BEPICOLOMBO",
+        "GAGANYAAN", "HERMES", "MERCURY", "APOLLO", "SOLAR ORBITER", "LUNAR PROBE",
+        "HELIOPHYSICS", "LUNAR PATHFINDER", "LUNAR RECONNAISSANCE ORBITER", "HORIZONS",
+        "SELENE", "MARS PATHFINDER", "CURIOSITY", "OPPORTUNITY", "SPIRIT",
+        "ROSCOSMOS", "JAXA", "TIANWEN", "VIPER", "GATEWAY", "CALLISTO", "SPACEBUS",
+        "MARS SAMPLE RETURN", "EXPLORER-1", "VOYAGER", "MOON EXPRESS", "CUBEHAB"
+    ]):
+        return "Space Infrastructure"
+
+
+
+    # 🚗 **Space Tug / Servicing / Space Logistics**
+    if any(keyword in name for keyword in [
+        "MEV", "MISSION EXTENSION", "TUG", "SATELLITE SERVICING", "ORBIT TRANSFER",
+        "ORBIT FAB", "RENDEZVOUS", "FUEL DEPOT", "ASTROBOTIC", "NORTHROP GRUMMAN",
+        "OSAM", "POD", "PEREGRINE", "XTRAC", "RPO", "JUNKER", "REPAIR", "RESTORE",
+        "SPACE DRAG", "IN-ORBIT REFUELING", "DROID", "GRIPPER", "ACTIVE DEBRIS REMOVAL",
+        "MISSION REBOOST", "LIFEBAND", "SHERPA", "PROLONG", "EXTENSION VEHICLE",
+        "NANOTUG", "GEO SERVICING", "MOON BASE SUPPLY", "TUGASSIST", "DEORBIT",
+        "ADVANCED RENDEZVOUS", "ON-ORBIT REPAIR", "ORBITAL SERVICE VEHICLE", "SPIDER",
+        "RAIDER", "SPECTRE", "VIVASAT", "DRACO", "BASILISK"
+    ]):
+        return "Satellite Servicing & Logistics"
+
+
+
+    # 🚀 Deep Space Exploration Missions (Interplanetary Probes, Lunar, and Beyond)
+    if any(keyword in name for keyword in [
+        # 🪐 Interplanetary & Outer Solar System Missions
+        "VOYAGER", "PIONEER", "NEW HORIZONS", "ULYSSES", "CASSINI", "JUNO", 
+        "BEPICOLOMBO", "MAVEN", "MARS EXPRESS", "VENUS EXPRESS", "MAGELLAN",
+        "AKATSUKI", "VENERA", "MARINER", "GALILEO", "ODYSSEY", "INSIGHT",
+        "MESSENGER", "HELIOPHYSICS", "JUPITER ICY MOONS", "GANYMEDE", "EUROPA",
+        "TITAN", "DRAGONFLY", "VOYAGER 1", "VOYAGER 2", "MARS ODYSSEY", 
+        "LUCY", "PERSEVERANCE", "CURIOSITY", "EXOMARS", "INSIGHT", 
+        "VIKING 1", "VIKING 2", "MARS GLOBAL SURVEYOR", "NOZOMI", "PHOBOS-GRUNT",
+        "SPIRIT", "OPPORTUNITY", "EXOMARS TRACE GAS ORBITER",
+        # 🌕 Lunar Exploration (Orbiters, Landers, Sample Return)
+        "LUNAR RECONNAISSANCE", "CHANG'E", "LUNOKHOD", "APOLLO", "ARTEMIS", 
+        "LUNA", "LUNOKHOD", "SURVEYOR", "RANGER", "SMART-1", "KAGUYA",
+        "SELENE", "YUTU", "ODIN", "VIPER", "ISRU", "HISEA", "TYCHO",
+        "ORBITER-1", "MOONLIGHT", "LUNAR PATHFINDER", "LUNAR FLASHLIGHT",
+        "NASA CLPS", "BLUE GHOST", "VIKRAM", "CHANDRAYAAN", "PEREGRINE",
+        "ODYSSEY MOON", "MOON EXPRESS", "LUNAR ICECUBE", "LUNAR POLAR HYDROGEN",
+        "SLIM", "HERMES", "PROSPECTOR", "EXPLORER-1", "LUNAR GATEWAY",
+        "CAPSTONE", "LUNAR PROSPECTOR", "LUNAR POLAR HYDROGEN MAPPER",
+        # 🌑 Missions to Other Moons (Saturn, Jupiter, Uranus, Neptune)
+        "EUROPA CLIPPER", "TITAN SATURN SYSTEM MISSION", "JUPITER ICY MOONS",
+        "CALLISTO LANDER", "TITAN DRAGONFLY", "GANYMEDE ORBITER", 
+        "TRITON", "NEPTUNE ORBITER", "CASSINI-HUYGENS", "HERA",
+        "HUBBLE DEEP SPACE", "ULTRA DEEP FIELD", "GANYMEDE LANDER",
+        "PLUTO-KUIPER EXPRESS", "TSSM", "IO VOLCANO OBSERVER", "NEPTUNE PROBE"
+    ]):
+        return "Deep Space Exploration"
+
+    # 🛑 Default classifications
     if object_type == "PAYLOAD":
         return "Unknown Payload"
     if object_type == "R/B":
@@ -414,8 +662,6 @@ def parse_tle_line1(tle_line1):
 
 
 
-from math import isfinite, sqrt, pi
-from skyfield.api import EarthSatellite
 
 
 
@@ -915,4 +1161,5 @@ def update_satellite_data():
 
 
 if __name__ == "__main__":
+    update_cdm_data()
     update_satellite_data()
