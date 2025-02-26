@@ -727,7 +727,6 @@ def parse_tle_line2(tle_line2):
 
 
 
-
 def compute_orbital_params(name, tle_line1, tle_line2, ts):
     try:
         if not tle_line1 or not tle_line2:
@@ -735,55 +734,63 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
             return None
         
         # 🚀 Initialize Satellite Object
-        satellite = EarthSatellite(tle_line1, tle_line2, name, ts)
+        try:
+            satellite = EarthSatellite(tle_line1, tle_line2, name, ts)
+        except Exception as e:
+            print(f"❌ Error initializing EarthSatellite for {name} (NORAD UNKNOWN): {e}")
+            return None
 
         # 🔍 Extract Orbital Parameters
         norad_number, intl_designator, ephemeris_type = parse_tle_line1(tle_line1)
+        if norad_number is None:
+            print(f"⚠️ Skipping {name}: Could not parse NORAD number from TLE")
+            return None
+        
         mean_motion, rev_num = parse_tle_line2(tle_line2)
+        if mean_motion is None:
+            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Invalid mean motion.")
+            return None
+        
         epoch = extract_epoch(tle_line1)
+        if epoch is None:
+            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Invalid epoch.")
+            return None
 
-        # 🔎 Debugging Prints: Check Values Before Processing
+        # 🔎 Debugging: Ensure values before calculations
         print(f"\n🔍 Checking values for {name} (NORAD {norad_number}):")
         print(f"   - Mean Motion: {mean_motion}")
         print(f"   - Epoch: {epoch}")
+        print(f"   - Rev Number: {rev_num}")
 
-        if mean_motion is None or not isfinite(mean_motion) or mean_motion <= 0:
-            print(f"⚠️ Skipping {name} (NORAD {norad_number}): No valid mean_motion.")
+        # ✅ **Check for bad values in Skyfield Model**
+        bad_values = []
+        try:
+            inclination = satellite.model.inclo * (180 / pi)
+            eccentricity = satellite.model.ecco
+            bstar = satellite.model.bstar
+            raan = satellite.model.nodeo * (180 / pi)
+            arg_perigee = satellite.model.argpo * (180 / pi)
+        except Exception as e:
+            print(f"❌ Skyfield model error for {name} (NORAD {norad_number}): {e}")
             return None
 
-        # ✅ **Check for bad values**
-        bad_values = []
-        if not isfinite(satellite.model.inclo):
+        if not isfinite(inclination):
             bad_values.append("inclination")
-        if not isfinite(satellite.model.ecco):
+        if not isfinite(eccentricity):
             bad_values.append("eccentricity")
-        if not isfinite(satellite.model.nodeo):
+        if not isfinite(raan):
             bad_values.append("raan")
-        if not isfinite(satellite.model.argpo):
+        if not isfinite(arg_perigee):
             bad_values.append("arg_perigee")
-        if not isfinite(satellite.model.bstar):
+        if not isfinite(bstar):
             bad_values.append("bstar")
 
         if bad_values:
             print(f"⚠️ Skipping {name} (NORAD {norad_number}): Bad values: {', '.join(bad_values)}")
-            return None  # ❌ Skip if any required parameter is bad
+            return None
 
         # ✅ **Compute Derived Parameters**
-        inclination = satellite.model.inclo * (180 / pi)
-        eccentricity = satellite.model.ecco
-        bstar = satellite.model.bstar
-        raan = satellite.model.nodeo * (180 / pi)
-        arg_perigee = satellite.model.argpo * (180 / pi)
-
-        # **Orbital Mechanics Constants**
         mu = 398600.4418  # Earth's gravitational parameter (km³/s²)
-
-        # ✅ **Compute Period**
-        if mean_motion > 0:
-            period = (1 / mean_motion) * 1440  # Convert rev/day to minutes
-        else:
-            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Invalid period.")
-            return None
 
         # ✅ **Compute Semi-Major Axis**
         try:
@@ -793,8 +800,7 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
         except Exception as e:
             print(f"⚠️ Skipping {name} (NORAD {norad_number}): Semi-major axis error: {e}")
             return None
-
-        # 🔎 Debugging Prints: Check Semi-Major Axis
+        
         print(f"   - Semi-Major Axis: {semi_major_axis} km")
 
         # ✅ **Compute Perigee, Apogee**
@@ -810,14 +816,17 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
             print(f"⚠️ Skipping {name} (NORAD {norad_number}): Unable to compute velocity: {e}")
             return None
         
-        # 🔎 Debugging Prints: Check Velocity
         print(f"   - Velocity: {velocity} km/s")
 
         # ✅ **Classify Orbit**
-        orbit_type = classify_orbit_type(perigee, apogee)
+        try:
+            orbit_type = classify_orbit_type(perigee, apogee)
+        except Exception as e:
+            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Unable to classify orbit: {e}")
+            return None
 
         # ✅ **Compute Latitude & Longitude**
-        latitude, longitude = None, None  # Default values
+        latitude, longitude = None, None
         try:
             geocentric = satellite.at(ts.now())  # Get satellite position
             subpoint = geocentric.subpoint()
@@ -826,7 +835,6 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
         except Exception as e:
             print(f"⚠️ Skipping {name} (NORAD {norad_number}): Unable to compute latitude/longitude: {e}")
 
-        # 🔎 Debugging Prints: Check Computed Values
         print(f"   - Orbit Type: {orbit_type}")
         print(f"   - Latitude: {latitude}")
         print(f"   - Longitude: {longitude}")
@@ -841,7 +849,6 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
             "mean_motion": mean_motion,
             "raan": raan,
             "arg_perigee": arg_perigee,
-            "period": period,
             "semi_major_axis": semi_major_axis,
             "perigee": perigee,
             "apogee": apogee,
@@ -849,8 +856,8 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
             "orbit_type": orbit_type,
             "bstar": bstar,
             "rev_num": rev_num,
-            "latitude": latitude,  # ✅ Now handles failure safely
-            "longitude": longitude  # ✅ Now handles failure safely
+            "latitude": latitude,  
+            "longitude": longitude
         }
 
     except Exception as e:
