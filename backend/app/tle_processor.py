@@ -347,12 +347,12 @@ def fetch_tle_data(session, existing_norads, batch_size=500):
 
 def fetch_spacetrack_data_batch(session, norad_ids, batch_size=500):
     """
-    Fetch satellite metadata from Space-Track with retries for failed requests.
-    Returns a dictionary mapping NORAD numbers to metadata.
+    Fetch satellite metadata from Space-Track, but only for NORADs confirmed in GP.
+    If a NORAD is missing from SATCAT, attempt to fetch from GP-class as a fallback.
     """
     metadata_dict = {}
-    all_norads = set(norad_ids)
     fetched_norads = set()
+    missing_from_satcat = set()
 
     print(f"📡 Fetching metadata in batches of {batch_size} satellites...")
 
@@ -365,47 +365,33 @@ def fetch_spacetrack_data_batch(session, norad_ids, batch_size=500):
 
         response = rate_limited_get(session, spacetrack_url)
 
-        if response.status_code == 200 and response.json():
+        if response.status_code == 200:
             batch_data = response.json()
 
-            # 🔍 Debugging: Print first 3 responses for analysis
-            print("\n🔍 API Response Sample (First 3 Satellites):")
-            for metadata in batch_data[:3]:  # Only print first 3 responses for readability
-                print(metadata)
+            if not batch_data:
+                print(f"⚠️ SATCAT returned no data for batch {i//batch_size + 1}. These NORADs may be GP-only.")
+                missing_from_satcat.update(batch)  # ✅ Track NORADs missing from SATCAT
 
             for metadata in batch_data:
                 try:
                     norad_number = int(metadata.get("NORAD_CAT_ID", -1))
-
-                    if norad_number <= 0:
-                        print(f"⚠️ Skipping metadata entry with invalid NORAD {norad_number}: {metadata}")
-                        continue  # ❌ Skip invalid entries
-
-                    # ✅ Print extracted values for debugging
-                    print(f"\n📡 Extracted Metadata for {metadata.get('OBJECT_NAME', 'Unknown')} (NORAD {norad_number}):")
-                    print(f"   - Object Type: {metadata.get('OBJECT_TYPE', 'Unknown')}")
-                    print(f"   - Launch Date: {metadata.get('LAUNCH', 'Unknown')}")
-                    print(f"   - Launch Site: {metadata.get('SITE', 'Unknown')}")
-                    print(f"   - Decay Date: {metadata.get('DECAY', 'Unknown')}")
-                    print(f"   - RCS Size: {metadata.get('RCSVALUE', 'Unknown')}")
-                    print(f"   - Country: {metadata.get('COUNTRY', 'Unknown')}")
-
-                    metadata_dict[norad_number] = {
-                        "object_type": metadata.get("OBJECT_TYPE", "Unknown"),
-                        "launch_date": metadata.get("LAUNCH") if metadata.get("LAUNCH") != "Unknown" else None,
-                        "launch_site": metadata.get("SITE") if metadata.get("SITE") != "Unknown" else None,
-                        "decay_date": metadata.get("DECAY") if metadata.get("DECAY") != "Unknown" else None,
-                        "rcs": metadata.get("RCSVALUE") if metadata.get("RCSVALUE") != "Unknown" else None,
-                        "purpose": infer_purpose(metadata),
-                        "country": metadata.get("COUNTRY", "Unknown"),
-                    }
-                    fetched_norads.add(norad_number)
+                    if norad_number > 0:
+                        fetched_norads.add(norad_number)
+                        metadata_dict[norad_number] = {
+                            "object_type": metadata.get("OBJECT_TYPE", "Unknown"),
+                            "launch_date": metadata.get("LAUNCH") if metadata.get("LAUNCH") != "Unknown" else None,
+                            "launch_site": metadata.get("SITE") if metadata.get("SITE") != "Unknown" else None,
+                            "decay_date": metadata.get("DECAY") if metadata.get("DECAY") != "Unknown" else None,
+                            "rcs": metadata.get("RCSVALUE") if metadata.get("RCSVALUE") != "Unknown" else None,
+                            "purpose": infer_purpose(metadata),
+                            "country": metadata.get("COUNTRY", "Unknown"),
+                        }
 
                 except Exception as e:
                     print(f"⚠️ Error processing metadata for NORAD {norad_number}: {e}")
 
         else:
-            print(f"❌ API error {response.status_code} for batch {i//batch_size + 1}. Retrying...")
+            print(f"❌ API error {response.status_code} for batch {i//batch_size + 1}. Retrying in smaller batches...")
 
             if batch_size > 500:
                 metadata_dict.update(fetch_spacetrack_data_batch(session, batch, batch_size=500))
@@ -416,41 +402,30 @@ def fetch_spacetrack_data_batch(session, norad_ids, batch_size=500):
             else:
                 print(f"⚠️ Skipping batch due to repeated errors.")
 
-    # ✅ Identify missing NORADs and retry
-    missing_norads = all_norads - fetched_norads
-    if missing_norads:
-        print(f"⚠️ {len(missing_norads)} NORAD IDs missing from metadata response. Retrying individually...")
+    # ✅ Identify missing NORADs (SATCAT did not return them)
+    completely_missing_norads = set(norad_ids) - fetched_norads
+    if completely_missing_norads:
+        print(f"⚠️ {len(completely_missing_norads)} NORADs are missing from SATCAT. Attempting to fetch from GP-class.")
 
-        for norad in missing_norads:
-            retry_url = f"https://www.space-track.org/basicspacedata/query/class/satcat/NORAD_CAT_ID/{norad}/format/json"
+        for norad in completely_missing_norads:
+            retry_url = f"https://www.space-track.org/basicspacedata/query/class/gp/NORAD_CAT_ID/{norad}/format/json"
             retry_response = rate_limited_get(session, retry_url)
 
             if retry_response.status_code == 200 and retry_response.json():
-                metadata = retry_response.json()[0]
-                norad_number = int(metadata.get("NORAD_CAT_ID", -1))
-
-                if norad_number > 0:
-                    print(f"\n📡 Retried Metadata for {metadata.get('OBJECT_NAME', 'Unknown')} (NORAD {norad_number}):")
-                    print(f"   - Object Type: {metadata.get('OBJECT_TYPE', 'Unknown')}")
-                    print(f"   - Launch Date: {metadata.get('LAUNCH', 'Unknown')}")
-                    print(f"   - Launch Site: {metadata.get('SITE', 'Unknown')}")
-                    print(f"   - Decay Date: {metadata.get('DECAY', 'Unknown')}")
-                    print(f"   - RCS Size: {metadata.get('RCSVALUE', 'Unknown')}")
-                    print(f"   - Country: {metadata.get('COUNTRY', 'Unknown')}")
-
-                    metadata_dict[norad_number] = {
-                        "object_type": metadata.get("OBJECT_TYPE", "Unknown"),
-                        "launch_date": metadata.get("LAUNCH") if metadata.get("LAUNCH") != "Unknown" else None,
-                        "launch_site": metadata.get("SITE") if metadata.get("SITE") != "Unknown" else None,
-                        "decay_date": metadata.get("DECAY") if metadata.get("DECAY") != "Unknown" else None,
-                        "rcs": metadata.get("RCSVALUE") if metadata.get("RCSVALUE") != "Unknown" else None,
-                        "purpose": infer_purpose(metadata),
-                        "country": metadata.get("COUNTRY", "Unknown"),
-                    }
-                    print(f"✅ Successfully retrieved missing metadata for NORAD {norad_number}")
+                gp_metadata = retry_response.json()[0]
+                metadata_dict[norad] = {
+                    "object_type": gp_metadata.get("OBJECT_TYPE", "Unknown"),
+                    "launch_date": gp_metadata.get("LAUNCH", None),
+                    "launch_site": gp_metadata.get("SITE", None),
+                    "decay_date": gp_metadata.get("DECAY", None),
+                    "rcs": gp_metadata.get("RCSVALUE", None),
+                    "purpose": infer_purpose(gp_metadata),
+                    "country": gp_metadata.get("COUNTRY", "Unknown"),
+                }
+                print(f"✅ Successfully retrieved missing metadata for NORAD {norad} from GP-class.")
 
             else:
-                print(f"⚠️ Still missing metadata for NORAD {norad}. May be inactive or missing data.")
+                print(f"⚠️ Still missing metadata for NORAD {norad}. Likely classified or inactive.")
 
     print(f"✅ Successfully fetched metadata for {len(metadata_dict)} satellites.")
     return metadata_dict
@@ -465,13 +440,15 @@ def infer_purpose(metadata):
     """
     name = metadata.get("OBJECT_NAME", "").upper()
     object_type = metadata.get("OBJECT_TYPE", "").upper()
-    
 
-    if object_type == "R/B":
+    # Rocket Bodies
+    if object_type in ["R/B", "ROCKET BODY"]:
         return "Rocket Body (Debris)"
-    
-    if object_type == "DEB":
+
+    # Debris
+    if object_type in ["DEB", "DEBRIS"]:
         return "Space Debris"
+
 
     # 🛰️ Starlink Constellation (Distinct Category)
     if "STARLINK" in name:
@@ -986,52 +963,37 @@ def fetch_new_payload_norads(session, max_norad):
 
 
 
-
-
-
 def fetch_missing_gp_norads(session, existing_norads):
     """
-    Fetches all NORAD numbers from both SATCAT (metadata) and GP-class (TLEs).
-    Returns a set of new NORAD numbers that are NOT in the database.
+    Fetches all NORAD numbers from GP-class (TLEs) and ensures only active satellites are considered.
+    Returns a set of new NORAD numbers that are NOT in the database and have TLEs within the last month.
     """
-    satcat_url = "https://www.space-track.org/basicspacedata/query/class/satcat/format/json"
     gp_url = "https://www.space-track.org/basicspacedata/query/class/gp/format/json"
 
     all_norads = set()
 
-    print("📡 Fetching all SATCAT and GP-class NORAD numbers from Space-Track...")
+    print("📡 Fetching GP-class NORAD numbers from Space-Track...")
 
-    # ✅ Fetch SATCAT NORADs
-    response_satcat = rate_limited_get(session, satcat_url)
-    if response_satcat.status_code == 200 and response_satcat.json():
-        for metadata in response_satcat.json():
-            try:
-                norad_number = int(metadata.get("NORAD_CAT_ID", -1))
-                if norad_number > 0:
-                    all_norads.add(norad_number)
-            except Exception as e:
-                print(f"⚠️ Error processing SATCAT NORAD {metadata.get('NORAD_CAT_ID', 'Unknown')}: {e}")
-
-    # ✅ Fetch GP-class NORADs
+    # ✅ Fetch GP-class NORADs (Only active satellites with TLEs)
     response_gp = rate_limited_get(session, gp_url)
     if response_gp.status_code == 200 and response_gp.json():
         for metadata in response_gp.json():
             try:
                 norad_number = int(metadata.get("NORAD_CAT_ID", -1))
-                if norad_number > 0:
-                    all_norads.add(norad_number)  # ✅ Ensure GP-class NORADs are also considered
+                tle_epoch = metadata.get("EPOCH", None)
+
+                if norad_number > 0 and tle_epoch:
+                    tle_epoch_date = datetime.strptime(tle_epoch, "%Y-%m-%dT%H:%M:%SZ")
+                    if tle_epoch_date > datetime.utcnow() - timedelta(days=30):
+                        all_norads.add(norad_number)  # ✅ Keep only active satellites with TLEs within the last month
             except Exception as e:
                 print(f"⚠️ Error processing GP-class NORAD {metadata.get('NORAD_CAT_ID', 'Unknown')}: {e}")
 
     # ✅ Identify new NORADs by subtracting existing ones
     new_norads = all_norads - existing_norads
 
-    print(f"✅ Found {len(new_norads)} new GP-class and SATCAT NORADs not in the database.")
+    print(f"✅ Found {len(new_norads)} new GP-class NORADs not in the database and with TLEs within the last month.")
     return new_norads
-
-
-
-
 
 
 
@@ -1201,5 +1163,5 @@ def update_satellite_data():
 
 
 if __name__ == "__main__":
-    update_cdm_data()
+    #update_cdm_data()
     update_satellite_data()
