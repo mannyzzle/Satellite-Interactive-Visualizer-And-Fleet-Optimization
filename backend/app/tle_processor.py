@@ -1039,6 +1039,9 @@ def fetch_missing_gp_norads(session, existing_norads):
 
 
 
+
+from psycopg2 import OperationalError, InterfaceError
+
 # ✅ Batch size for inserting satellites
 BATCH_SIZE = 500  
 
@@ -1120,8 +1123,12 @@ def update_satellite_data():
     new_satellites_metadata = fetch_spacetrack_data_batch(session, list(new_norads))
     new_satellites_tles = fetch_tle_data(session, new_norads)
 
+    # ✅ Get all existing names in the database before processing
+    cursor.execute("SELECT name FROM satellites")
+    db_existing_names = {row[0] for row in cursor.fetchall()}  # Store as a set
+
     # ✅ Track duplicate names within the batch to avoid conflicts
-    existing_names = set()
+    batch_existing_names = set()
 
     # ✅ Merge TLE & Metadata (with additional safety checks)
     new_satellites = []
@@ -1161,12 +1168,18 @@ def update_satellite_data():
                 norad = sat.get("norad_number")
                 name = sat.get("name", "Unknown")
 
-                # ✅ Check for duplicate names in the batch first
-                if name in existing_names:
-                    name = f"{name} ({norad})"  # Append NORAD ID to make it unique
-                    print(f"⚠️ Renaming duplicate satellite name within batch: {name}")
+                # ✅ Ensure unique name across database & batch
+                original_name = name
+                suffix = 1
+                while name in db_existing_names or name in batch_existing_names:
+                    name = f"{original_name} ({suffix})"
+                    suffix += 1
 
-                existing_names.add(name)
+                if name != original_name:
+                    print(f"⚠️ Renaming duplicate satellite: {original_name} → {name}")
+
+                batch_existing_names.add(name)
+                db_existing_names.add(name)
                 sat["name"] = name  
 
                 try:
@@ -1188,11 +1201,11 @@ def update_satellite_data():
                 except (OperationalError, InterfaceError) as e:
                     print(f"⚠️ Database connection lost while inserting {name} (NORAD {norad}): {e}")
                     conn.rollback()
-                    conn = get_db_connection()  # ✅ Reconnect and retry
+                    conn = get_db_connection()
                     cursor = conn.cursor()
                     continue  
 
-            conn.commit()  # ✅ Commit only after batch completes
+            conn.commit()
             cursor.close()
             conn.close()
 
