@@ -93,8 +93,15 @@ def fetch_cdm_data(session):
     return cdm_data
 
 
+def safe_float(value):
+    """Convert value to float if possible, else return None for SQL compatibility."""
+    try:
+        return float(value) if value not in [None, ""] else None
+    except ValueError:
+        return None
+
 def insert_new_cdms(cdm_data):
-    """Inserts new CDM events into the database, avoiding duplicates."""
+    """Inserts new CDM events into the database, avoiding duplicates and ensuring required fields."""
     if not cdm_data:
         print("⚠️ No new CDM events to insert.")
         return
@@ -103,8 +110,42 @@ def insert_new_cdms(cdm_data):
     cursor = conn.cursor()
 
     print(f"📥 Inserting {len(cdm_data)} new CDM events...")
+
     for cdm in tqdm(cdm_data, desc="📡 Processing CDM data", unit="CDM"):
         try:
+            # Extract required fields
+            required_fields = {
+                "CDM_ID": int(cdm.get("CDM_ID", -1)),
+                "CREATED": cdm.get("CREATED"),
+                "TCA": cdm.get("TCA"),
+                "MIN_RNG": safe_float(cdm.get("MIN_RNG")),
+                "PC": safe_float(cdm.get("PC")),
+                "SAT_1_ID": int(cdm.get("SAT_1_ID", -1)),
+                "SAT_1_NAME": cdm.get("SAT_1_NAME", "Unknown"),
+                "SAT1_OBJECT_TYPE": cdm.get("SAT1_OBJECT_TYPE", "Unknown"),
+                "SAT_2_ID": int(cdm.get("SAT_2_ID", -1)),
+                "SAT_2_NAME": cdm.get("SAT_2_NAME", "Unknown"),
+                "SAT2_OBJECT_TYPE": cdm.get("SAT2_OBJECT_TYPE", "Unknown"),
+                "EMERGENCY_REPORTABLE": True if cdm.get("EMERGENCY_REPORTABLE") == "Y" else False
+            }
+
+            # Ensure all required columns are non-null
+            if None in required_fields.values():
+                print(f"⚠️ Skipping incomplete CDM ID {required_fields['CDM_ID']} due to missing required fields.")
+                continue
+
+            # Extract optional fields with default values
+            optional_fields = {
+                "SAT1_RCS": cdm.get("SAT1_RCS", "Unknown"),
+                "SAT_1_EXCL_VOL": safe_float(cdm.get("SAT_1_EXCL_VOL")) or 0.0,  # Default to 0.0
+                "SAT2_RCS": cdm.get("SAT2_RCS", "Unknown"),
+                "SAT_2_EXCL_VOL": safe_float(cdm.get("SAT_2_EXCL_VOL")) or 0.0  # Default to 0.0
+            }
+
+            # Merge required and optional fields
+            cdm_entry = {**required_fields, **optional_fields}
+
+            # Insert into database
             cursor.execute("""
                 INSERT INTO cdm_events (
                     cdm_id, created, tca, min_rng, pc, 
@@ -119,24 +160,7 @@ def insert_new_cdms(cdm_data):
                     %(EMERGENCY_REPORTABLE)s, FALSE
                 )
                 ON CONFLICT (cdm_id) DO NOTHING;
-            """, {
-                "CDM_ID": int(cdm.get("CDM_ID", -1)),
-                "CREATED": cdm.get("CREATED"),
-                "TCA": cdm.get("TCA"),
-                "MIN_RNG": float(cdm.get("MIN_RNG", 0)),
-                "PC": float(cdm.get("PC", 0)),
-                "SAT_1_ID": int(cdm.get("SAT_1_ID", -1)),
-                "SAT_1_NAME": cdm.get("SAT_1_NAME", "Unknown"),
-                "SAT1_OBJECT_TYPE": cdm.get("SAT1_OBJECT_TYPE", "Unknown"),
-                "SAT1_RCS": cdm.get("SAT1_RCS", "Unknown"),
-                "SAT_1_EXCL_VOL": float(cdm.get("SAT_1_EXCL_VOL", 0)),
-                "SAT_2_ID": int(cdm.get("SAT_2_ID", -1)),
-                "SAT_2_NAME": cdm.get("SAT_2_NAME", "Unknown"),
-                "SAT2_OBJECT_TYPE": cdm.get("SAT2_OBJECT_TYPE", "Unknown"),
-                "SAT2_RCS": cdm.get("SAT2_RCS", "Unknown"),
-                "SAT_2_EXCL_VOL": float(cdm.get("SAT_2_EXCL_VOL", 0)),
-                "EMERGENCY_REPORTABLE": True if cdm.get("EMERGENCY_REPORTABLE") == "Y" else False
-            })
+            """, cdm_entry)
 
         except Exception as e:
             print(f"⚠️ Error inserting CDM ID {cdm.get('CDM_ID', 'Unknown')}: {e}")
@@ -145,7 +169,8 @@ def insert_new_cdms(cdm_data):
     cursor.close()
     conn.close()
 
-    print(f"✅ Inserted {len(cdm_data)} new CDM events.")
+    print(f"✅ Inserted valid CDM events.")
+
 
 
 def update_cdm_data():
