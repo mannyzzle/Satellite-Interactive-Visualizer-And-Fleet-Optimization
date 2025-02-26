@@ -440,15 +440,30 @@ def infer_purpose(metadata):
     """
     name = metadata.get("OBJECT_NAME", "").upper()
     object_type = metadata.get("OBJECT_TYPE", "").upper()
+    
 
-    # 🛰️ Starlink Constellation (Distinguishing Variants)
+    if object_type == "R/B":
+        return "Rocket Body (Debris)"
+    
+    if object_type == "DEB":
+        return "Space Debris"
+
+    # 🛰️ Starlink Constellation (Distinct Category)
     if "STARLINK" in name:
         return "Starlink Constellation"
 
-        # 🌐 **Communications Satellites**  
+    # 🛰️ OneWeb Constellation (Distinct Category)
+    if "ONEWEB" in name:
+        return "OneWeb Constellation"
+
+    # 🛰️ Iridium NEXT Constellation (Distinct Category)
+    if "IRIDIUM" in name:
+        return "Iridium NEXT Constellation"
+
+        # 🌐 **Traditional Communications Satellites**  
     if any(keyword in name for keyword in [
-        "IRIDIUM", "SES", "INTELSAT", "VIASAT", "EUTELSAT", "INMARSAT", "THURAYA", "HUGHES",
-        "ONEWEB", "O3B", "JCSAT", "SKYNET", "TDRS", "ANIK", "ASTRA", "TELSTAR", "TDRSS", "ECHO",
+        "SES", "INTELSAT", "VIASAT", "EUTELSAT", "INMARSAT", "THURAYA", "HUGHES",
+        "O3B", "JCSAT", "SKYNET", "TDRS", "ANIK", "ASTRA", "TELSTAR", "TDRSS", "ECHO",
         "MARISAT", "OPTUS", "CHINASAT", "YAMAL", "LORAL", "AMOS", "SHINASAT", "TELKOM", "GSAT",
         "TIBA", "KACIFIC", "HYLAS", "NBN", "NORSAT", "SESAT", "JUPITER", "TURKSAT", "ARABSAT",
         "NILESAT", "TANGO", "ABS", "KA-SAT", "CINAHASAT", "ST-2", "MEASAT", "BULSATCOM",
@@ -456,18 +471,30 @@ def infer_purpose(metadata):
         "VHTS", "VINASAT", "ES'HAIL", "JDRS", "SIRIUS", "GALAXY", "STARONE", "AUSSAT",
         "C-COM", "MOLNIYA", "ECHO", "HORIZONS", "INTELBIRD", "TELENOR", "MERCURY",
         "WGS", "EQUANT", "SES-17", "SES-22", "TURKSAT 5A", "TURKSAT 5B", "GSAT-30",
-        "TURKSAT-6A", "THAICOM", "ASTARTE", "ORBCOMM", "TERRASAR", "HISPASAT"
+        "TURKSAT-6A", "THAICOM", "ASTARTE", "ORBCOMM", "TERRASAR", "HISPASAT",
+        "GLOBALSTAR", "TIANMU-", "ZHONGXING-", "KOREASAT", "APSTAR-", "TIANLIAN",
+        "ASIASAT", "DIRECTV", "EXPRESS-AM", "NIMIQ", "SATELIOT", "BSAT-", "MUOS-",
+        "AMAZONAS", "HELLAS-SAT", "TIANTONG-", "QZS-", "YAHSAT", "TURKMENALEM", "XM-", "HELLAS-SAT", "DUBAISAT-", "COMSATBW-", "EXPRESS-AT", "ARSAT", "RADUGA-", "YAHSAT", "XM-", 
+        "EXPRESS-AMU", "ASIASTAR"
+
     ]):
         return "Communications"
+
+
+
 
     # 📡 **Navigation Satellites**  
     if any(keyword in name for keyword in [
         "GPS", "GLONASS", "GALILEO", "BEIDOU", "NAVSTAR", "QZSS", "COSPAS-SARSAT", "IRNSS",
         "COMPASS", "EGNOS", "WAAS", "MSAS", "GAGAN", "DORIS", "LAGEOS", "NANJING", "ZHY",
         "TUPL", "BDS", "NASS", "NAVIC", "DRAGONFLY", "MICROSCOPE", "PRN", "KASS",
-        "PAS-10", "OMNISTAR", "DORIS-2", "NAVSTAR-66", "PAS-12", "NAVIC-9", "GLONASS-K"
+        "PAS-10", "OMNISTAR", "DORIS-2", "NAVSTAR-66", "PAS-12", "NAVIC-9", "GLONASS-K", "TIANMU-", "QZS-", "GNOMES-", "POLAR", "CSC-", "LEO"
+
+
     ]):
         return "Navigation"
+
+
 
     # 🌦️ **Weather Monitoring Satellites**  
     if any(keyword in name for keyword in [
@@ -476,9 +503,14 @@ def infer_purpose(metadata):
         "JPSS", "SUOMI", "HY-2", "FY-4", "SEVIRI", "MTSAT", "NPOESS", "NSCAT", "CALIPSO",
         "CLOUDSAT", "GCOM", "GOSAT", "I-5 F4", "MSG-3", "MSG-4", "SCISAT", "OMPS", "LAGRANGE-1",
         "CYGNSS", "AURA", "GOSAT-2", "GRACE-FO", "SMOS", "TANSAT", "GRACE", "OCO-3", "VIIRS",
-        "JASON", "CRYOSAT", "AMSR", "TRMM", "ERS", "ENVISAT", "OZONE"
+        "JASON", "CRYOSAT", "AMSR", "TRMM", "ERS", "ENVISAT", "OZONE", "HAIYANG-", "TIANHUI", "HJ-", "FGRST (GLAST)", "OCEANSAT-", "S-NET", "CYGFM", "MDASAT-", "HULIANWAN", "HULIANGWANG", "YUNYAO-", "FARADAY", "DAQI"
+
+
     ]):
         return "Weather Monitoring"
+
+
+
 
     # 🛰️ **Military & Reconnaissance Satellites**  
     if any(keyword in name for keyword in [
@@ -487,9 +519,17 @@ def infer_purpose(metadata):
         "GRU", "ZUMA", "GAOFEN", "JL-1", "JL-2", "XHSAT", "SHIJIAN", "NAVY", "ARSENAL",
         "GRUMMAN", "KOSMOS", "SICH", "RORSAT", "SATCOM", "QIAN", "TIANCHENG", "SPIRA",
         "TITAN-2", "ORION-5", "GEO-11", "FIREBIRD", "EWS", "MUSIS", "UFO", "AEHF", "KOSMOS-2549",
-        "ALOUETTE", "ORBIT-1", "ZONAL", "SKYMED", "KOMETA", "GOVSAT", "VORTEX", "NOSS"
+        "ALOUETTE", "ORBIT-1", "ZONAL", "SKYMED", "KOMETA", "GOVSAT", "VORTEX", "NOSS", "SHIYAN", "TIANQI", "YUNHAI-", "SJ-", "GHOST-", "LUCH-", "GNOMES-", "RISAT-", "BLACKJACK", 
+        "TIANTONG-", "ORS-", "ION", "SKYKRAFT-", "ZHEDA PIXING-", "RADUGA-", "SWARM", "CSG-", 
+        "NINGXIA-", "TJS-", "MUOS-", "UMBRA-", "LEGION", "BRO-", "CHECKMATE", "GJZ", "GEESAT-", "TIANTONG-", "ZIYUAN", "RISAT-", "KL-BETA", "KAZSAT-", 
+        "GOKTURK", "ZHIHUI", "YARILO", "HUANJING", "SPARK", "XW-", "KONDOR-FKA", "KL-ALPHA", 
+        "ELSA-D", "EROS"
+
+
     ]):
         return "Military/Reconnaissance"
+
+
 
     # 🏞️ **Earth Observation Satellites**  
     if any(keyword in name for keyword in [
@@ -499,36 +539,52 @@ def infer_purpose(metadata):
         "VHR", "EOSAT", "LAGEOS", "TANDEM", "PAZ", "SWOT", "TET-1", "GEOEYE", "FASAT", "KASAT",
         "TUBIN", "VNREDSAT", "HYPERSAT-2", "MOROCCO", "NUSAT-7", "HYPSO", "RESOURCESAT",
         "IKONOS", "THEOS", "SIRIS", "IRS", "OHSAT", "HISUI", "PLEIADES-NEO", "BILSAT",
-        "FLOCK", "SPECTRA", "AEROSAT", "SARSAT", "GRACE-2", "CHRIS", "MOS-1"
+        "FLOCK", "SPECTRA", "AEROSAT", "SARSAT", "GRACE-2", "CHRIS", "MOS-1", "LEMUR-", "JILIN-", "GONETS-M", "HEAD-", "SUPERVIEW", "FORMOSAT", "EOS-", "ZIYUAN", 
+        "ALSAT", "KANOPUS-V", "DMC", "KONDOR-FKA", "CAPELLA-", "TISAT", "QUETZSAT", "BEIJING", 
+        "RSW-", "EROS", "ZHUHAI-", "EOS-", "DMC", "CANX-", "ELEKTRO-L", "SUPERVIEW-", "PRSS", "TELEOS-", "KANOPUS-V-IK", 
+        "SHARJAHSAT-", "CASSIOPE", "PRISMA", "SOCRATES", "DS-EO"
+
+
     ]):
         return "Earth Observation"
+
+
 
 
         # 🔬 **Scientific Research Satellites**
     if any(keyword in name for keyword in [
         "HUBBLE", "JWST", "X-RAY", "FERMI", "GAIA", "KEPLER", "TESS", "WISE", "SPITZER",
-        "HINODE", "FUSE", "RHESSI", "SOHO", "YOHKOH", "PARKER", "VIKING", "CASSINI",
-        "NEW HORIZONS", "VOYAGER", "JUNO", "ROSETTA", "AKARI", "IXPE", "FUSE", "SUOMI",
-        "ASTROSAT", "INSPIRE", "EXOMARS", "HERSCHEL", "PLANCK", "BICEP", "LIGO",
-        "EUCLID", "HAYABUSA", "LISA", "GRAIL", "WFIRST", "ATHENA", "HERSCHEL", "PLANCK",
-        "SOLAR ORBITER", "MARS EXPRESS", "MRO", "MAVEN", "INSIGHT", "DAWN", "BICEP",
-        "XMM-NEWTON", "SWIFT", "GEMS", "NUSTAR", "PLATO", "SPICA", "GONG", "HELIO",
-        "MAGELLAN", "CHANDRA", "ULYSSES", "HITOMI", "EXTREME UNIVERSE SPACE OBSERVATORY",
-        "SUNRISE", "HELIOPHYSICS", "KECK ARRAY", "NICER", "GONG", "HELIOS", "SOLAR-B",
-        "BICEP ARRAY", "JAMES WEBB", "QUANTUM", "XMM", "ASTRO-H", "LARES", "IRIS", "MICE"
+        "MRO", "MAVEN", "INSIGHT", "DAWN", "BICEP", "XMM-NEWTON", "SWIFT", "GEMS",
+        "NUSTAR", "PLATO", "SPICA", "GONG", "HELIO", "MAGELLAN", "CHANDRA", "ULYSSES",
+        "HITOMI", "SUNRISE", "HELIOPHYSICS", "KECK ARRAY", "NICER", "GONG", "HELIOS",
+        "SOLAR-B", "BICEP ARRAY", "JAMES WEBB", "QUANTUM", "XMM", "ASTRO-H", "LARES",
+        "IRIS", "MICE", "SDO", "PROBA-", "CORIOLIS", "JAS-", "TIMED", "BIROS", "SAPPHIRE", "RADFXSAT", 
+        "ITASAT", "ASNARO-", "BIROS", "CHEOPS", "LOPEN", "SPARTAN", "WEINA", "KANOPUS-V-IK", "INTEGRAL"
+
+
     ]):
         return "Scientific Research"
 
 
+
     # 🛠️ **Technology Demonstration Satellites**
     if any(keyword in name for keyword in [
-        "EXPERIMENT", "TEST", "TECHNOLOGY", "DEMO", "TECHSAT", "PROTOTYPE", "EXOSAT",
-        "BEESAT", "FIREBIRD", "STPSAT", "ASTERIX", "MICROSAT", "NANOSAT", "PHASE 4",
-        "LITE", "TSS", "X-SAT", "SKYLARK", "ANGELS", "GENESIS", "TOM", "TECHNOSAT",
-        "SPECTRUM-X", "LARES", "NEUDOSE", "ETB", "E-TB", "TECHDOME", "TRITON", "RAVAN",
-        "ECHO", "NANOSAIL", "VCLS", "CUBERIDER", "LUME", "FIREBIRD", "COPPER", "STPSAT-6",
-        "OSCAR", "ICECUBE", "RAVAN", "HIT-SAT", "QUBIK", "V-BAND", "DISCOSAT", "GOMX",
-        "GOMX-4", "EQUULEUS", "PICSAT", "CANYVAL-X", "INSPIRATION", "NANORACKS"
+        "EXPERIMENT", "TEST", "TECHNOLOGY", "DEMO", "TECHSAT", "PROTOTYPE", "MICROSAT",
+        "NANOSAT", "RAVAN", "ECHO", "VCLS", "CUBERIDER", "FIREBIRD", "COPPER", "OSCAR",
+        "ICECUBE", "DISCOSAT", "GOMX", "GOMX-4", "EQUULEUS", "PICSAT", "CANYVAL-X",
+        "INSPIRATION", "NANORACKS", "CENTISPACE-", "XJS-", "AEROCUBE", "LDPE-", "LINUSS", "OMNI-L", "TIGRISAT", "SMDC", 
+        "LEMUR-2", "ASTROCAST-", "KINEIS-", "NEXTSAT-", "CENTAURI-", "GOKTURK", "STAR-", "APRIZESAT", "PICO-", "AAC-AIS-SAT", "RCM-", "LDPE-", "CORVUS", "SXM-", "PREFIRE-", 
+        "QB", "SCD", "IONOSFERA-M", "PROMETHEUS", "CSG-", "LINGQIAO", "MOHAMMED", "AYRIS-", "TACSAT", 
+        "MANDRAKE", "OPS", "CUTE-", "CLUSTER", "OMNI-L", "ALOS-", "RSW-", "LAPAN-A", "VIGORIDE-", 
+        "SINOD-D", "VRSS-", "DRUMS", "PROGRESS-MS", "PEARL", "UNISAT-", "NANOFF", "ANSER-FLW", 
+        "LINUSS", "JACKAL", "AETHER-", "FOX-", "XJS", "FALCONSAT-", "CS", "CAPELLA-", "UWE-", 
+        "PLATFORM-", "NUVIEW", "GUANGCHUAN", "SDX", "POEM-", "PROPCUBE", "CENTAURI-", "MH-", 
+        "ORESAT", "WNISAT", "EXO-", "CUBEBUG-", "SEDNA-", "GENMAT-", "HIBARI", "HYPERFIELD-", 
+        "MKA-PN", "CUAVA-", "RADFXSAT", "OTB", "STARS", "EDRS-C", "TANAGER-", "ONGLAISAT", 
+        "MONOLITH", "INTEGRAL", "EXCITE", "TYCHE", "ADRAS-J", "NINJASAT", "RROCI-", "ROCK", 
+        "OOV-CUBE", "STEP", "LACE-", "RANDEV"
+
+
     ]):
         return "Technology Demonstration"
 
@@ -536,88 +592,62 @@ def infer_purpose(metadata):
 
     # 🚀 **Human Spaceflight / Crewed Missions**
     if any(keyword in name for keyword in [
-        "ISS", "CREW", "TIANGONG", "SHENZHOU", "SOYUZ", "DRAGON", "STARLINER", 
-        "APOLLO", "GAGANYAAN", "TYPHOON", "LUNAR GATEWAY", "ARTEMIS", "COLUMBIA",
-        "CHALLENGER", "SATURN V", "ORION", "VOSTOK", "MERCURY", "GEMINI",
-        "ZVEZDA", "UNITY", "TRANQUILITY", "MIR", "POLYUS", "CRV", "B330", "HERMES",
-        "XCOR", "SNAPSHOT", "LUNOKHOD", "LUNAR MODULE", "NOVA", "SPACEX", "DEARMOON",
-        "BOEING CST-100", "BLUE ORIGIN", "SPACESHIPTWO", "X-37B", "ORION MPCV",
-        "ASTRONAUT", "INTERNATIONAL SPACE STATION", "BAIKONUR", "LUNOKHOD", "X-15",
-        "LUNAR MODULE", "MOONWALK", "MOON LANDER"
+        "ISS", "CREW", "TIANGONG", "SHENZHOU", "SOYUZ", "DRAGON", "STARLINER", "APOLLO",
+        "GAGANYAAN", "ARTEMIS", "COLUMBIA", "CHALLENGER", "SATURN V", "ORION", "VOSTOK",
+        "MERCURY", "GEMINI", "ZVEZDA", "UNITY", "TRANQUILITY", "MIR", "LUNAR MODULE",
+        "SPACEX", "DEARMOON", "BOEING CST-100", "BLUE ORIGIN", "SPACESHIPTWO", "X-37B", "CSS", "ISS Modules (MENGTIAN, TIANHE, WENTIAN)"
+
     ]):
         return "Human Spaceflight"
 
 
 
-    # 🛠️ **Space Infrastructure (Relay, Experimental, Interplanetary)**
+    # 🛰️ **Space Infrastructure (Relay, Experimental, Interplanetary)**
     if any(keyword in name for keyword in [
-        "TDRS", "RELAY", "GEO-COM", "GEO-TEST", "LAGRANGE", "LUCY", "HAYABUSA",
-        "MARS", "VENUS", "JUPITER", "SATURN", "PLUTO", "KUIPER", "DEEP SPACE",
-        "EXPLORER", "MOON", "LUNAR", "INSIGHT", "ODYSSEY", "MAVEN", "BEPICOLOMBO",
-        "GAGANYAAN", "HERMES", "MERCURY", "APOLLO", "SOLAR ORBITER", "LUNAR PROBE",
-        "HELIOPHYSICS", "LUNAR PATHFINDER", "LUNAR RECONNAISSANCE ORBITER", "HORIZONS",
-        "SELENE", "MARS PATHFINDER", "CURIOSITY", "OPPORTUNITY", "SPIRIT",
-        "ROSCOSMOS", "JAXA", "TIANWEN", "VIPER", "GATEWAY", "CALLISTO", "SPACEBUS",
-        "MARS SAMPLE RETURN", "EXPLORER-1", "VOYAGER", "MOON EXPRESS", "CUBEHAB"
+        "TDRS", "RELAY", "GEO-COM", "LAGRANGE", "LUCY", "HAYABUSA", "MARS", "VENUS",
+        "JUPITER", "SATURN", "PLUTO", "KUIPER", "DEEP SPACE", "EXPLORER", "MOON", "LUNAR",
+        "INSIGHT", "ODYSSEY", "MAVEN", "BEPICOLOMBO", "GAGANYAAN", "HERMES", "MERCURY",
+        "SOLAR ORBITER", "LUNAR PATHFINDER", "LUNAR RECONNAISSANCE ORBITER", "HORIZONS",
+        "SELENE", "MARS PATHFINDER", "CURIOSITY", "OPPORTUNITY", "SPIRIT", "ROSCOSMOS",
+        "JAXA", "TIANWEN", "VIPER", "GATEWAY", "CALLISTO", "SPACEBUS", "MARS SAMPLE RETURN", "CSS", "TIANLIAN", "XW-", "EXPRESS-AT", "SPACEBEE-", "CSS", "TIANLIAN"
+
+
     ]):
         return "Space Infrastructure"
 
 
 
-    # 🚗 **Space Tug / Servicing / Space Logistics**
+    # 🚗 **Satellite Servicing & Logistics (Tugs, Refueling, Reboost)**
     if any(keyword in name for keyword in [
         "MEV", "MISSION EXTENSION", "TUG", "SATELLITE SERVICING", "ORBIT TRANSFER",
-        "ORBIT FAB", "RENDEZVOUS", "FUEL DEPOT", "ASTROBOTIC", "NORTHROP GRUMMAN",
-        "OSAM", "POD", "PEREGRINE", "XTRAC", "RPO", "JUNKER", "REPAIR", "RESTORE",
-        "SPACE DRAG", "IN-ORBIT REFUELING", "DROID", "GRIPPER", "ACTIVE DEBRIS REMOVAL",
-        "MISSION REBOOST", "LIFEBAND", "SHERPA", "PROLONG", "EXTENSION VEHICLE",
-        "NANOTUG", "GEO SERVICING", "MOON BASE SUPPLY", "TUGASSIST", "DEORBIT",
-        "ADVANCED RENDEZVOUS", "ON-ORBIT REPAIR", "ORBITAL SERVICE VEHICLE", "SPIDER",
-        "RAIDER", "SPECTRE", "VIVASAT", "DRACO", "BASILISK"
+        "ORBIT FAB", "RENDEZVOUS", "FUEL DEPOT", "OSAM", "POD", "REPAIR", "RESTORE",
+        "SPACE DRAG", "IN-ORBIT REFUELING", "ACTIVE DEBRIS REMOVAL", "MISSION REBOOST",
+        "SHERPA", "EXTENSION VEHICLE", "GEO SERVICING", "DEORBIT", "ON-ORBIT REPAIR", "ELSA-D", "PROX-", "ORBASTRO-AF"
+
     ]):
         return "Satellite Servicing & Logistics"
 
 
 
-    # 🚀 Deep Space Exploration Missions (Interplanetary Probes, Lunar, and Beyond)
+    # 🌌 **Deep Space Exploration Missions (Interplanetary & Lunar)**
     if any(keyword in name for keyword in [
-        # 🪐 Interplanetary & Outer Solar System Missions
-        "VOYAGER", "PIONEER", "NEW HORIZONS", "ULYSSES", "CASSINI", "JUNO", 
-        "BEPICOLOMBO", "MAVEN", "MARS EXPRESS", "VENUS EXPRESS", "MAGELLAN",
-        "AKATSUKI", "VENERA", "MARINER", "GALILEO", "ODYSSEY", "INSIGHT",
-        "MESSENGER", "HELIOPHYSICS", "JUPITER ICY MOONS", "GANYMEDE", "EUROPA",
-        "TITAN", "DRAGONFLY", "VOYAGER 1", "VOYAGER 2", "MARS ODYSSEY", 
-        "LUCY", "PERSEVERANCE", "CURIOSITY", "EXOMARS", "INSIGHT", 
-        "VIKING 1", "VIKING 2", "MARS GLOBAL SURVEYOR", "NOZOMI", "PHOBOS-GRUNT",
-        "SPIRIT", "OPPORTUNITY", "EXOMARS TRACE GAS ORBITER",
-        # 🌕 Lunar Exploration (Orbiters, Landers, Sample Return)
-        "LUNAR RECONNAISSANCE", "CHANG'E", "LUNOKHOD", "APOLLO", "ARTEMIS", 
-        "LUNA", "LUNOKHOD", "SURVEYOR", "RANGER", "SMART-1", "KAGUYA",
-        "SELENE", "YUTU", "ODIN", "VIPER", "ISRU", "HISEA", "TYCHO",
-        "ORBITER-1", "MOONLIGHT", "LUNAR PATHFINDER", "LUNAR FLASHLIGHT",
-        "NASA CLPS", "BLUE GHOST", "VIKRAM", "CHANDRAYAAN", "PEREGRINE",
-        "ODYSSEY MOON", "MOON EXPRESS", "LUNAR ICECUBE", "LUNAR POLAR HYDROGEN",
-        "SLIM", "HERMES", "PROSPECTOR", "EXPLORER-1", "LUNAR GATEWAY",
-        "CAPSTONE", "LUNAR PROSPECTOR", "LUNAR POLAR HYDROGEN MAPPER",
-        # 🌑 Missions to Other Moons (Saturn, Jupiter, Uranus, Neptune)
-        "EUROPA CLIPPER", "TITAN SATURN SYSTEM MISSION", "JUPITER ICY MOONS",
-        "CALLISTO LANDER", "TITAN DRAGONFLY", "GANYMEDE ORBITER", 
-        "TRITON", "NEPTUNE ORBITER", "CASSINI-HUYGENS", "HERA",
-        "HUBBLE DEEP SPACE", "ULTRA DEEP FIELD", "GANYMEDE LANDER",
-        "PLUTO-KUIPER EXPRESS", "TSSM", "IO VOLCANO OBSERVER", "NEPTUNE PROBE"
+        "VOYAGER", "PIONEER", "NEW HORIZONS", "ULYSSES", "CASSINI", "JUNO", "BEPICOLOMBO",
+        "MAVEN", "MARS EXPRESS", "VENUS EXPRESS", "MAGELLAN", "AKATSUKI", "VENERA",
+        "MARINER", "GALILEO", "ODYSSEY", "INSIGHT", "JUPITER ICY MOONS", "GANYMEDE",
+        "EUROPA", "TITAN", "DRAGONFLY", "LUNAR RECONNAISSANCE", "CHANG'E", "LUNA",
+        "LUNOKHOD", "APOLLO", "ARTEMIS", "SMART-1", "KAGUYA", "SELENE", "YUTU", "VIPER",
+        "LUNAR PATHFINDER", "LUNAR GATEWAY", "CAPSTONE", "EXOMARS", "TITAN SATURN SYSTEM MISSION", "MMS", "THOR", "HST", "CXO", "EYESAT", "RADIO ROSTO (RS-15)"
+
     ]):
         return "Deep Space Exploration"
+
 
     # 🛑 Default classifications
     if object_type == "PAYLOAD":
         return "Unknown Payload"
-    if object_type == "R/B":
-        return "Rocket Body (Debris)"
-    if object_type == "DEB":
-        return "Space Debris"
+    
 
     return "Unknown"
-
 
 
 
