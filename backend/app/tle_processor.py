@@ -12,6 +12,7 @@ import time
 from database import get_db_connection  # ✅ Use get_db_connection()
 from math import isfinite, sqrt, pi
 from skyfield.api import EarthSatellite
+from psycopg2 import OperationalError, InterfaceError
 
 
 # Load environment variables
@@ -1038,6 +1039,9 @@ def fetch_missing_gp_norads(session, existing_norads):
 
 
 
+# ✅ Batch size for inserting satellites
+BATCH_SIZE = 500  
+
 def update_satellite_data():
     """
     Fetch TLE data **ONLY for NORADs in the database**, 
@@ -1054,7 +1058,6 @@ def update_satellite_data():
 
     # ✅ Fetch existing NORAD numbers
     existing_norads = get_existing_norad_numbers()
-
     if not existing_norads:
         print("⚠️ No NORAD numbers found in the database. Skipping update.")
         return
@@ -1097,14 +1100,7 @@ def update_satellite_data():
                     rev_num = %(rev_num)s, 
                     ephemeris_type = %(ephemeris_type)s
                 WHERE norad_number = %(norad_number)s;
-            """, {
-                "tle_line1": tle_line1,
-                "tle_line2": tle_line2,
-                "norad_number": norad,
-                "ephemeris_type": ephemeris_type,  # ✅ Added ephemeris type
-                **params  # Unpacking computed orbital parameters
-            })
-
+            """, {**params, "tle_line1": tle_line1, "tle_line2": tle_line2, "norad_number": norad, "ephemeris_type": ephemeris_type})
         except Exception as e:
             print(f"⚠️ Error updating NORAD {norad}: {e}")
             conn.rollback()
@@ -1120,10 +1116,8 @@ def update_satellite_data():
         print("✅ No new satellites to add. Skipping new satellite processing.")
         return
 
-    # ✅ Fetch metadata **only for new payloads**
+    # ✅ Fetch metadata & TLEs for new satellites
     new_satellites_metadata = fetch_spacetrack_data_batch(session, list(new_norads))
-
-    # ✅ Fetch TLEs for new satellites
     new_satellites_tles = fetch_tle_data(session, new_norads)
 
     # ✅ Track duplicate names within the batch to avoid conflicts
@@ -1136,73 +1130,79 @@ def update_satellite_data():
         tle = next((tle for tle in new_satellites_tles if tle["norad_number"] == norad), None)
 
         if not tle:
-            print(f"⚠️ No TLE found for {metadata.get('name', 'Unknown')} (NORAD {norad}) - Retrying fetch...")
-            retry_tle = fetch_tle_data(session, {norad})
-
-            if retry_tle:
-                tle = retry_tle[0]
-                print(f"✅ Retried and found TLE for {metadata.get('name', 'Unknown')} (NORAD {norad})")
-            else:
-                print(f"❌ Still no TLE for {metadata.get('name', 'Unknown')} (NORAD {norad}) - Skipping.\n")
-                continue  
+            print(f"⚠️ No TLE found for {metadata.get('name', 'Unknown')} (NORAD {norad}) - Skipping.")
+            continue  
 
         tle_line1, tle_line2 = tle["tle_line1"], tle["tle_line2"]
         ephemeris_type = tle.get("ephemeris_type", 0)
         params = compute_orbital_params(metadata.get("name", "Unknown"), tle_line1, tle_line2, ts)
 
-        if not params or any(v is None for v in params.values()):
+        if not params:
             print(f"⚠️ Skipping {metadata.get('name', 'Unknown')} (NORAD {norad}): Missing computed parameters")
             continue
 
-        merged_data = {**metadata, **tle, **params, "ephemeris_type": ephemeris_type} if metadata and tle else None
-
-        if merged_data and all(merged_data.get(k) is not None for k in ["norad_number", "tle_line1", "tle_line2", "velocity"]):
-            new_satellites.append(merged_data)
-        else:
-            print(f"❌ Skipping {metadata.get('name', 'Unknown')} (NORAD {norad}): Missing required data")
+        merged_data = {**metadata, **tle, **params, "ephemeris_type": ephemeris_type}
+        new_satellites.append(merged_data)
 
     print(f"✅ {len(new_satellites)} new satellites with valid TLEs will be added.")
 
-    # ✅ Insert only new satellites (with valid TLEs)
-    for sat in tqdm(new_satellites, desc="🚀 Adding new payload satellites"):
+    # ✅ **Batch Insert New Satellites**
+    satellite_batches = [new_satellites[i:i + BATCH_SIZE] for i in range(0, len(new_satellites), BATCH_SIZE)]
+    print(f"🚀 Processing {len(satellite_batches)} batches of satellites...")
 
-        norad = sat.get("norad_number")
-        name = sat.get("name", "Unknown")
-
-        # ✅ Check for duplicate names in the batch first
-        if name in existing_names:
-            name = f"{name} ({norad})"  # Append NORAD ID to make it unique
-            print(f"⚠️ Renaming duplicate satellite name within batch: {name}")
-
-        existing_names.add(name)
-        sat["name"] = name  
-
+    for batch_idx, batch in enumerate(satellite_batches):
+        print(f"🚀 Inserting Batch {batch_idx + 1} / {len(satellite_batches)}")
 
         try:
-            cursor.execute("""
-                INSERT INTO satellites (name, tle_line1, tle_line2, norad_number, epoch,
-                                       inclination, eccentricity, mean_motion, raan, arg_perigee, velocity,
-                                       latitude, longitude, orbit_type, period, perigee, apogee,
-                                       semi_major_axis, bstar, rev_num, ephemeris_type, object_type, 
-                                       launch_date, launch_site, decay_date, rcs, purpose, country)
-                VALUES (%(name)s, %(tle_line1)s, %(tle_line2)s, %(norad_number)s, %(epoch)s,
-                        %(inclination)s, %(eccentricity)s, %(mean_motion)s, %(raan)s, %(arg_perigee)s, 
-                        %(velocity)s, %(latitude)s, %(longitude)s, %(orbit_type)s, %(period)s, 
-                        %(perigee)s, %(apogee)s, %(semi_major_axis)s, %(bstar)s, %(rev_num)s, 
-                        %(ephemeris_type)s, %(object_type)s, %(launch_date)s, %(launch_site)s, 
-                        %(decay_date)s, %(rcs)s, %(purpose)s, %(country)s)
-                ON CONFLICT (norad_number) DO NOTHING;
-            """, sat)
+            conn = get_db_connection()  # ✅ Ensure a fresh connection
+            cursor = conn.cursor()
 
-        except Exception as e:
-            print(f"⚠️ Error inserting new satellite {sat['name']} (NORAD {norad}): {e}")
-            conn.rollback()
+            for sat in batch:
+                norad = sat.get("norad_number")
+                name = sat.get("name", "Unknown")
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+                # ✅ Check for duplicate names in the batch first
+                if name in existing_names:
+                    name = f"{name} ({norad})"  # Append NORAD ID to make it unique
+                    print(f"⚠️ Renaming duplicate satellite name within batch: {name}")
+
+                existing_names.add(name)
+                sat["name"] = name  
+
+                try:
+                    cursor.execute("""
+                        INSERT INTO satellites (name, tle_line1, tle_line2, norad_number, epoch,
+                                               inclination, eccentricity, mean_motion, raan, arg_perigee, velocity,
+                                               latitude, longitude, orbit_type, period, perigee, apogee,
+                                               semi_major_axis, bstar, rev_num, ephemeris_type, object_type, 
+                                               launch_date, launch_site, decay_date, rcs, purpose, country)
+                        VALUES (%(name)s, %(tle_line1)s, %(tle_line2)s, %(norad_number)s, %(epoch)s,
+                                %(inclination)s, %(eccentricity)s, %(mean_motion)s, %(raan)s, %(arg_perigee)s, 
+                                %(velocity)s, %(latitude)s, %(longitude)s, %(orbit_type)s, %(period)s, 
+                                %(perigee)s, %(apogee)s, %(semi_major_axis)s, %(bstar)s, %(rev_num)s, 
+                                %(ephemeris_type)s, %(object_type)s, %(launch_date)s, %(launch_site)s, 
+                                %(decay_date)s, %(rcs)s, %(purpose)s, %(country)s)
+                        ON CONFLICT (norad_number) DO NOTHING;
+                    """, sat)
+
+                except (OperationalError, InterfaceError) as e:
+                    print(f"⚠️ Database connection lost while inserting {name} (NORAD {norad}): {e}")
+                    conn.rollback()
+                    conn = get_db_connection()  # ✅ Reconnect and retry
+                    cursor = conn.cursor()
+                    continue  
+
+            conn.commit()  # ✅ Commit only after batch completes
+            cursor.close()
+            conn.close()
+
+        except (OperationalError, InterfaceError) as e:
+            print(f"❌ Critical database failure on batch {batch_idx + 1}: {e}")
+            break  
 
     print(f"✅ {len(new_satellites)} new satellites added successfully.")
+
+
 
 if __name__ == "__main__":
     #update_cdm_data()
