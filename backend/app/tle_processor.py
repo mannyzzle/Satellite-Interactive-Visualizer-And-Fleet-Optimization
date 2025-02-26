@@ -727,6 +727,7 @@ def parse_tle_line2(tle_line2):
 
 
 
+
 def compute_orbital_params(name, tle_line1, tle_line2, ts):
     try:
         if not tle_line1 or not tle_line2:
@@ -789,7 +790,7 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
             print(f"⚠️ Skipping {name} (NORAD {norad_number}): Bad values: {', '.join(bad_values)}")
             return None
 
-        # ✅ **Compute Derived Parameters**
+        # **Orbital Mechanics Constants**
         mu = 398600.4418  # Earth's gravitational parameter (km³/s²)
 
         # ✅ **Compute Semi-Major Axis**
@@ -817,6 +818,17 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
             return None
         
         print(f"   - Velocity: {velocity} km/s")
+
+        # ✅ **Compute Period**
+        try:
+            period = (1 / mean_motion) * 1440  # Convert rev/day to minutes
+            if not isfinite(period) or period <= 0:
+                raise ValueError(f"Invalid period computed: {period}")
+        except Exception as e:
+            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Unable to compute period: {e}")
+            return None
+        
+        print(f"   - Period: {period} minutes")
 
         # ✅ **Classify Orbit**
         try:
@@ -849,6 +861,7 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
             "mean_motion": mean_motion,
             "raan": raan,
             "arg_perigee": arg_perigee,
+            "period": period,  # ✅ **Added Period**
             "semi_major_axis": semi_major_axis,
             "perigee": perigee,
             "apogee": apogee,
@@ -863,7 +876,6 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
     except Exception as e:
         print(f"❌ Critical error computing {name} (NORAD {norad_number}): {e}")
         return None
-
 
 
 
