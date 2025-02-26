@@ -4,14 +4,12 @@
 import psycopg2
 from skyfield.api import EarthSatellite, load
 from tqdm import tqdm
-from math import sqrt, pi
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
 import requests
 import time
 from database import get_db_connection  # ✅ Use get_db_connection()
-from math import isfinite
 from math import isfinite, sqrt, pi
 from skyfield.api import EarthSatellite
 
@@ -728,6 +726,8 @@ def parse_tle_line2(tle_line2):
 
 
 
+
+
 def compute_orbital_params(name, tle_line1, tle_line2, ts):
     try:
         if not tle_line1 or not tle_line2:
@@ -746,7 +746,7 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
         print(f"\n🔍 Checking values for {name} (NORAD {norad_number}):")
         print(f"   - Mean Motion: {mean_motion}")
         print(f"   - Epoch: {epoch}")
-        
+
         if mean_motion is None or not isfinite(mean_motion) or mean_motion <= 0:
             print(f"⚠️ Skipping {name} (NORAD {norad_number}): No valid mean_motion.")
             return None
@@ -788,16 +788,14 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
         # ✅ **Compute Semi-Major Axis**
         try:
             semi_major_axis = (mu / ((mean_motion * 2 * pi / 86400) ** 2)) ** (1 / 3)
+            if not isfinite(semi_major_axis) or semi_major_axis <= 0:
+                raise ValueError(f"Invalid semi-major axis computed: {semi_major_axis}")
         except Exception as e:
-            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Unable to compute semi-major axis: {e}")
+            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Semi-major axis error: {e}")
             return None
-        
+
         # 🔎 Debugging Prints: Check Semi-Major Axis
         print(f"   - Semi-Major Axis: {semi_major_axis} km")
-
-        if not isfinite(semi_major_axis) or semi_major_axis <= 0:
-            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Invalid semi-major axis ({semi_major_axis})")
-            return None
 
         # ✅ **Compute Perigee, Apogee**
         perigee = semi_major_axis * (1 - eccentricity) - 6378  # Earth radius subtracted
@@ -806,6 +804,8 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
         # ✅ **Compute Velocity**
         try:
             velocity = sqrt(mu / semi_major_axis)
+            if not isfinite(velocity) or velocity <= 0:
+                raise ValueError(f"Invalid velocity computed: {velocity}")
         except Exception as e:
             print(f"⚠️ Skipping {name} (NORAD {norad_number}): Unable to compute velocity: {e}")
             return None
@@ -813,22 +813,18 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
         # 🔎 Debugging Prints: Check Velocity
         print(f"   - Velocity: {velocity} km/s")
 
-        if not isfinite(velocity) or velocity <= 0:
-            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Bad velocity ({velocity})")
-            return None
-
         # ✅ **Classify Orbit**
         orbit_type = classify_orbit_type(perigee, apogee)
 
         # ✅ **Compute Latitude & Longitude**
+        latitude, longitude = None, None  # Default values
         try:
             geocentric = satellite.at(ts.now())  # Get satellite position
-            subpoint = geocentric.subpoint()  # Get ground subpoint
+            subpoint = geocentric.subpoint()
             latitude = subpoint.latitude.degrees
             longitude = subpoint.longitude.degrees
         except Exception as e:
-            print(f"⚠️ Could not determine latitude/longitude for {name} (NORAD {norad_number}): {e}")
-            latitude, longitude = None, None
+            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Unable to compute latitude/longitude: {e}")
 
         # 🔎 Debugging Prints: Check Computed Values
         print(f"   - Orbit Type: {orbit_type}")
@@ -853,14 +849,13 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
             "orbit_type": orbit_type,
             "bstar": bstar,
             "rev_num": rev_num,
-            "latitude": latitude,  # ✅ Added Latitude
-            "longitude": longitude  # ✅ Added Longitude
+            "latitude": latitude,  # ✅ Now handles failure safely
+            "longitude": longitude  # ✅ Now handles failure safely
         }
 
     except Exception as e:
-        print(f"❌ Error computing parameters for {name}: {e}")
+        print(f"❌ Critical error computing {name} (NORAD {norad_number}): {e}")
         return None
-
 
 
 
