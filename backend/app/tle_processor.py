@@ -963,10 +963,11 @@ def fetch_new_payload_norads(session, max_norad):
 
 
 
+
 def fetch_missing_gp_norads(session, existing_norads):
     """
     Fetches all NORAD numbers from GP-class (TLEs) and ensures only active satellites are considered.
-    Returns a set of new NORAD numbers that are NOT in the database and have TLEs within the last month.
+    Returns a set of new NORAD numbers that are NOT in the database and have TLEs within the last 6 months.
     """
     gp_url = "https://www.space-track.org/basicspacedata/query/class/gp/format/json"
 
@@ -983,16 +984,22 @@ def fetch_missing_gp_norads(session, existing_norads):
                 tle_epoch = metadata.get("EPOCH", None)
 
                 if norad_number > 0 and tle_epoch:
-                    tle_epoch_date = datetime.strptime(tle_epoch, "%Y-%m-%dT%H:%M:%SZ")
-                    if tle_epoch_date > datetime.utcnow() - timedelta(days=180):
-                        all_norads.add(norad_number)  # ✅ Keep only active satellites with TLEs within the last month
+                    # Updated format to include microseconds
+                    try:
+                        tle_epoch_date = datetime.strptime(tle_epoch, "%Y-%m-%dT%H:%M:%S.%fZ")
+                    except ValueError:
+                        tle_epoch_date = datetime.strptime(tle_epoch, "%Y-%m-%dT%H:%M:%SZ")  # Fallback to no microseconds
+
+                    # Filter for TLEs within the last 6 months
+                    if tle_epoch_date > datetime.utcnow() - timedelta(days=180):  # Now 6 months filter
+                        all_norads.add(norad_number)  # ✅ Keep only active satellites with TLEs within the last 6 months
             except Exception as e:
                 print(f"⚠️ Error processing GP-class NORAD {metadata.get('NORAD_CAT_ID', 'Unknown')}: {e}")
 
     # ✅ Identify new NORADs by subtracting existing ones
     new_norads = all_norads - existing_norads
 
-    print(f"✅ Found {len(new_norads)} new GP-class NORADs not in the database and with TLEs within the last month.")
+    print(f"✅ Found {len(new_norads)} new GP-class NORADs not in the database and with TLEs within the last 6 months.")
     return new_norads
 
 
