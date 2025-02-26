@@ -1177,15 +1177,6 @@ def update_satellite_data():
         existing_names.add(name)
         sat["name"] = name  
 
-        # ✅ Check against the database for existing names
-        cursor.execute("SELECT COUNT(*) FROM satellites WHERE name = %s", (name,))
-        result = cursor.fetchone()
-        existing_count = result[0] if result else 0
-
-        if existing_count > 0:
-            name = f"{name} ({norad})"  # Append NORAD ID again if necessary
-            print(f"⚠️ Renaming duplicate name (found in DB) to: {name}")
-            sat["name"] = name  
 
         try:
             cursor.execute("""
