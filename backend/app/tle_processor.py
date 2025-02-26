@@ -1144,10 +1144,21 @@ def update_satellite_data():
 
     print(f"✅ {len(new_satellites)} new satellites with valid TLEs will be added.")
 
-    # ✅ Insert only new satellites (with valid TLEs)
+        # ✅ Insert only new satellites (with valid TLEs)
     for sat in tqdm(new_satellites, desc="🚀 Adding new payload satellites"):
 
         norad = sat.get("norad_number")
+        name = sat.get("name", "Unknown")
+
+        # ✅ Check for duplicate names and modify them if needed
+        cursor.execute("SELECT COUNT(*) FROM satellites WHERE name = %s", (name,))
+        existing_count = cursor.fetchone()[0]
+
+        if existing_count > 0:
+            name = f"{name} ({norad})"  # Append NORAD ID to make it unique
+            print(f"⚠️ Renaming duplicate satellite name to: {name}")
+
+        sat["name"] = name  # Update name in satellite dict
 
         try:
             # ✅ Insert new satellite with full metadata & TLE
@@ -1169,6 +1180,7 @@ def update_satellite_data():
         except Exception as e:
             print(f"⚠️ Error inserting new satellite {sat['name']} (NORAD {norad}): {e}")
             conn.rollback()
+
 
     conn.commit()
     cursor.close()
