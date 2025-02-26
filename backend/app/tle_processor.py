@@ -930,6 +930,32 @@ def get_existing_norad_numbers():
 
 
 
+def get_existing_satellite_names():
+    """
+    Fetches all existing satellite names from the database.
+    Returns a set of names.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)  # ✅ Use dictionary cursor
+
+    cursor.execute("SELECT name FROM satellites;")
+    rows = cursor.fetchall()
+
+    if not rows:
+        print("⚠️ No satellite names found in the database!")
+        return set()
+
+    names = {row["name"] for row in rows if row["name"]}  # ✅ Ensure names are valid
+
+    cursor.close()
+    conn.close()
+    
+    print(f"✅ Found {len(names)} existing satellite names in the database.")
+    return names
+
+
+
+
 def get_max_norad_number():
     """
     Fetches the highest NORAD number from the database.
@@ -1059,8 +1085,10 @@ def update_satellite_data():
         print("❌ Could not authenticate with Space-Track. Exiting update process.")
         return
 
-    # ✅ Fetch existing NORAD numbers
+    # ✅ Fetch existing NORAD numbers & satellite names from the database
     existing_norads = get_existing_norad_numbers()
+    existing_names = get_existing_satellite_names()  # ✅ New function to fetch existing names
+
     if not existing_norads:
         print("⚠️ No NORAD numbers found in the database. Skipping update.")
         return
@@ -1123,10 +1151,6 @@ def update_satellite_data():
     new_satellites_metadata = fetch_spacetrack_data_batch(session, list(new_norads))
     new_satellites_tles = fetch_tle_data(session, new_norads)
 
-    # ✅ Get all existing names in the database before processing
-    cursor.execute("SELECT name FROM satellites")
-    db_existing_names = {row[0] for row in cursor.fetchall()}  # Store as a set
-
     # ✅ Track duplicate names within the batch to avoid conflicts
     batch_existing_names = set()
 
@@ -1171,7 +1195,7 @@ def update_satellite_data():
                 # ✅ Ensure unique name across database & batch
                 original_name = name
                 suffix = 1
-                while name in db_existing_names or name in batch_existing_names:
+                while name in existing_names or name in batch_existing_names:
                     name = f"{original_name} ({suffix})"
                     suffix += 1
 
@@ -1179,7 +1203,7 @@ def update_satellite_data():
                     print(f"⚠️ Renaming duplicate satellite: {original_name} → {name}")
 
                 batch_existing_names.add(name)
-                db_existing_names.add(name)
+                existing_names.add(name)
                 sat["name"] = name  
 
                 try:
@@ -1214,6 +1238,7 @@ def update_satellite_data():
             break  
 
     print(f"✅ {len(new_satellites)} new satellites added successfully.")
+
 
 
 
