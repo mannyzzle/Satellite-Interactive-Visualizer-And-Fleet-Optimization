@@ -726,8 +726,6 @@ def parse_tle_line2(tle_line2):
 
 
 
-
-
 def compute_orbital_params(name, tle_line1, tle_line2, ts):
     try:
         if not tle_line1 or not tle_line2:
@@ -830,14 +828,19 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
         
         print(f"   - Period: {period} minutes")
 
-        # ✅ **Classify Orbit**
+        # ✅ **Classify Orbit** (⚠️ SAFETY CHECK ADDED)
         try:
-            orbit_type = classify_orbit_type(perigee, apogee)
+            if isfinite(perigee) and isfinite(apogee):
+                orbit_type = classify_orbit_type(perigee, apogee)
+            else:
+                raise ValueError("Perigee or apogee is invalid.")
         except Exception as e:
             print(f"⚠️ Skipping {name} (NORAD {norad_number}): Unable to classify orbit: {e}")
             return None
 
-        # ✅ **Compute Latitude & Longitude**
+        print(f"   - Orbit Type: {orbit_type}")
+
+        # ✅ **Compute Latitude & Longitude** (⚠️ SAFETY CHECK ADDED)
         latitude, longitude = None, None
         try:
             geocentric = satellite.at(ts.now())  # Get satellite position
@@ -847,7 +850,6 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
         except Exception as e:
             print(f"⚠️ Skipping {name} (NORAD {norad_number}): Unable to compute latitude/longitude: {e}")
 
-        print(f"   - Orbit Type: {orbit_type}")
         print(f"   - Latitude: {latitude}")
         print(f"   - Longitude: {longitude}")
 
@@ -861,7 +863,7 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
             "mean_motion": mean_motion,
             "raan": raan,
             "arg_perigee": arg_perigee,
-            "period": period,  # ✅ **Added Period**
+            "period": period,
             "semi_major_axis": semi_major_axis,
             "perigee": perigee,
             "apogee": apogee,
