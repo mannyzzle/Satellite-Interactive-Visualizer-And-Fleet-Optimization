@@ -984,7 +984,7 @@ def fetch_missing_gp_norads(session, existing_norads):
 
                 if norad_number > 0 and tle_epoch:
                     tle_epoch_date = datetime.strptime(tle_epoch, "%Y-%m-%dT%H:%M:%SZ")
-                    if tle_epoch_date > datetime.utcnow() - timedelta(days=30):
+                    if tle_epoch_date > datetime.utcnow() - timedelta(days=180):
                         all_norads.add(norad_number)  # ✅ Keep only active satellites with TLEs within the last month
             except Exception as e:
                 print(f"⚠️ Error processing GP-class NORAD {metadata.get('NORAD_CAT_ID', 'Unknown')}: {e}")
