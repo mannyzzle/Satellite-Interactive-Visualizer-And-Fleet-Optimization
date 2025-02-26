@@ -1126,38 +1126,36 @@ def update_satellite_data():
     # ✅ Fetch TLEs for new satellites
     new_satellites_tles = fetch_tle_data(session, new_norads)
 
+    # ✅ Track duplicate names within the batch to avoid conflicts
+    existing_names = set()
+
     # ✅ Merge TLE & Metadata (with additional safety checks)
     new_satellites = []
     for norad in new_norads:
         metadata = new_satellites_metadata.get(norad, {})
-
-        # ✅ Find TLE for this NORAD
         tle = next((tle for tle in new_satellites_tles if tle["norad_number"] == norad), None)
 
         if not tle:
             print(f"⚠️ No TLE found for {metadata.get('name', 'Unknown')} (NORAD {norad}) - Retrying fetch...")
-            retry_tle = fetch_tle_data(session, {norad})  # ✅ Retry fetching for this specific NORAD
+            retry_tle = fetch_tle_data(session, {norad})
 
             if retry_tle:
                 tle = retry_tle[0]
                 print(f"✅ Retried and found TLE for {metadata.get('name', 'Unknown')} (NORAD {norad})")
             else:
                 print(f"❌ Still no TLE for {metadata.get('name', 'Unknown')} (NORAD {norad}) - Skipping.\n")
-                continue  # ❌ Skip satellites without TLE data
+                continue  
 
-        # ✅ Compute orbital parameters
         tle_line1, tle_line2 = tle["tle_line1"], tle["tle_line2"]
-        ephemeris_type = tle.get("ephemeris_type", 0)  # Default to 0 if missing
+        ephemeris_type = tle.get("ephemeris_type", 0)
         params = compute_orbital_params(metadata.get("name", "Unknown"), tle_line1, tle_line2, ts)
 
         if not params or any(v is None for v in params.values()):
             print(f"⚠️ Skipping {metadata.get('name', 'Unknown')} (NORAD {norad}): Missing computed parameters")
             continue
 
-        # ✅ Merge metadata, TLE, and computed orbital parameters
         merged_data = {**metadata, **tle, **params, "ephemeris_type": ephemeris_type} if metadata and tle else None
 
-        # ✅ Ensure required fields exist before appending
         if merged_data and all(merged_data.get(k) is not None for k in ["norad_number", "tle_line1", "tle_line2", "velocity"]):
             new_satellites.append(merged_data)
         else:
@@ -1165,24 +1163,31 @@ def update_satellite_data():
 
     print(f"✅ {len(new_satellites)} new satellites with valid TLEs will be added.")
 
-        # ✅ Insert only new satellites (with valid TLEs)
+    # ✅ Insert only new satellites (with valid TLEs)
     for sat in tqdm(new_satellites, desc="🚀 Adding new payload satellites"):
 
         norad = sat.get("norad_number")
         name = sat.get("name", "Unknown")
 
-        # ✅ Check for duplicate names and modify them if needed
+        # ✅ Check for duplicate names in the batch first
+        if name in existing_names:
+            name = f"{name} ({norad})"  # Append NORAD ID to make it unique
+            print(f"⚠️ Renaming duplicate satellite name within batch: {name}")
+
+        existing_names.add(name)
+        sat["name"] = name  
+
+        # ✅ Check against the database for existing names
         cursor.execute("SELECT COUNT(*) FROM satellites WHERE name = %s", (name,))
-        existing_count = cursor.fetchone()[0]
+        result = cursor.fetchone()
+        existing_count = result[0] if result else 0
 
         if existing_count > 0:
-            name = f"{name} ({norad})"  # Append NORAD ID to make it unique
-            print(f"⚠️ Renaming duplicate satellite name to: {name}")
-
-        sat["name"] = name  # Update name in satellite dict
+            name = f"{name} ({norad})"  # Append NORAD ID again if necessary
+            print(f"⚠️ Renaming duplicate name (found in DB) to: {name}")
+            sat["name"] = name  
 
         try:
-            # ✅ Insert new satellite with full metadata & TLE
             cursor.execute("""
                 INSERT INTO satellites (name, tle_line1, tle_line2, norad_number, epoch,
                                        inclination, eccentricity, mean_motion, raan, arg_perigee, velocity,
@@ -1202,13 +1207,11 @@ def update_satellite_data():
             print(f"⚠️ Error inserting new satellite {sat['name']} (NORAD {norad}): {e}")
             conn.rollback()
 
-
     conn.commit()
     cursor.close()
     conn.close()
 
     print(f"✅ {len(new_satellites)} new satellites added successfully.")
-
 
 if __name__ == "__main__":
     #update_cdm_data()
