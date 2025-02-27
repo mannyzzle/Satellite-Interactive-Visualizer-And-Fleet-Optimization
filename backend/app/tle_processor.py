@@ -1013,45 +1013,50 @@ def fetch_new_payload_norads(session, max_norad):
     return new_norads
 
 
-
-def fetch_missing_gp_norads(session, existing_norads):
+def fetch_missing_gp_norads(session, existing_norads, sat_db):
     """
     Fetches all NORAD numbers from GP-class (TLEs) and ensures only active satellites are considered.
+    Applies different decay removal buffers based on orbit type:
+      - LEO: Remove after 3 days past decay_date
+      - MEO: Remove after 7–14 days past decay_date
+      - HEO: Remove after 30+ days past decay_date
+      - GEO: Keep indefinitely unless verified de-orbited
     Returns a set of new NORAD numbers that are NOT in the database and have TLEs within the last 6 months.
     """
-    gp_url = "https://www.space-track.org/basicspacedata/query/class/gp/format/json"
 
+    gp_url = "https://www.space-track.org/basicspacedata/query/class/gp/format/json"
     all_norads = set()
 
     print("📡 Fetching GP-class NORAD numbers from Space-Track...")
 
-    # ✅ Fetch GP-class NORADs (Only active satellites with TLEs)
     response_gp = rate_limited_get(session, gp_url)
     if response_gp.status_code == 200 and response_gp.json():
         for metadata in response_gp.json():
             try:
                 norad_number = int(metadata.get("NORAD_CAT_ID", -1))
                 tle_epoch = metadata.get("EPOCH", None)
+                orbit_type = metadata.get("ORBIT_TYPE", "UNKNOWN").upper()
+                decay_date = metadata.get("DECAY_DATE", None)
 
                 if norad_number > 0 and tle_epoch:
-                    # Convert to the desired format: "YYYY-MM-DD HH:MM:SS.ffffff"
-                    tle_epoch_cleaned = tle_epoch.rstrip("Z").replace("T", " ")
                     
-                    # Attempt parsing the EPOCH
-                    parsed = None
-                    for fmt in ["%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"]:
-                        try:
-                            parsed = datetime.strptime(tle_epoch_cleaned, fmt)
-                            break  # Stop if one format works
-                        except ValueError:
-                            continue  # Try the next format
+                    
+                    # Handle decay date logic
+                    if decay_date:
+                        decay_parsed = datetime.strptime(decay_date, "%Y-%m-%d")
 
-                    if not parsed:
-                        raise ValueError(f"Unknown TLE EPOCH format: {tle_epoch}")
+                        # Apply different removal buffers based on orbit type
+                        if orbit_type == "LEO" and decay_parsed < datetime.utcnow() - timedelta(days=3):
+                            continue  # Remove LEO objects 3+ days past decay
+                        elif orbit_type == "MEO" and decay_parsed < datetime.utcnow() - timedelta(days=14):
+                            continue  # Remove MEO objects 14+ days past decay
+                        elif orbit_type == "HEO" and decay_parsed < datetime.utcnow() - timedelta(days=30):
+                            continue  # Remove HEO objects 30+ days past decay
+                        elif orbit_type == "GEO":
+                            continue  # GEO objects stay indefinitely unless manually verified
 
-                    # Filter for TLEs within the last 6 months
-                    if parsed > datetime.utcnow() - timedelta(days=180):  # Now 6 months filter
-                        all_norads.add(norad_number)  # ✅ Keep only active satellites with TLEs within the last 6 months
+                    # ✅ Keep only active satellites with valid recent TLEs
+                    all_norads.add(norad_number)
 
             except Exception as e:
                 print(f"⚠️ Error processing GP-class NORAD {metadata.get('NORAD_CAT_ID', 'Unknown')}: {e}")
@@ -1061,7 +1066,6 @@ def fetch_missing_gp_norads(session, existing_norads):
 
     print(f"✅ Found {len(new_norads)} new GP-class NORADs not in the database and with TLEs within the last 6 months.")
     return new_norads
-
 
 
 
