@@ -106,7 +106,7 @@ export default function Home() {
 
 
 
-  
+
   
   const addOrbitPaths = () => {
     console.log("🛰️ Updating orbit paths...");
@@ -1782,7 +1782,7 @@ return (
     <div className="p-7 bg-gray-900 bg-opacity-95 rounded-xl shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 lg:col-span-2">
       <h2 className="text-4xl font-medium text-cyan-400 tracking-wide">Resources & Learning</h2>
       <ul className="mt-5 list-disc pl-6 space-y-3 text-lg text-gray-300">
-        <li><a href="https://www.celestrak.com/" className="text-teal-300 hover:underline hover:text-teal-200" target="_blank">CelesTrak — TLE Data & Orbital Elements</a></li>
+        <li><a href="https://www.spacestrak.com/" className="text-teal-300 hover:underline hover:text-teal-200" target="_blank">SpaceTrak — TLE Data & Orbital Elements</a></li>
         <li><a href="https://www.n2yo.com/" className="text-green-400 hover:underline hover:text-green-300" target="_blank">N2YO — Live Satellite Tracking</a></li>
       </ul>
     </div>

@@ -26,7 +26,7 @@ The **Satellite Interactive Visualizer** is a dynamic, 3D web-based interface th
 - LLM Integration:
   - Answer user questions about satellite operations, locations, and orbital dynamics.
   - Provide suggestions for viewing satellites in specific areas.
-- Real-time satellite position updates using APIs such as CelesTrak.
+- Real-time satellite position updates using APIs such as SpaceTrak.
 
 ---
 
