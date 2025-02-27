@@ -921,7 +921,6 @@ def clean_old_norads():
         (orbit_type = 'LEO' AND decay_date < CURRENT_DATE - INTERVAL '3 days')
         OR (orbit_type = 'MEO' AND decay_date < CURRENT_DATE - INTERVAL '14 days')
         OR (orbit_type = 'HEO' AND decay_date < CURRENT_DATE - INTERVAL '30 days')
-        OR (orbit_type = 'GEO' AND decay_date < CURRENT_DATE - INTERVAL '180 days')  -- Only remove GEO if manually confirmed
     );
     """
 
@@ -994,72 +993,13 @@ def get_existing_satellite_names():
 
 
 
-def get_max_norad_number():
-    """
-    Fetches the highest NORAD number from the database.
-    Returns the max NORAD number or 0 if no satellites exist.
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT MAX(norad_number) AS max_norad FROM satellites;")
-    result = cursor.fetchone()  # Fetch result safely
-
-    cursor.close()
-    conn.close()
-
-    # ✅ Handle case where no rows exist
-    max_norad = result["max_norad"] if result and result["max_norad"] is not None else 0
-
-    print(f"✅ Highest NORAD in the database: {max_norad}")
-    return max_norad
-
-
-
-
-
-
-def fetch_new_payload_norads(session, max_norad):
-    """
-    Fetches NORAD numbers **ONLY for new payload satellites**
-    that have NORAD numbers greater than max_norad.
-    Returns a set of new NORAD numbers.
-    """
-    spacetrack_url = f"https://www.space-track.org/basicspacedata/query/class/satcat/format/json"
-
-    print(f"📡 Fetching new payload satellites with NORAD > {max_norad}...")
-
-    response = rate_limited_get(session, spacetrack_url)
-
-    new_norads = set()
-
-    if response.status_code == 200 and response.json():
-        for metadata in response.json():
-            try:
-                norad_number = int(metadata.get("NORAD_CAT_ID", -1))
-                
-                # ✅ Only add NORADs greater than max_norad
-                if norad_number > max_norad:
-                    new_norads.add(norad_number)
-            except Exception as e:
-                print(f"⚠️ Error processing NORAD {metadata.get('NORAD_CAT_ID', 'Unknown')}: {e}")
-
-        print(f"✅ Successfully found {len(new_norads)} new payload NORADs.")
-    else:
-        print(f"❌ API error {response.status_code} while fetching new payload NORADs.")
-
-    return new_norads
-
-
 def fetch_missing_gp_norads(session, existing_norads):
     """
-    Fetches all NORAD numbers from GP-class (TLEs) and ensures only active satellites are considered.
-    Applies different decay removal buffers based on orbit type:
-      - LEO: Remove after 3 days past decay_date
-      - MEO: Remove after 7–14 days past decay_date
-      - HEO: Remove after 30+ days past decay_date
-      - GEO: Keep indefinitely unless verified de-orbited
-    Returns a set of new NORAD numbers that are NOT in the database and have TLEs within the last 6 months.
+    Fetch potential objects from GP-class TLEs, applying:
+      - Orbit-based decay date removal
+      - TLE epoch recency thresholds
+      - Combined Apogee/Perigee + Recency Checks
+    Returns a set of new NORAD numbers not in the database.
     """
 
     gp_url = "https://www.space-track.org/basicspacedata/query/class/gp/format/json"
@@ -1072,38 +1012,70 @@ def fetch_missing_gp_norads(session, existing_norads):
         for metadata in response_gp.json():
             try:
                 norad_number = int(metadata.get("NORAD_CAT_ID", -1))
-                tle_epoch = metadata.get("EPOCH", None)
-                orbit_type = metadata.get("ORBIT_TYPE", "UNKNOWN").upper()
-                decay_date = metadata.get("DECAY_DATE", None)
+                tle_epoch_str = metadata.get("EPOCH", "")
+                orbit_type = (metadata.get("ORBIT_TYPE") or "UNKNOWN").upper()
+                decay_date_str = metadata.get("DECAY_DATE", None)
 
-                if norad_number > 0 and tle_epoch:
-                    
-                    
-                    # Handle decay date logic
-                    if decay_date:
-                        decay_parsed = datetime.strptime(decay_date, "%Y-%m-%d")
+                # 🚀 Orbital parameters
+                apogee_km = metadata.get("APOAPSIS", None)
+                perigee_km = metadata.get("PERIAPSIS", None)
 
-                        # Apply different removal buffers based on orbit type
-                        if orbit_type == "LEO" and decay_parsed < datetime.utcnow() - timedelta(days=3):
-                            continue  # Remove LEO objects 3+ days past decay
-                        elif orbit_type == "MEO" and decay_parsed < datetime.utcnow() - timedelta(days=14):
-                            continue  # Remove MEO objects 14+ days past decay
-                        elif orbit_type == "HEO" and decay_parsed < datetime.utcnow() - timedelta(days=30):
-                            continue  # Remove HEO objects 30+ days past decay
-                        elif orbit_type == "GEO":
-                            continue  # GEO objects stay indefinitely unless manually verified
+                if norad_number <= 0 or not tle_epoch_str:
+                    continue  # Invalid entry
 
-                    # ✅ Keep only active satellites with valid recent TLEs
-                    all_norads.add(norad_number)
+                # ------------------ Decay-Date Check ------------------
+                if decay_date_str:
+                    decay_date = datetime.strptime(decay_date_str, "%Y-%m-%d")
+                    now_utc = datetime.utcnow()
+
+                    if orbit_type == "LEO" and decay_date < now_utc - timedelta(days=3):
+                        continue
+                    elif orbit_type == "MEO" and decay_date < now_utc - timedelta(days=14):
+                        continue
+                    elif orbit_type == "HEO" and decay_date < now_utc - timedelta(days=30):
+                        continue
+                    # For GEO, skip if you want them removed once they're decayed, or keep them.
+
+                # ------------------ TLE Epoch Recency Check ------------------
+                tle_epoch_str = tle_epoch_str.replace("T", " ").rstrip("Z")
+                try:
+                    tle_epoch_dt = datetime.strptime(tle_epoch_str, "%Y-%m-%d %H:%M:%S.%f")
+                except ValueError:
+                    tle_epoch_dt = datetime.strptime(tle_epoch_str, "%Y-%m-%d %H:%M:%S")
+
+                days_since_epoch = (datetime.utcnow() - tle_epoch_dt).days
+
+                # ------------------ Combined Apogee/Perigee + Recency Checks ------------------
+                if orbit_type == "LEO":
+                    # 🚀 If TLE is too old OR altitude is too low, it's likely decayed
+                    if (days_since_epoch > 14) and (
+                        (apogee_km is not None and float(apogee_km) < 200) or
+                        (perigee_km is not None and float(perigee_km) < 120)
+                    ):
+                        continue
+
+                elif orbit_type == "MEO":
+                    # 🚀 If TLE is too old AND the apogee is suspiciously low
+                    if (days_since_epoch > 30) and (apogee_km is not None and float(apogee_km) < 200):
+                        continue
+
+                elif orbit_type == "HEO":
+                    # 🚀 If TLE is too old AND it's suspiciously low for HEO
+                    if (days_since_epoch > 60) and (apogee_km is not None and float(apogee_km) < 1000):
+                        continue
+
+                
+                # If it passed all checks, keep it
+                all_norads.add(norad_number)
 
             except Exception as e:
                 print(f"⚠️ Error processing GP-class NORAD {metadata.get('NORAD_CAT_ID', 'Unknown')}: {e}")
 
-    # ✅ Identify new NORADs by subtracting existing ones
     new_norads = all_norads - existing_norads
-
-    print(f"✅ Found {len(new_norads)} new GP-class NORADs not in the database and with TLEs within the last 6 months.")
+    print(f"✅ Found {len(new_norads)} new GP-class NORADs not in the database.")
     return new_norads
+
+
 
 
 
@@ -1227,6 +1199,8 @@ def update_satellite_data():
     conn.commit()
     print(f"✅ Updated TLE data for {len(fresh_tles)} satellites.")
 
+
+
     # 5️⃣ Fetch new payload NORADs **ONLY if they are greater than max_norad**
     new_norads = fetch_missing_gp_norads(session, existing_norads)
     print(f"🚀 Found {len(new_norads)} new payload satellites to be added.")
@@ -1331,6 +1305,6 @@ def update_satellite_data():
 
 
 
-if __name__ == "__main__":
+#if __name__ == "__main__":
     #update_cdm_data()
-    update_satellite_data()
+    #update_satellite_data()
