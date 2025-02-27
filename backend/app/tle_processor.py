@@ -212,6 +212,8 @@ def rate_limited_get(session, url):
 
 
 
+
+
 def fetch_tle_data(session, existing_norads, batch_size=500):
     """
     Fetches latest TLE data from Space-Track with retries for failed requests.
@@ -338,7 +340,6 @@ def fetch_tle_data(session, existing_norads, batch_size=500):
 
     print(f"✅ Successfully fetched TLE data for {len(satellites)} satellites.")
     return satellites
-
 
 
 
@@ -903,30 +904,67 @@ def classify_orbit_type(perigee, apogee):
 
 
 
+def clean_old_norads():
+    """
+    Deletes NORAD numbers from the database that no longer meet the criteria based on orbit type and decay date.
+    """
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    print("🧹 Cleaning outdated NORADs from the database...")
+
+    delete_query = """
+    DELETE FROM satellites
+    WHERE decay_date IS NOT NULL
+    AND (
+        (orbit_type = 'LEO' AND decay_date < CURRENT_DATE - INTERVAL '3 days')
+        OR (orbit_type = 'MEO' AND decay_date < CURRENT_DATE - INTERVAL '14 days')
+        OR (orbit_type = 'HEO' AND decay_date < CURRENT_DATE - INTERVAL '30 days')
+        OR (orbit_type = 'GEO' AND decay_date < CURRENT_DATE - INTERVAL '180 days')  -- Only remove GEO if manually confirmed
+    );
+    """
+
+    cursor.execute(delete_query)
+    conn.commit()
+    
+    deleted_rows = cursor.rowcount
+    print(f"✅ Deleted {deleted_rows} outdated NORADs.")
+
+    cursor.close()
+    conn.close()
+
+
+
 
 def get_existing_norad_numbers():
     """
-    Fetches all existing NORAD numbers from the database.
+    Fetches all existing NORAD numbers from the database after cleaning old entries.
     Returns a set of NORAD numbers.
     """
+
+    # 🔥 First, clean old NORADs
+    clean_old_norads()
+
     conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)  # ✅ Ensure we use a dictionary cursor
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)  # ✅ Use dictionary cursor
 
     cursor.execute("SELECT norad_number FROM satellites;")
     rows = cursor.fetchall()
-
 
     if not rows:
         print("⚠️ No NORAD numbers found in the database!")
         return set()
 
-    norads = {int(row["norad_number"]) for row in rows}  # ✅ Access using column name instead of index
+    norads = {int(row["norad_number"]) for row in rows}  # ✅ Access using column name
 
     cursor.close()
     conn.close()
-    
+
     print(f"✅ Found {len(norads)} existing NORAD numbers in the database.")
     return norads
+
+
 
 
 
@@ -1013,7 +1051,7 @@ def fetch_new_payload_norads(session, max_norad):
     return new_norads
 
 
-def fetch_missing_gp_norads(session, existing_norads, sat_db):
+def fetch_missing_gp_norads(session, existing_norads):
     """
     Fetches all NORAD numbers from GP-class (TLEs) and ensures only active satellites are considered.
     Applies different decay removal buffers based on orbit type:
@@ -1072,6 +1110,7 @@ def fetch_missing_gp_norads(session, existing_norads, sat_db):
 
 from psycopg2 import OperationalError, InterfaceError
 
+
 # ✅ Batch size for inserting satellites
 BATCH_SIZE = 500  
 
@@ -1082,7 +1121,7 @@ def update_satellite_data():
     and update SATCAT data **only for new payloads**.
     """
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)  # Dictionary cursor for easier column access
     session = get_spacetrack_session()
 
     if not session:
@@ -1097,15 +1136,52 @@ def update_satellite_data():
         print("⚠️ No NORAD numbers found in the database. Skipping update.")
         return
 
-    # ✅ Fetch TLE data **ONLY for existing NORADs**
+    # 1️⃣ Fetch the current epochs from the DB to compare later
+    existing_epochs = {}
+    cursor.execute("SELECT norad_number, epoch FROM satellites WHERE epoch IS NOT NULL;")
+    for row in cursor.fetchall():
+        # row["epoch"] should already be a datetime if your column is TIMESTAMP
+        existing_epochs[row["norad_number"]] = row["epoch"]
+
+    # 2️⃣ Fetch TLE data **ONLY for existing NORADs**
     existing_tles = fetch_tle_data(session, existing_norads)
     print(f"📡 Fetched TLE data for {len(existing_tles)} existing satellites.")
 
-    # ✅ Update existing satellites' TLEs in the database
+    # 3️⃣ Filter out TLEs that do NOT have a newer epoch
+    fresh_tles = []
     for tle in existing_tles:
         norad = tle["norad_number"]
+        new_epoch_str = tle.get("epoch")
+        if not new_epoch_str:
+            # If there's no epoch in the TLE data, skip it.
+            print(f"⚠️ Skipping NORAD {norad}: No new epoch in TLE data.")
+            continue
+
+        # Parse the new epoch (e.g., "2025-02-26T14:10:11.123456")
+        # Remove trailing "Z" if present and replace "T" with space
+        new_epoch_str = new_epoch_str.replace("T", " ").rstrip("Z")
+        try:
+            # Attempt parsing microseconds first
+            new_epoch_dt = datetime.strptime(new_epoch_str, "%Y-%m-%d %H:%M:%S.%f")
+        except ValueError:
+            # If microseconds are not present
+            new_epoch_dt = datetime.strptime(new_epoch_str, "%Y-%m-%d %H:%M:%S")
+
+        old_epoch = existing_epochs.get(norad)  # Might be None or a datetime
+
+        # If there's no existing epoch or the new one is strictly newer, we keep it
+        if not old_epoch or new_epoch_dt > old_epoch:
+            fresh_tles.append(tle)
+        else:
+            print(f"⏭️ Skipping update for NORAD {norad}: New epoch {new_epoch_dt} ≤ DB epoch {old_epoch}")
+
+    print(f"📝 Proceeding to update {len(fresh_tles)} satellites with newer epochs.")
+
+    # 4️⃣ Update existing satellites' TLEs in the database (only those in fresh_tles)
+    for tle in fresh_tles:
+        norad = tle["norad_number"]
         tle_line1, tle_line2 = tle["tle_line1"], tle["tle_line2"]
-        ephemeris_type = tle.get("ephemeris_type", 0)  # Default to 0 if missing
+        ephemeris_type = tle.get("ephemeris_type", 0)
         params = compute_orbital_params(f"Existing NORAD {norad}", tle_line1, tle_line2, ts)
 
         if not params:
@@ -1135,15 +1211,23 @@ def update_satellite_data():
                     rev_num = %(rev_num)s, 
                     ephemeris_type = %(ephemeris_type)s
                 WHERE norad_number = %(norad_number)s;
-            """, {**params, "tle_line1": tle_line1, "tle_line2": tle_line2, "norad_number": norad, "ephemeris_type": ephemeris_type})
+            """, {
+                **params,
+                "tle_line1": tle_line1,
+                "tle_line2": tle_line2,
+                "norad_number": norad,
+                "ephemeris_type": ephemeris_type,
+                # Use the new TLE epoch string
+                "epoch": tle["epoch"]
+            })
         except Exception as e:
             print(f"⚠️ Error updating NORAD {norad}: {e}")
             conn.rollback()
 
     conn.commit()
-    print(f"✅ Updated TLE data for {len(existing_tles)} satellites.")
+    print(f"✅ Updated TLE data for {len(fresh_tles)} satellites.")
 
-    # ✅ Fetch new payload NORADs **ONLY if they are greater than max_norad**
+    # 5️⃣ Fetch new payload NORADs **ONLY if they are greater than max_norad**
     new_norads = fetch_missing_gp_norads(session, existing_norads)
     print(f"🚀 Found {len(new_norads)} new payload satellites to be added.")
 
@@ -1151,9 +1235,10 @@ def update_satellite_data():
         print("✅ No new satellites to add. Skipping new satellite processing.")
         return
 
-    # ✅ Fetch metadata & TLEs for new satellites
+    # 6️⃣ Fetch metadata & TLEs for new satellites
     new_satellites_metadata = fetch_spacetrack_data_batch(session, list(new_norads))
     new_satellites_tles = fetch_tle_data(session, new_norads)
+
 
     # ✅ Track duplicate names within the batch to avoid conflicts
     batch_existing_names = set()
