@@ -438,12 +438,14 @@ def generate_infographics(filter_name, filter_condition=None):
 # ✅ Full list of filters matching the UI
 filters = {
     "All Satellites": None,  
+
+    # 🌍 Orbital Categories
     "LEO": "orbit_type = 'LEO'",
     "MEO": "orbit_type = 'MEO'",
     "GEO": "orbit_type = 'GEO'",
     "HEO": "orbit_type = 'HEO'",
 
-    # 🚀 Velocity & Orbital Filters
+    # 🚀 Velocity & Orbital Parameters
     "High Velocity": "velocity > 7.8",
     "Low Velocity": "velocity <= 7.8",
     "Perigee < 500 km": "perigee < 500",
@@ -451,18 +453,31 @@ filters = {
     "Eccentricity > 0.1": "eccentricity > 0.1",
     "B* Drag Term > 0.0001": "bstar > 0.0001",
 
-    # 🛰️ Satellite Purpose
+    # 🛰️ Mission Type Filters
     "Communications": "purpose = 'Communications'",
     "Navigation": "purpose = 'Navigation'",
-    "Military": "purpose = 'Military/Reconnaissance'",
-    "Weather": "purpose = 'Weather Monitoring'",
+    "Military/Reconnaissance": "purpose = 'Military/Reconnaissance'",
+    "Weather Monitoring": "purpose = 'Weather Monitoring'",
     "Earth Observation": "purpose = 'Earth Observation'",
-    "Science": "purpose = 'Scientific Research'",
+    "Scientific Research": "purpose = 'Scientific Research'",
+    "Deep Space Exploration": "purpose = 'Deep Space Exploration'",
     "Human Spaceflight": "purpose = 'Human Spaceflight'",
-    "Technology Demo": "purpose = 'Technology Demonstration'",
+    "Technology Demonstration": "purpose = 'Technology Demonstration'",
+    "Space Infrastructure": "purpose = 'Space Infrastructure'",
+    "Satellite Servicing & Logistics": "purpose = 'Satellite Servicing & Logistics'",
+
+    # 🛰️ Constellations
+    "Starlink Constellation": "purpose = 'Starlink Constellation'",
+    "OneWeb Constellation": "purpose = 'OneWeb Constellation'",
+    "Iridium NEXT Constellation": "purpose = 'Iridium NEXT Constellation'",
+
+    # 🚀 Space Debris & Unknown Objects
+    "Space Debris": "purpose = 'Space Debris'",
+    "Rocket Body (Debris)": "purpose = 'Rocket Body (Debris)'",
+    "Unknown": "purpose = 'Unknown'",
 
     # 🚀 Launch & Decay Filters
     "Recent Launches": "launch_date > NOW() - INTERVAL '30 days'",
-
+    "Decayed Satellites": "decay_date IS NOT NULL"
     # 📅 Dynamic Filters (Launch Year & Country)
 }

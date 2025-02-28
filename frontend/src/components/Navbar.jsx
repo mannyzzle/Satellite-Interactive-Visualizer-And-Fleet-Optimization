@@ -78,12 +78,12 @@ export default function Navbar({ toggleLiveTracking, isLiveTracking }) {
             {isResourcesOpen && (
               <div className="absolute left-0 mt-3 w-56 bg-gray-800 text-white rounded-md shadow-lg overflow-hidden">
                 <a 
-                  href="https://www.celestrak.com/" 
+                  href="https://www.spacestrak.com/" 
                   target="_blank" 
                   rel="noopener noreferrer" 
                   className="block px-6 py-3 hover:bg-gray-700 transition-all duration-200"
                 >
-                  CelesTrak (TLE & Tracking)
+                  SpaceTrak (TLE & Tracking)
                 </a>
                 <a 
                   href="https://www.n2yo.com/" 
