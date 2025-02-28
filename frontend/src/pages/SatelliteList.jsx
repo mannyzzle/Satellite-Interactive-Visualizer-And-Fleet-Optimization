@@ -9,23 +9,40 @@ export default function SatelliteList() {
   const limit = 100; // Fetch 100 per category but show 8 at a time
 
   const categories = [
+    // 🌍 Orbital Regions
     { name: "LEO", label: "Low Earth Orbit (LEO)", description: "Satellites in Low Earth Orbit (LEO) operate between 160km and 2,000km above Earth. They are commonly used for communications, imaging, and scientific missions." },
     { name: "MEO", label: "Medium Earth Orbit (MEO)", description: "Satellites in Medium Earth Orbit (MEO) reside between LEO and GEO, typically used for navigation and communications, like GPS satellites." },
     { name: "GEO", label: "Geostationary Orbit (GEO)", description: "Geostationary satellites maintain a fixed position above the equator at 35,786 km. They are widely used for weather monitoring and global communications." },
     { name: "HEO", label: "Highly Elliptical Orbit (HEO)", description: "Satellites in Highly Elliptical Orbit (HEO) follow elongated paths, useful for long-duration coverage over specific areas." },
+
+    // 🚀 Velocity Filters
     { name: "High Velocity", label: "Fast Satellites", description: "Satellites moving faster than 7.8 km/s, typically in lower orbits where high speeds are required to maintain trajectory." },
     { name: "Low Velocity", label: "Slow Satellites", description: "Satellites with speeds at or below 7.8 km/s, often in higher orbits where slower movement balances gravitational pull." },
+
+    // 📅 Launch & Decay Filters
     { name: "Recent Launches", label: "Recently Launched Satellites", description: "Track satellites launched within the last 30 days, highlighting the newest additions to Earth's orbital environment." },
+    { name: "Decaying", label: "Decayed Satellites", description: "Satellites that have re-entered Earth's atmosphere or are no longer operational." },
+
+    // 🛰️ Purpose Filters
     { name: "Communications", label: "Communications Satellites", description: "Satellites used for telecommunication services, internet connectivity, and data transmission across the globe." },
     { name: "Navigation", label: "Navigation Satellites", description: "Essential for GPS, GLONASS, Galileo, and BeiDou systems that provide global positioning services." },
-    { name: "Military", label: "Military & Reconnaissance", description: "Satellites used for national security, surveillance, and defense-related intelligence gathering." },
-    { name: "Weather", label: "Weather Monitoring", description: "Satellites dedicated to climate monitoring, storm tracking, and atmospheric analysis." },
+    { name: "Military/Reconnaissance", label: "Military & Reconnaissance", description: "Satellites used for national security, surveillance, and defense-related intelligence gathering." },
+    { name: "Weather Monitoring", label: "Weather Monitoring", description: "Satellites dedicated to climate monitoring, storm tracking, and atmospheric analysis." },
     { name: "Earth Observation", label: "Earth Observation Satellites", description: "Used for imaging, environmental monitoring, and mapping Earth's surface in high resolution." },
-    { name: "Science", label: "Scientific Research Satellites", description: "Satellites supporting space-based experiments, astrophysics, and planetary studies." },
+    { name: "Scientific Research", label: "Scientific Research Satellites", description: "Satellites supporting space-based experiments, astrophysics, and planetary studies." },
     { name: "Human Spaceflight", label: "Human Spaceflight Missions", description: "Satellites or modules supporting human space exploration and operations, such as the ISS." },
-    { name: "Technology Demo", label: "Technology Demonstration", description: "Experimental satellites designed to test new technologies before full-scale deployment." }
-  ];
-  
+    { name: "Technology Demonstration", label: "Technology Demonstration", description: "Experimental satellites designed to test new technologies before full-scale deployment." },
+    { name: "Space Infrastructure", label: "Space Infrastructure", description: "Satellites designed to support in-orbit services, assembly, and station-keeping activities." },
+    { name: "Satellite Servicing & Logistics", label: "Satellite Servicing & Logistics", description: "Satellites used for refueling, maintenance, and in-orbit repairs of other spacecraft." },
+    { name: "Starlink Constellation", label: "Starlink Constellation", description: "Satellites forming SpaceX’s broadband internet constellation in Low Earth Orbit." },
+    { name: "OneWeb Constellation", label: "OneWeb Constellation", description: "A global satellite internet constellation designed to provide broadband connectivity." },
+    { name: "Iridium NEXT Constellation", label: "Iridium NEXT Constellation", description: "A network of satellites providing worldwide voice and data communication services." },
+    { name: "Deep Space Exploration", label: "Deep Space Exploration", description: "Satellites and probes designed for interplanetary missions and deep space studies." },
+    { name: "Space Debris", label: "Space Debris", description: "Non-functional satellites, defunct spacecraft, and debris fragments in Earth's orbit." },
+    { name: "Rocket Body (Debris)", label: "Rocket Body Debris", description: "Spent rocket stages and launcher components left in orbit after satellite deployments." },
+    { name: "Unknown", label: "Unknown Purpose", description: "Satellites with unspecified or undisclosed mission purposes." }
+];
+
   const [pageNumbers, setPageNumbers] = useState({});
 
   useEffect(() => {

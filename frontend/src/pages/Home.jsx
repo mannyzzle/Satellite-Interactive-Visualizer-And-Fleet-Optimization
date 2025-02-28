@@ -15,9 +15,13 @@ const basePath = import.meta.env.BASE_URL;  // ✅ Dynamically fetch the base UR
 
 const dayTexture = `${basePath}earth_day.jpg`;
 const nightTexture = `${basePath}earth_night.jpg`;
-const satelliteModelPath = `${basePath}satellite.glb`;
+
 const cloudTexture = `${basePath}clouds.png`;
  
+
+const satelliteModelPath = `${basePath}satellite.glb`;
+
+
 
 export default function Home() {
   const globeRef = useRef(null);
@@ -146,7 +150,6 @@ export default function Home() {
   
 
 
-
   function createOrbitPath(satellite) {
     if (!satellite || !satellite.period) return null; // ❌ Prevents crash if no period
   
@@ -164,19 +167,41 @@ export default function Home() {
   
     if (orbitPoints.length === 0) return null; // 🚀 Avoid empty orbits
   
-    // ✅ Step 2: Choose Orbit Colors
-    const orbitColors = {
-      "LEO": 0x22A884,  // 🟢 Bright Teal-Green for Low Earth Orbit (Viridis: Green-Teal)
-      "MEO": 0x70CF57,  // 🟡 Vibrant Lime-Green for Medium Earth Orbit (Viridis: Green-Lime)
-      "GEO": 0xF4E61E,  // 🟠 Bold Golden-Yellow for Geostationary Orbit (Viridis: Bright Gold)
-      "HEO": 0x3ECBF5,  // 🔵 Neon Baby Blue for Highly Elliptical Orbit (Bright and Vibrant)
-    };
-    
-    
-    
-      
+    // ✅ Step 2: Define Purpose-Based Colors
+    const purposeColors = {
+      "Space Debris": 0xFF0000,  // 🔴 Bright Red
+      "Rocket Body (Debris)": 0xFF0000,  // 🔴 Bright Red
+      "Unknown": 0xFF0000,  // 🔴 Bright Red
   
-    const orbitColor = orbitColors[satellite.orbit_type] || 0x89CFF0; // 🟦 Default Light Blue
+    //Communications  
+  "Communications": 0x00FFFF,  // 🔵 Neon Cyan (High visibility for communication-based satellites)
+  "Starlink Constellation": 0xFFFFFF,  // ✨ Pure White (Neon-like, futuristic Starlink identity)
+  "OneWeb Constellation": 0xADD8E6,  // 🟦 Light Blue (Soft and neutral satellite coverage)
+  "Iridium NEXT Constellation": 0x87CEFA,  // 🟦 Light Sky Blue (Recognizable, satellite phone network)
+
+  // 🛰️ Navigation & Positioning (Green Shades)
+  "Navigation": 0x32CD32,  // 🟢 Bright Lime Green
+  "Military/Reconnaissance": 0x006400,  // 🟢 Dark Green
+
+
+  // 🌦️ Environmental & Earth Monitoring (Yellow Variants)
+  "Weather Monitoring": 0xFFD700,  // 🟡 Gold (Bright, high visibility for weather)
+  "Earth Observation": 0xFFFF99,  // 🟨 Soft Yellow (Natural observation, distinct from weather)
+
+  // 🔬 Science & Research (Purple Variants)
+  "Scientific Research": 0x800080,  // 🟣 Pure Purple (General science and research)
+  "Deep Space Exploration": 0x9400D3,  // 💜 Dark Violet (Cosmic, deep space)
+  "Human Spaceflight": 0x9932CC,  // 💜 Amethyst (Human-centric but within science)
+
+  // 🛠️ Technology & Infrastructure (Orange Variants)
+  "Technology Demonstration": 0xFF8C00,  // 🟠 Dark Orange (Experimental tech)
+  "Space Infrastructure": 0xFF4500,  // 🟠 Orange-Red (Construction, support systems)
+  "Satellite Servicing & Logistics": 0xFF6347,  // 🍅 Tomato Red (Logistics & servicing)
+
+
+    };
+  
+    const orbitColor = purposeColors[satellite.purpose] || 0x89CFF0; // Default Light Blue for unclassified
   
     // ✅ Step 3: Create Orbit Path
     const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
@@ -189,6 +214,11 @@ export default function Home() {
     return new THREE.Line(orbitGeometry, orbitMaterial);
   }
   
+
+
+
+
+
   const resetMarker = () => {
     if (selectedPointerRef.current) {
       console.log("🔄 Removing previous marker...");
@@ -244,10 +274,8 @@ function animateMoon() {
 
 
 
-
-
 const loadSatelliteModel = (satellite) => {
-  if (!is3DEnabled) return; // 🚨 Do NOT load if 3D is disabled
+  if (!is3DEnabled) return; // 🚨 Prevents loading if 3D mode is off
 
   console.log(`🔄 Attempting to load model for: ${satellite.name} (${satellite.norad_number})`);
 
@@ -257,41 +285,47 @@ const loadSatelliteModel = (satellite) => {
     return;
   }
 
-  const loader = new GLTFLoader();
-  
-  loader.load(
-    satelliteModelPath,
-    (gltf) => {
-      const satelliteModel = gltf.scene;
-      satelliteModel.scale.set(0.00005, 0.00005, 0.00005);
+  const scene = sceneRef.current;
+  if (!scene) return;
 
-      // 🚀 Compute Initial Position
-      const initialPos = computeSatellitePosition(satellite, Date.now() / 1000);
-      satelliteModel.position.copy(initialPos);
+  // 🚀 Compute Initial Position
+  const initialPos = computeSatellitePosition(satellite, Date.now() / 1000);
 
-      // ✅ Ensure proper orientation
-      satelliteModel.lookAt(new THREE.Vector3(0, 0, 0));
-      satelliteModel.rotateX(Math.PI / 2);
-      satelliteModel.rotateY(-Math.PI / 2);
+  // ✅ **FIX: Check if the position is valid before continuing**
+  if (!initialPos || initialPos.x === undefined || initialPos.y === undefined || initialPos.z === undefined) {
+    console.warn(`⚠️ Skipping ${satellite.name} (${satellite.norad_number}) due to missing position data.`);
+    return;
+  }
 
-      // ✅ Attach metadata
-      satelliteModel.userData = satellite;
+  // 🚀 **Check if it's debris or has a decay date**
+  const isDebrisOrDecayed = 
+    satellite.purpose === "Rocket Body (Debris)" ||
+    satellite.purpose === "Space Debris" ||
+    satellite.purpose === "Unknown" ||
+    satellite.decay_date !== null; // If decay date exists, it's considered debris
 
-      // ✅ Store reference
-      satelliteObjectsRef.current[satellite.norad_number] = satelliteModel;
+  const sphereColor = isDebrisOrDecayed ? 0xFF073A : 0x00FFFF; // 🔴 Neon Red for debris, 🟦 Neon Teal for others
 
-      // ✅ Add to scene
-      if (sceneRef.current) {
-        sceneRef.current.add(satelliteModel);
-        console.log(`📡 Satellite model successfully added: ${satellite.name} (${satellite.norad_number})`);
-      }
-    },
-    undefined,
-    (error) => {
-      console.error(`❌ Error loading satellite model (${satellite.norad_number}):`, error);
-    }
-  );
+  console.log(`🎨 Rendering sphere for ${satellite.name}: ${isDebrisOrDecayed ? "Neon Red (Debris)" : "Neon Teal (Active)"}`);
+
+  // ✅ Create Sphere for Satellite
+  const sphereGeometry = new THREE.SphereGeometry(0.15, 16, 16);
+  const sphereMaterial = new THREE.MeshBasicMaterial({ color: sphereColor, emissive: sphereColor, emissiveIntensity: 0.8 });
+  const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+
+  // 🚀 Set Position
+  sphere.position.copy(initialPos);
+
+  // ✅ Attach metadata
+  sphere.userData = satellite;
+
+  // ✅ Store reference & add to scene
+  satelliteObjectsRef.current[satellite.norad_number] = sphere;
+  scene.add(sphere);
+
+  console.log(`✅ Sphere successfully added: ${satellite.name} (${satellite.norad_number})`);
 };
+
 
 
 
@@ -1238,8 +1272,8 @@ const displayedSatellites = (filteredSatellites.length > 0 ? filteredSatellites 
   sat.name.toLowerCase().includes(searchQuery.toLowerCase()) // ✅ Search applied here
 );
 
-
 const countryMapping = {
+  // Major Space-Faring Nations
   "US": { name: "USA", flag: "🇺🇸" },
   "PRC": { name: "China", flag: "🇨🇳" },
   "UK": { name: "United Kingdom", flag: "🇬🇧" },
@@ -1248,44 +1282,96 @@ const countryMapping = {
   "IND": { name: "India", flag: "🇮🇳" },
   "ESA": { name: "European Space Agency", flag: "🇪🇺" },
   "FR": { name: "France", flag: "🇫🇷" },
-  "SES": { name: "SES (Luxembourg)", flag: "🇱🇺" },
-  "CA": { name: "Canada", flag: "🇨🇦" },
   "GER": { name: "Germany", flag: "🇩🇪" },
   "SKOR": { name: "South Korea", flag: "🇰🇷" },
   "IT": { name: "Italy", flag: "🇮🇹" },
   "SPN": { name: "Spain", flag: "🇪🇸" },
-  "ARGN": { name: "Argentina", flag: "🇦🇷" },
-  "TURK": { name: "Turkey", flag: "🇹🇷" },
+  "RUS": { name: "Russia", flag: "🇷🇺" },
+  "UKR": { name: "Ukraine", flag: "🇺🇦" },
   "BRAZ": { name: "Brazil", flag: "🇧🇷" },
-  "NOR": { name: "Norway", flag: "🇳🇴" },
-  "UAE": { name: "UAE", flag: "🇦🇪" },
+  "CAN": { name: "Canada", flag: "🇨🇦" },
+  "AUS": { name: "Australia", flag: "🇦🇺" },
+
+  // Satellite Communication & Global Operators
+  "SES": { name: "SES (Luxembourg)", flag: "🇱🇺" },
+  "O3B": { name: "O3B Networks", flag: "🛰️" },
+  "GLOB": { name: "Globalstar", flag: "🌎" },
+  "IRID": { name: "Iridium Communications", flag: "🛰️" },
+  "ITSO": { name: "INTELSAT", flag: "🛰️" },
+  "INMA": { name: "INMARSAT", flag: "🛰️" },
+  "EUME": { name: "EUMETSAT", flag: "🇪🇺" },
+  "EUTE": { name: "EUTELSAT", flag: "🇪🇺" },
+
+  // Middle East & Africa
+  "UAE": { name: "United Arab Emirates", flag: "🇦🇪" },
   "ISRA": { name: "Israel", flag: "🇮🇱" },
-  "TWN": { name: "Taiwan", flag: "🇹🇼" },
   "IRAN": { name: "Iran", flag: "🇮🇷" },
+  "SAFR": { name: "South Africa", flag: "🇿🇦" },
+  "EGYP": { name: "Egypt", flag: "🇪🇬" },
+  "TURK": { name: "Turkey", flag: "🇹🇷" },
+  "KAZ": { name: "Kazakhstan", flag: "🇰🇿" },
+  "QAT": { name: "Qatar", flag: "🇶🇦" },
+  "PAKI": { name: "Pakistan", flag: "🇵🇰" },
+  "KEN": { name: "Kenya", flag: "🇰🇪" },
+
+  // Americas
+  "ARGN": { name: "Argentina", flag: "🇦🇷" },
+  "MEX": { name: "Mexico", flag: "🇲🇽" },
+  "CHLE": { name: "Chile", flag: "🇨🇱" },
+  "PER": { name: "Peru", flag: "🇵🇪" },
+  "BOL": { name: "Bolivia", flag: "🇧🇴" },
+  "URY": { name: "Uruguay", flag: "🇺🇾" },
+  "VENZ": { name: "Venezuela", flag: "🇻🇪" },
+  "COL": { name: "Colombia", flag: "🇨🇴" },
+  "NIC": { name: "Nicaragua", flag: "🇳🇮" },
+
+  // Europe
   "BEL": { name: "Belgium", flag: "🇧🇪" },
+  "NOR": { name: "Norway", flag: "🇳🇴" },
+  "POL": { name: "Poland", flag: "🇵🇱" },
+  "HUN": { name: "Hungary", flag: "🇭🇺" },
   "SING": { name: "Singapore", flag: "🇸🇬" },
+  "BELA": { name: "Belarus", flag: "🇧🇾" },
+  "NETH": { name: "Netherlands", flag: "🇳🇱" },
+  "CZE": { name: "Czech Republic", flag: "🇨🇿" },
+  "SVK": { name: "Slovakia", flag: "🇸🇰" },
+  "AUT": { name: "Austria", flag: "🇦🇹" },
+  "SWTZ": { name: "Switzerland", flag: "🇨🇭" },
+  "LUXE": { name: "Luxembourg", flag: "🇱🇺" },
+  "DEN": { name: "Denmark", flag: "🇩🇰" },
+  "SWE": { name: "Sweden", flag: "🇸🇪" },
+  "FIN": { name: "Finland", flag: "🇫🇮" },
+  "ROM": { name: "Romania", flag: "🇷🇴" },
+
+  // Asia-Pacific
+  "TWN": { name: "Taiwan", flag: "🇹🇼" },
   "INDO": { name: "Indonesia", flag: "🇮🇩" },
   "THAI": { name: "Thailand", flag: "🇹🇭" },
-  "EGYP": { name: "Egypt", flag: "🇪🇬" },
-  "KAZ": { name: "Kazakhstan", flag: "🇰🇿" },
-  "SAFR": { name: "South Africa", flag: "🇿🇦" },
-  "PAKI": { name: "Pakistan", flag: "🇵🇰" },
-  "MEX": { name: "Mexico", flag: "🇲🇽" },
-  "POL": { name: "Poland", flag: "🇵🇱" },
-  "UKR": { name: "Ukraine", flag: "🇺🇦" },
-  "QAT": { name: "Qatar", flag: "🇶🇦" },
-  "CHLE": { name: "Chile", flag: "🇨🇱" },
-  "BOL": { name: "Bolivia", flag: "🇧🇴" },
-  "ISS": { name: "ISS (International Space Station)", flag: "🚀" },
-  "NICO": { name: "Nicaragua", flag: "🇳🇮" },
-  "PER": { name: "Peru", flag: "🇵🇪" },
   "BGD": { name: "Bangladesh", flag: "🇧🇩" },
-  "IRAQ": { name: "Iraq", flag: "🇮🇶" },
-  "HUN": { name: "Hungary", flag: "🇭🇺" },
-  "KEN": { name: "Kenya", flag: "🇰🇪" },
-  "BELA": { name: "Belarus", flag: "🇧🇾" },
-  "AGO": { name: "Angola", flag: "🇦🇴" }
+  "PHL": { name: "Philippines", flag: "🇵🇭" },
+  "NZ": { name: "New Zealand", flag: "🇳🇿" },
+  "MYA": { name: "Myanmar", flag: "🇲🇲" },
+  "LKA": { name: "Sri Lanka", flag: "🇱🇰" },
+  "MALA": { name: "Malaysia", flag: "🇲🇾" },
+  "VTNM": { name: "Vietnam", flag: "🇻🇳" },
+  "MNG": { name: "Mongolia", flag: "🇲🇳" },
+  "NPL": { name: "Nepal", flag: "🇳🇵" },
+
+  // International Organizations & Space Stations
+  "ISS": { name: "ISS (International Space Station)", flag: "🚀" },
+  "AB": { name: "Arab Satellite Communications Organization", flag: "🌍" },
+  "IM": { name: "International Maritime Satellite Organization", flag: "🌊" },
+  "NATO": { name: "North Atlantic Treaty Organization", flag: "🛡️" },
+  "RASC": { name: "Regional African Satellite Communications Org", flag: "🌍" },
+  "UNKN": { name: "Unknown", flag: "❓" },
+
+  // Space Debris & Unknown Entities
+  "TBD": { name: "To Be Determined / Unknown", flag: "🛰️" },
+  "DEB": { name: "Space Debris", flag: "🗑️" },
+  "RB": { name: "Rocket Body (Debris)", flag: "🚀" }
 };
+
+
 
 const getCountryFlag = (code) => countryMapping[code]?.flag || "🌍";
 const getCountryName = (code) => countryMapping[code]?.name || "Unknown";
@@ -1321,105 +1407,124 @@ return (
       {/* 🌍 3D UI + Sidebar + Info Box (All Together) */}
       <div className="relative flex-1 flex border-[50px] border-gray-950 shadow-2xl overflow-hidden">
 
-        {/* 📌 Sidebar (Hidden Until Unlocked) */}
-        {is3DEnabled && (
-          <div
-            className={`absolute top-1/2 left-0 transform -translate-y-1/2 ${
-              window.innerWidth < 768 ? "h-[60vh] w-40" : "h-[70vh] w-48"
-            } bg-gray-900 bg-opacity-90 backdrop-blur-md text-white p-3 shadow-xl border-r border-gray-700 rounded-r-xl transition-all duration-300 ease-in-out z-50 ${
-              sidebarOpen ? "translate-x-0" : "-translate-x-48"
-            }`}
-          >
-            {/* 🛰️ Sidebar Header */}
-            <h2 className="text-md font-bold mb-2 text-center border-b border-gray-700 pb-1">
-              Satellites
-            </h2>
+      {/* 📌 Sidebar (Fixed & Responsive) */}
+{is3DEnabled && (
+  <div
+    className={`absolute top-1/2 left-0 transform -translate-y-1/2 ${
+      sidebarOpen ? "translate-x-0" : "-translate-x-full"
+    } w-48 sm:w-52 bg-gray-900 bg-opacity-90 backdrop-blur-md text-white p-3 shadow-xl border-r border-gray-700 rounded-r-xl transition-all duration-300 ease-in-out z-50`}
+  >
+    {/* 🛰️ Sidebar Header */}
+    <h2 className="text-md font-bold mb-2 text-center border-b border-gray-700 pb-1">
+      Satellites
+    </h2>
 
-            {/* 🔍 Search Input */}
-            <input
-              type="text"
-              placeholder="🔍 Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full p-1 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-600 shadow-sm text-sm"
-            />
+    {/* 🔍 Search Input */}
+    <input
+      type="text"
+      placeholder="🔍 Search..."
+      value={searchQuery}
+      onChange={(e) => setSearchQuery(e.target.value)}
+      className="w-full p-1 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-600 shadow-sm text-sm"
+    />
 
-            {/* 🚀 Satellite List (Two Columns) */}
-            <div className="overflow-y-auto max-h-[40vh] mt-2">
-              {loading ? (
-                <p className="text-center text-gray-400 text-sm">Loading...</p>
-              ) : displayedSatellites.length === 0 ? (
-                <p className="text-center text-yellow-400 font-semibold text-sm">
-                  ⚠️ No satellites
-                </p>
-              ) : (
-                <ul className="grid grid-cols-2 gap-1">
-                  {displayedSatellites.map((sat) => (
-                    <li
-                      key={sat.norad_number}
-                      className={`cursor-pointer p-2 rounded-md text-center border border-gray-700 shadow-sm transition-all duration-200 text-xs ${
-                        selectedSatellite?.norad_number === sat.norad_number
-                          ? "bg-teal-500 text-white border-teal-500 shadow-md"
-                          : "bg-gray-800 hover:bg-gray-700"
-                      }`}
-                      onClick={() => {
-                        console.log(`📡 Selecting satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
-                        focusOnSatellite(sat);
-                        enableInteraction();
-                      }}
-                    >
-                      <span className="block w-full">
-                        {sat.name} {getCountryFlag(sat.country)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          {/* 🌍 Pagination Controls (Now Includes Total Pages) */}
-          {total > limit && (
-              <div className="flex flex-col items-center mt-3 border-t border-gray-700 pt-3">
-                <span className="text-xs text-gray-300 mb-2">
-                  Page {page} of {Math.ceil(total / limit)}
-                </span>
-                <div className="flex justify-between w-full">
-                  <button
-                    onClick={() => changePage(page - 1)}
-                    disabled={page === 1 || loading}
-                    className={`px-3 py-1 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-                      page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
-                    }`}
-                  >
-                    ← Prev
-                  </button>
+    {/* 🚀 Satellite List (Two Columns) */}
+    <div className="overflow-y-auto max-h-[40vh] mt-2">
+      {loading ? (
+        <p className="text-center text-gray-400 text-sm">Loading...</p>
+      ) : displayedSatellites.length === 0 ? (
+        <p className="text-center text-yellow-400 font-semibold text-sm">
+          ⚠️ No satellites found
+        </p>
+      ) : (
+        <ul className="grid grid-cols-2 gap-1">
+          {displayedSatellites.map((sat) => (
+            <li
+              key={sat.norad_number}
+              className={`cursor-pointer p-2 rounded-md text-center border border-gray-700 shadow-sm transition-all duration-200 text-xs ${
+                selectedSatellite?.norad_number === sat.norad_number
+                  ? "bg-teal-500 text-white border-teal-500 shadow-md"
+                  : "bg-gray-800 hover:bg-gray-700"
+              }`}
+              onClick={() => {
+                console.log(`📡 Selecting satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
+                focusOnSatellite(sat);
+                enableInteraction();
+              }}
+            >
+              <span className="block w-full">
+                {sat.name} {getCountryFlag(sat.country)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
 
-                  <button
-                    onClick={() => changePage(page + 1)}
-                    disabled={loading || page * limit >= total}
-                    className={`px-3 py-1 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-                      loading || satellites.length < limit ? "opacity-50 cursor-not-allowed" : ""
-                    }`}
-                  >
-                    Next →
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+    {/* 🌍 Pagination Controls (Smaller & Compact) */}
+{total > limit && (
+  <div className="flex flex-col items-center mt-3 border-t border-gray-700 pt-3">
+    <span className="text-xs text-gray-300 mb-1">
+      Page {page} of {Math.ceil(total / limit)}
+    </span>
+    <div className="flex justify-between w-full space-x-1">
+      <button
+        onClick={() => changePage(1)}
+        disabled={page === 1 || loading}
+        className={`px-2 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
+          page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
+        }`}
+      >
+        ⏮
+      </button>
 
+      <button
+        onClick={() => changePage(page - 1)}
+        disabled={page === 1 || loading}
+        className={`px-2 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
+          page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
+        }`}
+      >
+        ←
+      </button>
 
-        {/* 📌 Sidebar Toggle (Fixed Position & Now Responsive) */}
-        {is3DEnabled && (
-          <button
-            onClick={() => setSidebarOpen((prev) => !prev)}
-            className={`absolute top-1/2 transform -translate-y-1/2 bg-gray-800 text-white px-3 py-4 rounded-r-lg shadow-md hover:bg-gray-700 transition-all duration-300 z-[100] ${
-              sidebarOpen ? "left-[12rem]" : "left-0"
-            }`}
-          >
-            {sidebarOpen ? "←" : "→"}
-          </button>
-        )}
+      <button
+        onClick={() => changePage(page + 1)}
+        disabled={loading || page * limit >= total}
+        className={`px-2 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
+          loading || satellites.length < limit ? "opacity-50 cursor-not-allowed" : ""
+        }`}
+      >
+        →
+      </button>
+
+      <button
+        onClick={() => changePage(Math.ceil(total / limit))}
+        disabled={page === Math.ceil(total / limit) || loading}
+        className={`px-2 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
+          page === Math.ceil(total / limit) || loading ? "opacity-50 cursor-not-allowed" : ""
+        }`}
+      >
+        ⏭
+      </button>
+    </div>
+  </div>
+)}
+</div>
+)}
+
+{/* 📌 Sidebar Toggle (Now Always Aligned) */}
+{is3DEnabled && (
+  <button
+    onClick={() => setSidebarOpen((prev) => !prev)}
+    className={`absolute top-1/2 transform -translate-y-1/2 bg-gray-800 text-white px-3 py-4 rounded-r-lg shadow-md hover:bg-gray-700 transition-all duration-300 z-[100] ${
+      sidebarOpen ? "left-[12.5rem]" : "left-0"
+    }`}
+  >
+    {sidebarOpen ? "←" : "→"}
+  </button>
+)}
+
 
         {/* 🌍 3D UI Scene (Now Adaptive for Mobile with Spinning Globe) */}
 <div
@@ -1523,62 +1628,60 @@ return (
         </div>
       )}
       
-{/* 📌 Info Box (Fully Responsive & Mobile-Friendly) */}
+{/* 📌 Compact Info Box (Fixed Small on Right) */}
 {is3DEnabled && (
   <div
-    className={`absolute bottom-3 sm:bottom-6 ${
-      window.innerWidth < 768 ? "left-1/2 transform -translate-x-1/2 w-[90%]" : "right-6 w-64"
-    } bg-gray-900 bg-opacity-90 text-yellow-300 p-3 sm:p-4 shadow-2xl text-xs sm:text-sm border-l-4 border-yellow-500 flex flex-col items-center max-h-[70vh] sm:max-h-[85vh] overflow-hidden rounded-lg z-[50] transition-all duration-300 ease-in-out`}
+    className="absolute bottom-4 right-4 w-52 bg-gray-900 bg-opacity-90 text-yellow-300 p-3 shadow-lg text-xs border-l-4 border-yellow-500 rounded-md z-[50] transition-all duration-300 ease-in-out"
   >
     {!selectedSatellite ? (
-      <div className="flex flex-col items-center justify-center h-full text-yellow-400 font-semibold text-center px-3 sm:px-4 py-4 sm:py-6">
-        <span className="text-2xl sm:text-3xl">📡</span>
-        <p className="mt-2 text-sm sm:text-base">Select a satellite for real-time tracking</p>
+      <div className="flex flex-col items-center justify-center h-full text-yellow-400 font-semibold text-center p-3">
+        <span className="text-xl">📡</span>
+        <p className="mt-1">Select a satellite</p>
       </div>
     ) : (
       <>
         {/* ✅ Satellite Header */}
-        <div className="w-full text-center border-b border-yellow-500 pb-2 sm:pb-3">
-          <div className="text-base sm:text-lg font-bold text-yellow-400 truncate">{selectedSatellite.name}</div>
-          <div className="text-xs sm:text-sm flex items-center justify-center mt-1 space-x-1 sm:space-x-2">
-            <span className="text-lg sm:text-xl">{getCountryFlag(selectedSatellite.country)}</span>
+        <div className="w-full text-center border-b border-yellow-500 pb-2">
+          <div className="text-sm font-bold text-yellow-400 truncate">{selectedSatellite.name}</div>
+          <div className="text-xs flex items-center justify-center mt-1 space-x-1">
+            <span className="text-lg">{getCountryFlag(selectedSatellite.country)}</span>
             <span>{getCountryName(selectedSatellite.country)}</span>
           </div>
         </div>
 
-        {/* ✅ Real-Time Data (Smooth Updates) */}
-        <div className="flex flex-col w-full text-center space-y-2 sm:space-y-3 py-2 sm:py-3 animate-fadeIn">
-          <div className="flex justify-between w-full">
-            <span className="text-yellow-500 text-[10px] sm:text-xs font-semibold uppercase">Velocity</span>
-            <span className="text-xs sm:text-sm">{realTimeData.velocity} km/s</span>
+        {/* ✅ Real-Time Data */}
+        <div className="w-full py-2 space-y-1">
+          <div className="flex justify-between">
+            <span className="text-yellow-500 text-[10px] uppercase">Velocity</span>
+            <span>{realTimeData.velocity} km/s</span>
           </div>
-          <div className="flex justify-between w-full">
-            <span className="text-yellow-500 text-[10px] sm:text-xs font-semibold uppercase">Altitude</span>
-            <span className="text-xs sm:text-sm">{realTimeData.altitude} km</span>
+          <div className="flex justify-between">
+            <span className="text-yellow-500 text-[10px] uppercase">Altitude</span>
+            <span>{realTimeData.altitude} km</span>
           </div>
-          <div className="flex justify-between w-full">
-            <span className="text-yellow-500 text-[10px] sm:text-xs font-semibold uppercase">Position</span>
-            <span className="text-xs sm:text-sm">{realTimeData.latitude}°, {realTimeData.longitude}°</span>
+          <div className="flex justify-between">
+            <span className="text-yellow-500 text-[10px] uppercase">Position</span>
+            <span>{realTimeData.latitude}°, {realTimeData.longitude}°</span>
           </div>
         </div>
 
-        {/* ✅ Additional Details (Compact & Structured) */}
-        <div className="flex flex-col w-full border-t border-yellow-500 pt-2 sm:pt-3 space-y-2 sm:space-y-3">
-          <div className="flex justify-between w-full">
-            <span className="text-yellow-500 text-[10px] sm:text-xs font-semibold uppercase">NORAD ID</span>
-            <span className="text-xs sm:text-sm">{selectedSatellite.norad_number}</span>
+        {/* ✅ Additional Details */}
+        <div className="w-full border-t border-yellow-500 pt-2 space-y-1">
+          <div className="flex justify-between">
+            <span className="text-yellow-500 text-[10px] uppercase">NORAD ID</span>
+            <span>{selectedSatellite.norad_number}</span>
           </div>
-          <div className="flex justify-between w-full">
-            <span className="text-yellow-500 text-[10px] sm:text-xs font-semibold uppercase">Orbit Type</span>
-            <span className="text-xs sm:text-sm">{selectedSatellite.orbit_type}</span>
+          <div className="flex justify-between">
+            <span className="text-yellow-500 text-[10px] uppercase">Orbit</span>
+            <span>{selectedSatellite.orbit_type}</span>
           </div>
-          <div className="flex justify-between w-full">
-            <span className="text-yellow-500 text-[10px] sm:text-xs font-semibold uppercase">Purpose</span>
-            <span className="text-xs sm:text-sm">{selectedSatellite.purpose || "Unknown"}</span>
+          <div className="flex justify-between">
+            <span className="text-yellow-500 text-[10px] uppercase">Purpose</span>
+            <span>{selectedSatellite.purpose || "Unknown"}</span>
           </div>
-          <div className="flex justify-between w-full">
-            <span className="text-yellow-500 text-[10px] sm:text-xs font-semibold uppercase">Launch Date</span>
-            <span className="text-xs sm:text-sm">{selectedSatellite.launch_date ? new Date(selectedSatellite.launch_date).toLocaleDateString() : "N/A"}</span>
+          <div className="flex justify-between">
+            <span className="text-yellow-500 text-[10px] uppercase">Launch</span>
+            <span>{selectedSatellite.launch_date ? new Date(selectedSatellite.launch_date).toLocaleDateString() : "N/A"}</span>
           </div>
         </div>
       </>
@@ -1589,20 +1692,11 @@ return (
  </div>
 
 
- {/* 🛰️ Filter Section Below 3D UI */}
-<div className="flex flex-col items-center p-4 bg-gray-900 shadow-md rounded-md w-full z-50 ax-w-xl mx-auto">
-
-{/* Box-Styled Title - Reduced Size */}
-<div className="px-4 py-1 border border-teal-400 bg-gray-800 rounded-lg shadow-md animate-jump max-w-sm">
-    <h3 className="text-base font-medium text-teal-300 text-center tracking-wide">
-      Satellite Data Filters & Orbital Selection
-    </h3>
-  </div>
-  
+<div className="w-full p-4 bg-gray-800 rounded-lg shadow-md">
   {/* 🌍 Orbital Filters */}
-  <div className="w-full text-center mb-3">
-    <h4 className="text-sm font-medium text-green-400 mb-2 tracking-wide">Orbital Categories</h4>
-    <div className="flex flex-wrap justify-center gap-2">
+  <div className="w-full text-center mb-4">
+    <h4 className="text-md font-semibold text-yellow-300 mb-2 tracking-wide">Orbital Categories</h4>
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {[
         { name: "LEO", label: "Low Earth Orbit (LEO)" },
         { name: "MEO", label: "Medium Earth Orbit (MEO)" },
@@ -1615,9 +1709,9 @@ return (
   </div>
 
   {/* 🚀 Velocity & Orbital Characteristics */}
-  <div className="w-full text-center mb-3">
-    <h4 className="text-sm font-medium text-green-400 mb-2 tracking-wide">Velocity & Orbital Parameters</h4>
-    <div className="flex flex-wrap justify-center gap-2">
+  <div className="w-full text-center mb-4">
+    <h4 className="text-md font-semibold text-yellow-300 mb-2 tracking-wide">Velocity & Orbital Parameters</h4>
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
       {[
         { name: "High Velocity", label: "Fast (>7.8 km/s)" },
         { name: "Low Velocity", label: "Slow (≤7.8 km/s)" },
@@ -1632,18 +1726,27 @@ return (
   </div>
 
   {/* 🛰️ Satellite Purpose */}
-  <div className="w-full text-center mb-3">
-    <h4 className="text-sm font-medium text-green-400 mb-2 tracking-wide">Mission Type</h4>
-    <div className="flex flex-wrap justify-center gap-2">
+  <div className="w-full text-center mb-4">
+    <h4 className="text-md font-semibold text-yellow-300 mb-2 tracking-wide">Mission Type</h4>
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {[
         { name: "Communications", label: "Communications" },
         { name: "Navigation", label: "Navigation" },
-        { name: "Military", label: "Military / Recon" },
-        { name: "Weather", label: "Weather Monitoring" },
+        { name: "Military/Reconnaissance", label: "Military / Recon" },
+        { name: "Weather Monitoring", label: "Weather Monitoring" },
         { name: "Earth Observation", label: "Earth Observation" },
-        { name: "Science", label: "Scientific Research" },
+        { name: "Scientific Research", label: "Scientific Research" },
         { name: "Human Spaceflight", label: "Human Spaceflight" },
-        { name: "Technology Demo", label: "Technology Demo" },
+        { name: "Technology Demonstration", label: "Technology Demo" },
+        { name: "Space Infrastructure", label: "Space Infrastructure" },
+        { name: "Satellite Servicing & Logistics", label: "Satellite Servicing" },
+        { name: "Starlink Constellation", label: "Starlink Constellation" },
+        { name: "OneWeb Constellation", label: "OneWeb Constellation" },
+        { name: "Iridium NEXT Constellation", label: "Iridium NEXT Constellation" },
+        { name: "Deep Space Exploration", label: "Deep Space Exploration" },
+        { name: "Space Debris", label: "Space Debris" },
+        { name: "Rocket Body (Debris)", label: "Rocket Body Debris" },
+        { name: "Unknown", label: "Unknown Purpose" },
       ].map((filter) => (
         <FilterButton key={filter.name} filter={filter} />
       ))}
@@ -1651,22 +1754,22 @@ return (
   </div>
 
   {/* 🚀 Launch & Decay Filters, Launch Year, Country, and Reset */}
-  <div className="flex flex-wrap items-center justify-center gap-4 w-full text-center mb-3">
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center mb-4">
     
     {/* 🚀 Launch & Decay Filters */}
-    <div className="flex flex-col items-center flex-1">
-      <h4 className="text-sm font-medium text-green-400 mb-2 tracking-wide">Launch & Decay Events</h4>
-      <FilterButton
-        key="Recent Launches"
-        filter={{ name: "Recent Launches", label: "Recent Launch (30 Days)" }}
-      />
+    <div className="flex flex-col items-center">
+      <h4 className="text-md font-semibold text-yellow-300 mb-2 tracking-wide">Launch & Decay Events</h4>
+      <div className="flex flex-wrap justify-center gap-2">
+        <FilterButton key="Recent Launches" filter={{ name: "Recent Launches", label: "Recent Launch (30 Days)" }} />
+        <FilterButton key="Decayed" filter={{ name: "Decayed", label: "Decayed Satellites" }} />
+      </div>
     </div>
 
     {/* 📅 Launch Year Dropdown */}
-    <div className="flex flex-col items-center flex-1">
-      <h4 className="text-sm font-medium text-green-400 mb-2 tracking-wide">Launch Year</h4>
+    <div className="flex flex-col items-center">
+      <h4 className="text-md font-semibold text-yellow-300 mb-2 tracking-wide">Launch Year</h4>
       <select
-        className="px-4 py-2 text-xs font-medium rounded-md bg-gray-700 text-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+        className="px-4 py-2 text-sm font-medium rounded-md bg-gray-700 text-gray-300 focus:outline-none focus:ring-2 focus:ring-yellow-500"
         onChange={(e) => toggleFilter(`Launch Year:${e.target.value}`)}
       >
         <option value="">Select Year</option>
@@ -1677,10 +1780,10 @@ return (
     </div>
 
     {/* 🌍 Country Dropdown */}
-    <div className="flex flex-col items-center flex-1">
-      <h4 className="text-sm font-medium text-green-400 mb-2 tracking-wide">Country of Origin</h4>
+    <div className="flex flex-col items-center">
+      <h4 className="text-md font-semibold text-yellow-300 mb-2 tracking-wide">Country of Origin</h4>
       <select
-        className="px-4 py-2 text-xs font-medium rounded-md bg-gray-700 text-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+        className="px-4 py-2 text-sm font-medium rounded-md bg-gray-700 text-gray-300 focus:outline-none focus:ring-2 focus:ring-yellow-500"
         onChange={(e) => toggleFilter(`Country:${e.target.value}`)}
       >
         <option value="">Select Country</option>
@@ -1691,18 +1794,19 @@ return (
         ))}
       </select>
     </div>
+  </div>
 
-    {/* 🔄 RESET FILTERS */}
-    <div className="flex flex-col items-center flex-1">
-      <button
-        className="px-5 py-2 text-sm font-medium bg-yellow-400 hover:bg-yellow-500 text-black rounded-md shadow-md transition-all duration-200 focus:ring-2 focus:ring-yellow-500"
-        onClick={resetFilters}
-      >
-        Reset Filters
-      </button>
-    </div>
+  {/* 🔄 RESET FILTERS */}
+  <div className="w-full text-center">
+    <button
+      className="px-5 py-2 text-md font-semibold bg-yellow-400 hover:bg-yellow-500 text-black rounded-md shadow-md transition-all duration-200 focus:ring-2 focus:ring-yellow-500"
+      onClick={resetFilters}
+    >
+      Reset Filters
+    </button>
   </div>
 </div>
+
 
 
 {/* 📊 Infographics Section */}
