@@ -105,7 +105,7 @@ export default function Home() {
     const { x, y, z } = positionAndVelocity.position; // ECI coordinates (km)
   
     // ✅ Convert ECI coordinates to a `THREE.Vector3` for visualization
-    return new THREE.Vector3(x/500, z/500, -y/500); // ✅ Swap axes to align with THREE.js
+    return new THREE.Vector3(x, z, -y); // ✅ Swap axes to align with THREE.js
   }
 
 
@@ -174,29 +174,28 @@ export default function Home() {
       "Unknown": 0xFF0000,  // 🔴 Bright Red
   
     //Communications  
-  "Communications": 0x00FFFF,  // 🔵 Neon Cyan (High visibility for communication-based satellites)
+  "Communications": 0x32CD32,  // 🔵 green (High visibility for communication-based satellites)
   "Starlink Constellation": 0xFFFFFF,  // ✨ Pure White (Neon-like, futuristic Starlink identity)
-  "OneWeb Constellation": 0xADD8E6,  // 🟦 Light Blue (Soft and neutral satellite coverage)
-  "Iridium NEXT Constellation": 0x87CEFA,  // 🟦 Light Sky Blue (Recognizable, satellite phone network)
+  "OneWeb Constellation": 0xFFFFFF,  // 🟦 Light Blue (Soft and neutral satellite coverage)
+  "Iridium NEXT Constellation": 0xFFFFFF,  // 🟦 Light Sky Blue (Recognizable, satellite phone network)
 
   // 🛰️ Navigation & Positioning (Green Shades)
   "Navigation": 0x32CD32,  // 🟢 Bright Lime Green
-  "Military/Reconnaissance": 0x006400,  // 🟢 Dark Green
-
-
+  "Military/Reconnaissance": 0x32CD32,  // 🟢 Dark Green
   // 🌦️ Environmental & Earth Monitoring (Yellow Variants)
-  "Weather Monitoring": 0xFFD700,  // 🟡 Gold (Bright, high visibility for weather)
-  "Earth Observation": 0xFFFF99,  // 🟨 Soft Yellow (Natural observation, distinct from weather)
+  "Weather Monitoring": 0x32CD32,  // 🟢 Bright Lime Green
+  "Earth Observation": 0x32CD32,  // 0x32CD32,  // 🟢 Bright Lime Green
+
 
   // 🔬 Science & Research (Purple Variants)
-  "Scientific Research": 0x800080,  // 🟣 Pure Purple (General science and research)
-  "Deep Space Exploration": 0x9400D3,  // 💜 Dark Violet (Cosmic, deep space)
-  "Human Spaceflight": 0x9932CC,  // 💜 Amethyst (Human-centric but within science)
+  "Scientific Research": 0x32CD32,  // 🟣 Pure Purple (General science and research)
+  "Deep Space Exploration": 0x32CD32,  // 💜 Dark Violet (Cosmic, deep space)
+  "Human Spaceflight": 0x32CD32,  // 💜 Amethyst (Human-centric but within science)
 
   // 🛠️ Technology & Infrastructure (Orange Variants)
-  "Technology Demonstration": 0xFF8C00,  // 🟠 Dark Orange (Experimental tech)
-  "Space Infrastructure": 0xFF4500,  // 🟠 Orange-Red (Construction, support systems)
-  "Satellite Servicing & Logistics": 0xFF6347,  // 🍅 Tomato Red (Logistics & servicing)
+  "Technology Demonstration": 0x32CD32,  // 🟠 Dark Orange (Experimental tech)
+  "Space Infrastructure": 0x32CD32,  // 🟠 Orange-Red (Construction, support systems)
+  "Satellite Servicing & Logistics": 0x32CD32  // 🟠 Orange-Red (Construction, support systems)
 
 
     };
@@ -233,7 +232,7 @@ export default function Home() {
 
   function createMoon(scene) {
 
-    const moonGeometry = new THREE.SphereGeometry(1.27, 32, 32); // 🌙 Size ~1/4th of Earth
+    const moonGeometry = new THREE.SphereGeometry(15.27, 32, 32); // 🌙 Size ~1/4th of Earth
     const moonMaterial = new THREE.MeshStandardMaterial({
       map: moonTexture,
       bumpMap: moonTexture,  // Surface roughness
@@ -309,7 +308,7 @@ const loadSatelliteModel = (satellite) => {
   console.log(`🎨 Rendering sphere for ${satellite.name}: ${isDebrisOrDecayed ? "Neon Red (Debris)" : "Neon Teal (Active)"}`);
 
   // ✅ Create Sphere for Satellite
-  const sphereGeometry = new THREE.SphereGeometry(0.15, 16, 16);
+  const sphereGeometry = new THREE.SphereGeometry(0.1, 8, 8);
   const sphereMaterial = new THREE.MeshBasicMaterial({ color: sphereColor, emissive: sphereColor, emissiveIntensity: 0.8 });
   const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
 
@@ -329,47 +328,43 @@ const loadSatelliteModel = (satellite) => {
 
 
 
-
-
 // ✅ Smooth Camera Transition Function (Now Fixed)
 function smoothCameraTransition(targetPosition, satellite) {
-  if (!is3DEnabled) return;
-  if (!cameraRef.current) return;
+  if (!is3DEnabled || !cameraRef.current) return;
 
   const startPos = cameraRef.current.position.clone();
-  let zoomFactor = 0.8; // Default zoom-in (closer)
+  const targetDistance = startPos.distanceTo(targetPosition);
 
-  // ✅ Adjust Zoom Based on Satellite Altitude (Dynamic Scaling)
+  // ✅ Fix Zoom Factor (Logarithmic Scaling)
+  let zoomFactor;
   if (satellite) {
     const altitude = (satellite.perigee + satellite.apogee) / 2; // Compute average altitude
 
-    // 🌍 Adjust zoom factor based on altitude range
     if (altitude < 2000) {
-      zoomFactor = 0.6;  // Even closer for LEO
-    } else if (altitude >= 2000 && altitude < 20000) {
-      zoomFactor = 0.75; // Moderate zoom for MEO
-    } else if (altitude >= 20000 && altitude < 40000) {
-      zoomFactor = 0.85; // Medium zoom for GEO
+      zoomFactor = 1.2;  // LEO - Small Adjustment (Closer View)
+    } else if (altitude < 20000) {
+      zoomFactor = 1.5;  // MEO - Mid Adjustment
+    } else if (altitude < 40000) {
+      zoomFactor = 2.0;  // GEO - Slightly More Distance
     } else {
-      zoomFactor = 0.9; // Slight zoom-in for HEO
+      zoomFactor = 3.0;  // HEO - Prevent Extreme Zoom-In
     }
+  } else {
+    zoomFactor = 1.5; // Default zoom for unknown altitudes
   }
 
-  // ✅ Correct the zooming behavior (divide instead of multiply)
-  const targetPos = targetPosition.clone().divideScalar(zoomFactor); // Move camera **closer**
+  // ✅ Fix Target Position Calculation (Don't Over-Divide)
+  const targetPos = targetPosition.clone().multiplyScalar(zoomFactor);
 
   let t = 0;
+
   function moveCamera() {
-    t += 0.05; // Reduce speed for smoother movement
+    t += 0.03; // ✅ Lower speed for smooth transitions
 
-    const distance = startPos.distanceTo(targetPos);
-    const speedFactor = distance > 50 ? 0.2 : distance > 20 ? 0.1 : 0.05; // Adjust speed dynamically
-
-    // ✅ Lerp the camera smoothly to the target position
+    const speedFactor = Math.log(targetDistance) * 0.05; // ✅ Dynamic Speed Scaling
     cameraRef.current.position.lerpVectors(startPos, targetPos, t * speedFactor);
     cameraRef.current.lookAt(targetPosition);
 
-    // ✅ Stop movement once fully zoomed
     if (t < 1) {
       requestAnimationFrame(moveCamera);
     } else {
@@ -381,9 +376,6 @@ function smoothCameraTransition(targetPosition, satellite) {
 
   moveCamera();
 }
-
-
-
 
 
 
@@ -445,6 +437,11 @@ const focusOnSatellite = useCallback((sat) => {
 
   checkModelLoaded();
 }, [setSelectedSatellite, setIsTracking, sceneRef, selectedPointerRef, cameraRef, is3DEnabled]);
+
+
+
+
+
 
 
 
@@ -948,33 +945,42 @@ useEffect(() => {
   const scene = new THREE.Scene();
   sceneRef.current = scene;
 
-  const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.5, 9000);
-  camera.position.set(0, 5, 35);
+  // ✅ Adjust the Initial Camera Position Dynamically
+  const initialAltitude = 50000; // LEO default
+  const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.5, 900000);
+  camera.position.set(0, 5, initialAltitude);
   cameraRef.current = camera;
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true , precision: "highp" });
+  // ✅ Optimize Renderer
+  const renderer = new THREE.WebGLRenderer({ antialias: true, precision: "highp" });
   renderer.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
   mountRef.current.appendChild(renderer.domElement);
+
+  // ✅ Optimize Controls
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableZoom = true;
   controls.enablePan = false;
   controls.enableDamping = true;
   controls.dampingFactor = 0.1;
-  controls.rotateSpeed = 0.8;
-  controls.minDistance = 16;
-  controls.maxDistance = 1000;
+  controls.rotateSpeed = 0.5;
+
+  controls.minDistance = 130; // 🔥 Prevents too-close zoom
+  controls.maxDistance = 500000; // 🚀 Allows zooming for deep-space objects
+
   controlsRef.current = controls;
 
+  // ✅ Add Light Source
   const light = new THREE.DirectionalLight(0xffffff, 4.5);
   light.position.set(200, 50, 0);
   scene.add(light);
 
 
+
   
   // 🌍 **Create Earth**
   const globe = new THREE.Mesh(
-    new THREE.SphereGeometry(13, 64, 64),
+    new THREE.SphereGeometry(6000, 64, 64),
     new THREE.MeshStandardMaterial({
       map: dayMap,
       emissiveMap: nightMap,
@@ -991,7 +997,7 @@ useEffect(() => {
 
   // ☁️ **Cloud Layer**
   const cloudMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(13.05, 64, 64),
+    new THREE.SphereGeometry(6050.6, 906, 906),
     new THREE.MeshStandardMaterial({
       map: clouds,
       transparent: true,
@@ -1021,7 +1027,7 @@ useEffect(() => {
 
   // 🌫 **Atmosphere Glow**
   const atmosphere = new THREE.Mesh(
-    new THREE.SphereGeometry(13.05, 64, 64),
+    new THREE.SphereGeometry(6100.5, 64, 64),
     new THREE.MeshBasicMaterial({
       color: 0x3399ff,
       transparent: true,
@@ -1042,7 +1048,7 @@ useEffect(() => {
 
   // 🌞 **Create Sun**
   const sun = new THREE.Mesh(
-    new THREE.SphereGeometry(20, 64, 64),
+    new THREE.SphereGeometry(20, 4, 4),
     new THREE.MeshStandardMaterial({
       map: sunTexture,
       emissive: 0xffffe0,
@@ -1050,9 +1056,9 @@ useEffect(() => {
       emissiveMap: sunTexture,
     })
   );
-  sun.position.set(2000, 50, 0);
+  sun.position.set(5000, 50, 0);
   sunRef.current = sun;
-  scene.add(sun);
+  //scene.add(sun);
 
  
 
@@ -1062,7 +1068,7 @@ const starVertices = [];
 
 // ✅ Increase star count and expand volume
 const starCount = 200000;  // More stars
-const starFieldSize = 30000; // Increase field size
+const starFieldSize = 3000000; // Increase field size
 
 for (let i = 0; i < starCount; i++) {
   starVertices.push(
@@ -1095,10 +1101,10 @@ scene.add(stars);
 
   
   // ✅ ADD THE MOON HERE
-  createMoon(scene, globe); 
+  //createMoon(scene, globe); 
 
   // ✅ Start Moon Orbit Animation
-  animateMoon();
+  //animateMoon();
 
 
   // 🔄 **Animation Loop**
@@ -1107,7 +1113,7 @@ scene.add(stars);
     requestAnimationFrame(animate);
 
     if (globeRef.current) globeRef.current.rotation.y += 0.00000727;
-    if (cloudRef.current) cloudRef.current.rotation.y += 0.000009;
+    if (cloudRef.current) cloudRef.current.rotation.y += 0.00009;
 
     const time = Date.now() / 1000;
     const timeFactor = 1;
@@ -1117,7 +1123,7 @@ scene.add(stars);
     if (satelliteModel.userData) {
       const newPos = computeSatellitePosition(satelliteModel.userData, time * timeFactor);
       if (newPos) {
-        satelliteModel.position.lerp(newPos, 0.3); // 🔄 Smooth movement
+        satelliteModel.position.lerp(newPos, 0.1); // 🔄 Smooth movement
       } else {
         console.warn(`⚠️ Satellite ${satelliteModel.userData.norad_number} has no new position!`);
       }
@@ -1221,28 +1227,37 @@ const [realTimeData, setRealTimeData] = useState({
 
 
 
-
-// ✅ Separate useEffect for Tracking (Fixes tracking while keeping satellites visible)
-useEffect(() => {
-  if (!isTracking || !selectedSatellite || !cameraRef.current) return;
-
-  console.log(`📌 Tracking satellite: ${selectedSatellite.name} (NORAD: ${selectedSatellite.norad_number})`);
-
-  const trackSatellite = () => {
-    if (!selectedSatellite || !satelliteObjectsRef.current[selectedSatellite.norad_number]) return;
-
-    const satPosition = satelliteObjectsRef.current[selectedSatellite.norad_number].position;
-    cameraRef.current.position.lerp(satPosition.clone().multiplyScalar(1.3), 0.05);
-    cameraRef.current.lookAt(satPosition);
-  };
-
-  const interval = setInterval(trackSatellite, 15);
-
-  return () => clearInterval(interval);
-}, [isTracking, selectedSatellite,is3DEnabled]); // ✅ Runs only when tracking state or satellite selection changes
-
-
-
+  useEffect(() => {
+    if (!isTracking || !selectedSatellite || !cameraRef.current) return;
+  
+    console.log(`📌 Tracking satellite: ${selectedSatellite.name} (NORAD: ${selectedSatellite.norad_number})`);
+  
+    const trackSatellite = () => {
+      if (!selectedSatellite || !satelliteObjectsRef.current[selectedSatellite.norad_number]) return;
+  
+      const satPosition = satelliteObjectsRef.current[selectedSatellite.norad_number].position.clone();
+  
+      // ✅ Dynamic Speed Factor Based on Altitude (Fast for LEO)
+      const speedFactor = selectedSatellite.perigee < 2000 ? 0.5 : 0.08; // Faster LEO tracking
+  
+      // ✅ Adjust Zoom Factor Based on Satellite Altitude
+      const zoomFactor = selectedSatellite.perigee < 2000 ? 1.0009 : 1.0003;
+      const targetPos = satPosition.multiplyScalar(zoomFactor);
+  
+      // ✅ Smooth Lerp to the Target Position
+      cameraRef.current.position.lerp(targetPos, speedFactor);
+      cameraRef.current.lookAt(satPosition);
+    };
+  
+    // ✅ Reduce Interval for Faster Updates (10ms instead of 15ms)
+    const interval = setInterval(trackSatellite, 10);
+  
+    return () => {
+      clearInterval(interval);
+      console.log(`🛑 Stopped tracking ${selectedSatellite.name}`);
+    };
+  }, [isTracking, selectedSatellite, is3DEnabled]); // ✅ Runs when tracking state or satellite selection changes
+  
 
 
 
@@ -1517,7 +1532,7 @@ return (
 {is3DEnabled && (
   <button
     onClick={() => setSidebarOpen((prev) => !prev)}
-    className={`absolute top-1/2 transform -translate-y-1/2 bg-gray-800 text-white px-3 py-4 rounded-r-lg shadow-md hover:bg-gray-700 transition-all duration-300 z-[100] ${
+    className={`absolute top-1/2 transform -translate-y-1/2 bg-gray-800 text-white px-3 py-4 rounded-r-lg shadow-md hover:bg-gray-700 transition-all duration-300 z-[90] ${
       sidebarOpen ? "left-[12.5rem]" : "left-0"
     }`}
   >
@@ -1535,7 +1550,7 @@ return (
 
   {/* 🔄 Cool Loading Screen (Appears During Fetching) */}
   {loading && (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-80 text-white z-[100]">
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-80 text-white z-[90]">
       <div className="flex flex-col items-center">
         {/* 🔄 Spinning Loader */}
         <div className="w-12 h-12 border-t-4 border-b-4 border-teal-400 rounded-full animate-spin"></div>

@@ -13,7 +13,7 @@
 
   color-scheme: light dark;
   color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  background-color: #070013;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -143,4 +143,57 @@ nav {
 
 .animate-jump {
   animation: jump 1.5s ease-in-out infinite;
+}
+
+
+@keyframes rotateGlobe {
+  0% { transform: rotateY(0deg); }
+  100% { transform: rotateY(360deg); }
+}
+
+.animate-rotateGlobe {
+  animation: rotateGlobe 5s linear infinite;
+}
+
+
+
+/* ✅ Keep Navbar on Top */
+nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: auto; /* 🔥 Allow navbar to adjust dynamically */
+  min-height: 60px; /* 🔥 Prevent squishing */
+  background-color: #1a1a1a;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* ✅ Ensures spacing */
+  padding: 12px 16px; /* 🔥 More padding for better spacing */
+  z-index: 100;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ✅ Ensure Navbar Items are Properly Spaced */
+.navbar-container {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  justify-content: space-between; /* ✅ Spread items out */
+  gap: 24px; /* 🔥 Adds spacing */
+}
+
+/* ✅ Mobile Navigation Fix */
+@media (max-width: 768px) {
+  nav {
+    flex-direction: column; /* ✅ Stack items in mobile */
+    align-items: center;
+    padding: 10px 0;
+  }
+
+  .navbar-container {
+    flex-direction: column; /* ✅ Stack items in mobile */
+    gap: 10px;
+  }
 }

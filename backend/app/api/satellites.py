@@ -16,7 +16,7 @@ def sanitize_value(value):
 @router.get("/")
 def get_all_satellites(
     page: int = Query(1, ge=1),
-    limit: int = Query(100, ge=1, le=11000),
+    limit: int = Query(10000, ge=1, le=10000),
     filter: str = Query(None)
 ):
     offset = (page - 1) * limit
