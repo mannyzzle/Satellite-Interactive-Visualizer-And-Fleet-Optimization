@@ -16,8 +16,9 @@ def sanitize_value(value):
 @router.get("/")
 def get_all_satellites(
     page: int = Query(1, ge=1),
-    limit: int = Query(1000, ge=1, le=11000),
-    filter: str = Query(None)
+    limit: int = Query(1000, ge=1, le=27451),
+    filter: str = Query(None),
+    sort_by: str = Query("altitude", regex="^(altitude|collision)$")  # ✅ Allow sorting option
 ):
     offset = (page - 1) * limit
     conn = get_db_connection()
@@ -38,7 +39,7 @@ def get_all_satellites(
         total_count = result["count"]
         print(f"✅ Total satellites found: {total_count}")
 
-        # ✅ Query satellites sorted by `launch_date DESC`
+        # ✅ Base Query
         query = """
             SELECT id, name, norad_number, orbit_type, inclination, velocity, 
                    latitude, longitude, bstar, rev_num, ephemeris_type, 
@@ -53,8 +54,12 @@ def get_all_satellites(
         if filter:
             query += f" WHERE {get_filter_condition(filter)}"
 
-        # ✅ Order results by `launch_date DESC`
-        query += " ORDER BY launch_date DESC"
+        # ✅ Sorting Logic: Default `altitude`, Optional `collision`
+        if sort_by == "collision":
+            print("⚠️ Sorting by **collision risk** instead of altitude...")
+            query += " ORDER BY velocity DESC, eccentricity DESC, bstar DESC, perigee ASC"
+        else:
+            query += " ORDER BY perigee ASC, apogee ASC, launch_date DESC"
 
         query += " LIMIT %s OFFSET %s"
         cursor.execute(query, (limit, offset))
@@ -110,6 +115,7 @@ def get_all_satellites(
         conn.close()
 
 
+
 def get_filter_condition(filter):
     """Generate SQL filter conditions based on the selected filter."""
     filter_conditions = {
@@ -153,6 +159,7 @@ def get_filter_condition(filter):
         "Decayed": "decay_date IS NOT NULL",
         "Active Satellites": "decay_date IS NULL"
     }
+
 
     conditions = []
     launch_years = []  # Store multiple launch years

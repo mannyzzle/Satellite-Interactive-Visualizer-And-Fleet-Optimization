@@ -6,7 +6,7 @@ export default function SatelliteList() {
   const [satelliteData, setSatelliteData] = useState({});
   const [loadingCategories, setLoadingCategories] = useState({});
   const [error, setError] = useState(null);
-  const limit = 100; // Fetch 100 per category but show 8 at a time
+  const limit = 1000; // Fetch 100 per category but show 8 at a time
 
   const categories = [
     // 🌍 Orbital Regions
