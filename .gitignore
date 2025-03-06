@@ -9,3 +9,7 @@ venv/
 __pycache__/
 *.pyc
 *.pyo
+
+#satellite file
+
+tle_latest.json

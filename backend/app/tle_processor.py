@@ -1,6 +1,6 @@
 # /backend/app/tle_processor.py
 
-
+import csv
 import psycopg2
 from skyfield.api import EarthSatellite, load
 from tqdm import tqdm
@@ -11,24 +11,66 @@ import requests
 import time
 from database import get_db_connection  # ✅ Use get_db_connection()
 from math import isfinite, sqrt, pi
-from skyfield.api import EarthSatellite
 from psycopg2 import OperationalError, InterfaceError
+import json
+from tempfile import NamedTemporaryFile
+import numpy as np  # For NaN detection
+from concurrent.futures import ThreadPoolExecutor
+from dateutil.parser import parse
+from sgp4.api import Satrec, WGS72
+from datetime import datetime, timezone
+import traceback
+# Astropy imports (for coordinate frames)
+from astropy.coordinates import TEME, ITRS, EarthLocation
+from astropy import units as u
+from astropy.time import Time
+import math
+from skyfield.elementslib import osculating_elements_of
+ts = load.timescale()
+eph = load('de421.bsp')
+earth = eph['earth']
 
-
+MU = 398600.4418  # Earth's standard gravitational parameter (km^3/s^2)
+R_EARTH = 6378.137  # Earth's equatorial radius (km)
+# Earth's gravitational parameter (km³/s²)
+MU = 398600.4418  
 # Load environment variables
 load_dotenv()
-
 # Load Skyfield timescale
 ts = load.timescale()
 SPACETRACK_USER = os.getenv("SPACETRACK_USER")
 SPACETRACK_PASS = os.getenv("SPACETRACK_PASS")
 COOKIES_FILE = "cookies.txt"  # Ensure this is the correct cookie file path
-
+TLE_FILE_PATH = "tle_latest.json"  # ✅ Store TLE data locally
 CDM_API_URL = "https://www.space-track.org/basicspacedata/query/class/cdm_public/format/json"
-
-
-
+# ✅ Batch size for inserting satellites
+BATCH_SIZE = 5000  
 API_WAIT_TIME = 3  # ✅ Complies with API rate limits
+EARTH_RADIUS_KM = 6371 
+
+
+
+
+
+
+# If sgp4.api does not provide jday, define our own:
+def jday(year, mon, day, hr, minute, sec):
+    """
+    Computes the Julian Date for the given UTC date and time.
+    Returns a tuple: (jd, fraction) where jd is the integer part
+    and fraction is the fractional part.
+    """
+    # This algorithm is based on "Fundamentals of Astrodynamics and Applications" (Vallado)
+    jd = (367 * year
+          - int((7 * (year + int((mon + 9) / 12))) / 4)
+          + int((275 * mon) / 9)
+          + day + 1721013.5)
+    # Now add the fractional day:
+    fraction = (hr + minute/60.0 + sec/3600.0) / 24.0
+    return jd, fraction
+
+
+
 
 def get_spacetrack_session():
     """Logs in to Space-Track and returns an authenticated session."""
@@ -211,234 +253,315 @@ def rate_limited_get(session, url):
 
 
 
+def serialize_datetime(obj):
+    """Convert datetime objects to ISO format strings."""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError(f"Type {type(obj)} not serializable")
 
 
 
-def fetch_tle_data(session, existing_norads, batch_size=500):
+def fetch_tle_data(session, existing_norads):
     """
-    Fetches latest TLE data from Space-Track with retries for failed requests.
+    Fetches the latest TLE data **only once per hour** and filters for existing NORADs.
+    Handles first-time fetch when the file doesn't exist.
     """
     if not existing_norads:
         print("⚠️ No existing NORAD numbers found. Skipping TLE fetch.")
         return []
 
-    satellites = []
-    all_norads = set(existing_norads)
-    fetched_norads = set()
+    # ✅ Check if the TLE file exists and is recent (<1 hour old)
+    if os.path.exists(TLE_FILE_PATH):
+        try:
+            with open(TLE_FILE_PATH, "r") as file:
+                tle_data = json.load(file)
 
-    print(f"📡 Fetching latest TLE data in batches of {batch_size}...")
+            # ✅ If file is <1 hour old, use it instead of fetching again
+            if time.time() - tle_data["timestamp"] < 360000:
+                print("📡 Using cached TLE data (Last Updated: < 1 hour ago)")
+                satellites = tle_data["satellites"]
+                return filter_satellites(satellites, existing_norads)
+        except (json.JSONDecodeError, KeyError):
+            print("⚠️ TLE file is corrupt or incomplete. Fetching fresh data...")
 
-    for i in range(0, len(existing_norads), batch_size):
-        batch = list(existing_norads)[i:i + batch_size]
-        norad_query = ",".join(map(str, batch))
-        tle_url = f"https://www.space-track.org/basicspacedata/query/class/gp/NORAD_CAT_ID/{norad_query}/orderby/EPOCH desc/format/json"
+    # ✅ **First fetch or expired file → Download fresh TLE data**
+    print("📡 Fetching latest TLE data from Space-Track...")
 
-        print(f"📡 Fetching batch {i//batch_size + 1} of {len(existing_norads) // batch_size + 1}...")
+    tle_url = "https://www.space-track.org/basicspacedata/query/class/gp/orderby/EPOCH%20desc/format/json"
 
-        response = rate_limited_get(session, tle_url)
 
-        if response.status_code == 200:
-            batch_data = response.json()
+    response = session.get(tle_url)
 
-            # 🔍 Debugging: Print first three responses
-            print("\n🔍 API Response Sample (First 3 Satellites):")
-            for sat in batch_data[:3]:  # Only print first 3 responses for readability
-                print(sat)
+    if response.status_code == 200:
+        satellites = response.json()
 
-            for sat in batch_data:
-                try:
-                    norad_number = int(sat.get("NORAD_CAT_ID", -1))
-                    mean_motion = float(sat.get("MEAN_MOTION", 0)) if sat.get("MEAN_MOTION") else None
-                    tle_line1 = sat.get("TLE_LINE1", "").strip()
-                    tle_line2 = sat.get("TLE_LINE2", "").strip()
+        # ✅ Compute orbital parameters for each satellite
+        for sat in satellites:
+            sat["computed_params"] = compute_orbital_params(
+                sat.get("OBJECT_NAME", "Unknown"),
+                sat.get("TLE_LINE1", ""),
+                sat.get("TLE_LINE2", "")
+            )
 
-                    # 🚨 **Check for missing critical data**
-                    if mean_motion is None or not tle_line1 or not tle_line2:
-                        print(f"⚠️ Skipping {sat.get('OBJECT_NAME', 'Unknown')} (NORAD {norad_number}): Missing Mean Motion or TLE data.")
-                        continue  # ❌ Skip invalid satellites
+        # ✅ Convert `datetime` objects before saving JSON
+        with open(TLE_FILE_PATH, "w") as file:
+            json.dump({"timestamp": time.time(), "satellites": satellites}, file, default=serialize_datetime)
 
-                    # 🔎 Print extracted values before appending
-                    print(f"\n📡 Extracted Satellite Data - {sat.get('OBJECT_NAME', 'Unknown')} (NORAD {norad_number}):")
-                    print(f"   - Mean Motion: {mean_motion}")
-                    print(f"   - TLE Line 1: {tle_line1}")
-                    print(f"   - TLE Line 2: {tle_line2}")
-
-                    if norad_number > 0:
-                        fetched_norads.add(norad_number)
-                        satellites.append({
-                            "norad_number": norad_number,
-                            "name": sat.get("OBJECT_NAME", "Unknown"),
-                            "tle_line1": tle_line1,
-                            "tle_line2": tle_line2,
-                            "epoch": sat.get("EPOCH", None),
-                            "mean_motion": mean_motion,
-                            "eccentricity": float(sat.get("ECCENTRICITY", 0)) if sat.get("ECCENTRICITY") else None,
-                            "inclination": float(sat.get("INCLINATION", 0)) if sat.get("INCLINATION") else None,
-                            "raan": float(sat.get("RA_OF_ASC_NODE", 0)) if sat.get("RA_OF_ASC_NODE") else None,
-                            "arg_perigee": float(sat.get("ARG_OF_PERICENTER", 0)) if sat.get("ARG_OF_PERICENTER") else None,
-                            "semi_major_axis": float(sat.get("SEMIMAJOR_AXIS", 0)) if sat.get("SEMIMAJOR_AXIS") else None,
-                        })
-                except Exception as e:
-                    print(f"⚠️ Error processing satellite {sat.get('OBJECT_NAME', 'Unknown')} (NORAD {norad_number}): {e}")
-
-        else:
-            print(f"❌ API error {response.status_code} for batch {i//batch_size + 1}. Retrying in smaller chunks...")
-
-            # ✅ Retry failed batch in smaller chunks (500)
-            if batch_size > 500:
-                satellites.extend(fetch_tle_data(session, batch, batch_size=500))
-            elif batch_size > 250:
-                satellites.extend(fetch_tle_data(session, batch, batch_size=250))
-            elif batch_size > 100:
-                satellites.extend(fetch_tle_data(session, batch, batch_size=100))
-            else:
-                print(f"⚠️ Skipping batch. API limit likely reached for {batch}")
-
-    # ✅ Identify missing NORADs and retry
-    missing_norads = all_norads - fetched_norads
-    if missing_norads:
-        print(f"⚠️ {len(missing_norads)} NORAD IDs missing from API response. Retrying individually...")
-
-        for norad in missing_norads:
-            retry_url = f"https://www.space-track.org/basicspacedata/query/class/gp/NORAD_CAT_ID/{norad}/orderby/EPOCH desc/format/json"
-            retry_response = rate_limited_get(session, retry_url)
-
-            if retry_response.status_code == 200 and retry_response.json():
-                sat = retry_response.json()[0]
-                norad_number = int(sat.get("NORAD_CAT_ID", -1))
-                mean_motion = float(sat.get("MEAN_MOTION", 0)) if sat.get("MEAN_MOTION") else None
-                tle_line1 = sat.get("TLE_LINE1", "").strip()
-                tle_line2 = sat.get("TLE_LINE2", "").strip()
-
-                # 🚨 **Check again for missing critical data before retrying**
-                if mean_motion is None or not tle_line1 or not tle_line2:
-                    print(f"⚠️ Retried but skipping {sat.get('OBJECT_NAME', 'Unknown')} (NORAD {norad_number}): Missing Mean Motion or TLE data.")
-                    continue  # ❌ Skip invalid satellites
-
-                # 🔎 Print extracted values for retry
-                print(f"\n📡 Retried Satellite Data - {sat.get('OBJECT_NAME', 'Unknown')} (NORAD {norad_number}):")
-                print(f"   - Mean Motion: {mean_motion}")
-                print(f"   - TLE Line 1: {tle_line1}")
-                print(f"   - TLE Line 2: {tle_line2}")
-
-                satellites.append({
-                    "norad_number": norad_number,
-                    "name": sat.get("OBJECT_NAME", "Unknown"),
-                    "tle_line1": tle_line1,
-                    "tle_line2": tle_line2,
-                    "epoch": sat.get("EPOCH", None),
-                    "mean_motion": mean_motion,
-                    "eccentricity": float(sat.get("ECCENTRICITY", 0)) if sat.get("ECCENTRICITY") else None,
-                    "inclination": float(sat.get("INCLINATION", 0)) if sat.get("INCLINATION") else None,
-                    "raan": float(sat.get("RA_OF_ASC_NODE", 0)) if sat.get("RA_OF_ASC_NODE") else None,
-                    "arg_perigee": float(sat.get("ARG_OF_PERICENTER", 0)) if sat.get("ARG_OF_PERICENTER") else None,
-                    "semi_major_axis": float(sat.get("SEMIMAJOR_AXIS", 0)) if sat.get("SEMIMAJOR_AXIS") else None,
-                })
-                print(f"✅ Successfully retrieved missing NORAD {norad}")
-            else:
-                print(f"⚠️ Still missing NORAD {norad}. May be inactive or missing data.")
-
-    print(f"✅ Successfully fetched TLE data for {len(satellites)} satellites.")
-    return satellites
+        print(f"✅ Downloaded and processed TLE data for {len(satellites)} satellites.")
+        return filter_satellites(satellites, existing_norads)
+    else:
+        print(f"❌ API error {response.status_code}. Could not fetch TLE data.")
+        return []
 
 
 
 
-def fetch_spacetrack_data_batch(session, norad_ids, batch_size=500):
+
+def compute_sgp4_position(tle_line1, tle_line2):
     """
-    Fetch satellite metadata from Space-Track, but only for NORADs confirmed in GP.
-    If a NORAD is missing from SATCAT, attempt to fetch from GP-class as a fallback.
+    Computes the current satellite latitude and longitude using python-sgp4,
+    and transforms TEME coordinates into geodetic coordinates using Astropy.
     """
-    metadata_dict = {}
-    fetched_norads = set()
-    missing_from_satcat = set()
+    try:
+        #print(f"\n🔍 [DEBUG] Processing Satellite TLE")
+        #print(f"   ↳ TLE1: {tle_line1}")
+        #print(f"   ↳ TLE2: {tle_line2}")
+        
 
-    print(f"📡 Fetching metadata in batches of {batch_size} satellites...")
+        # Validate TLE lines
+        if not tle_line1 or not tle_line2:
+            print("❌ [ERROR] Missing TLE lines!")
+            return None, None, None
 
-    for i in range(0, len(norad_ids), batch_size):
-        batch = norad_ids[i:i + batch_size]
-        norad_query = ",".join(map(str, batch))
-        spacetrack_url = f"https://www.space-track.org/basicspacedata/query/class/satcat/NORAD_CAT_ID/{norad_query}/format/json"
+        # Create a Satrec object from TLE lines
+        try:
+            satrec = Satrec.twoline2rv(tle_line1, tle_line2, WGS72)
+        except Exception as e:
+            print(f"❌ [ERROR] Invalid TLE or parse failure: {e}")
+            return None, None, None
 
-        print(f"📡 Fetching batch {i//batch_size + 1} of {len(norad_ids) // batch_size + 1}...")
+        # Get current UTC time and create an Astropy Time object
+        now = datetime.utcnow()
+        #print(f"✅ [DEBUG] Current UTC time: {now}")
+        obstime = Time(now, scale='utc')
 
-        response = rate_limited_get(session, spacetrack_url)
+        # Get total Julian Date from Astropy; split into integer and fractional parts
+        jd_total = obstime.jd
+        jd = math.floor(jd_total)
+        fr = jd_total - jd
 
-        if response.status_code == 200:
-            batch_data = response.json()
+        # Run SGP4 propagation to get TEME coordinates (km)
+        error_code, r, v = satrec.sgp4(jd, fr)
+        if error_code != 0:
+            print(f"❌ [ERROR] SGP4 propagation error code: {error_code}")
+            return None, None, None
 
-            if not batch_data:
-                print(f"⚠️ SATCAT returned no data for batch {i//batch_size + 1}. These NORADs may be GP-only.")
-                missing_from_satcat.update(batch)  # ✅ Track NORADs missing from SATCAT
+        # r is in TEME coordinates (km)
+        # Create a TEME coordinate using Astropy with the SGP4 output
+        teme_coord = TEME(
+            x=r[0] * u.km,
+            y=r[1] * u.km,
+            z=r[2] * u.km,
+            obstime=obstime
+        )
 
-            for metadata in batch_data:
-                try:
-                    norad_number = int(metadata.get("NORAD_CAT_ID", -1))
-                    if norad_number > 0:
-                        fetched_norads.add(norad_number)
-                        metadata_dict[norad_number] = {
-                            "object_type": metadata.get("OBJECT_TYPE", "Unknown"),
-                            "launch_date": metadata.get("LAUNCH") if metadata.get("LAUNCH") != "Unknown" else None,
-                            "launch_site": metadata.get("SITE") if metadata.get("SITE") != "Unknown" else None,
-                            "decay_date": metadata.get("DECAY") if metadata.get("DECAY") != "Unknown" else None,
-                            "rcs": metadata.get("RCSVALUE") if metadata.get("RCSVALUE") != "Unknown" else None,
-                            "purpose": infer_purpose(metadata),
-                            "country": metadata.get("COUNTRY", "Unknown"),
-                        }
+        # Transform TEME to ITRS (Earth-fixed coordinate frame)
+        itrs_coord = teme_coord.transform_to(ITRS(obstime=obstime))
 
-                except Exception as e:
-                    print(f"⚠️ Error processing metadata for NORAD {norad_number}: {e}")
+        # Extract geodetic latitude, longitude, and altitude
+        lat_deg = itrs_coord.earth_location.lat.to(u.deg).value
+        lon_deg = itrs_coord.earth_location.lon.to(u.deg).value
+        alt_km  = itrs_coord.earth_location.height.to(u.km).value
 
+        #print(f"✅ [DEBUG] Computed Current lat/lon: ({lat_deg}, {lon_deg}), altitude: {alt_km} km")
+
+        # Sanity checks on computed lat/lon
+        if lat_deg is None or lon_deg is None:
+            print("❌ [ERROR] Computed lat/lon are None!")
+            return None, None, None
+
+        if abs(lat_deg) > 90 or abs(lon_deg) > 180:
+            print(f"❌ [ERROR] Computed lat/lon out of bounds! lat={lat_deg}, lon={lon_deg}")
+            return None, None, None
+
+        return lat_deg, lon_deg, alt_km
+
+    except Exception as e:
+        print(f"⚠️ [ERROR] SGP4 computation failed: {e}")
+        traceback.print_exc()
+        return None, None, None
+
+
+
+def fetch_lat_lon(computed_params):
+    """ Fetch latitude and longitude if missing or NaN. """
+    try:
+        if computed_params is None:
+            return
+
+        print(f"🛠️ Debug BEFORE lat/lon computation: {computed_params}")
+        tle_line1 = computed_params.get("tle_line1")
+        tle_line2 = computed_params.get("tle_line2")
+
+        # ✅ Ensure we don't overwrite existing valid values
+        if computed_params.get("latitude") is not None and computed_params.get("longitude") is not None:
+            print("✅ Latitude and longitude already exist, skipping recomputation.")
+            return  # ✅ Already has valid values, no need to compute again
+
+        print(f"🌍 Computing new lat/lon for NORAD {computed_params.get('norad_number', 'Unknown')}")
+        latitude, longitude, altitude_km = compute_sgp4_position(tle_line1, tle_line2)
+
+        # ✅ Ensure computed values are not None before updating
+        if latitude is not None and longitude is not None and altitude_km is not None:
+            computed_params["latitude"] = latitude
+            computed_params["longitude"] = longitude
+            computed_params["altitude_km"] = altitude_km
+            #print(f"✅ Debug AFTER lat/lon computation: {computed_params}")
         else:
-            print(f"❌ API error {response.status_code} for batch {i//batch_size + 1}. Retrying in smaller batches...")
+            print(f"⚠️ Geodetic computation failed for NORAD {computed_params.get('norad_number', 'Unknown')}")
 
-            if batch_size > 500:
-                metadata_dict.update(fetch_spacetrack_data_batch(session, batch, batch_size=500))
-            elif batch_size > 250:
-                metadata_dict.update(fetch_spacetrack_data_batch(session, batch, batch_size=250))
-            elif batch_size > 100:
-                metadata_dict.update(fetch_spacetrack_data_batch(session, batch, batch_size=100))
-            else:
-                print(f"⚠️ Skipping batch due to repeated errors.")
+    except Exception as e:
+        print(f"⚠️ Error fetching lat/lon: {e}")
 
-    # ✅ Identify missing NORADs (SATCAT did not return them)
-    completely_missing_norads = set(norad_ids) - fetched_norads
-    if completely_missing_norads:
-        print(f"⚠️ {len(completely_missing_norads)} NORADs are missing from SATCAT. Attempting to fetch from GP-class.")
 
-        missing_from_gp = list(completely_missing_norads)
-        batch_size = 500  # Space-Track API limit
 
-        print(f"📡 Fetching missing GP-class metadata in batches of {batch_size}...")
 
-        for i in range(0, len(missing_from_gp), batch_size):
-            batch = missing_from_gp[i:i + batch_size]
-            norad_query = ",".join(map(str, batch))
-            batch_url = f"https://www.space-track.org/basicspacedata/query/class/gp/NORAD_CAT_ID/{norad_query}/format/json"
 
-            retry_response = rate_limited_get(session, batch_url)
+def filter_satellites(satellites, existing_norads):
+    """
+    Filters the downloaded TLE dataset to:
+    - Keep satellites in our database
+    - Store additional metadata fields
+    - Prevent duplicates (NORADs)
+    - Ignore satellites with NaN lat/lon
+    """
+    filtered_satellites = []
+    existing_norads_set = set(existing_norads)
+    seen_norads = set()  # ✅ Track added NORADs
 
-            if retry_response.status_code == 200 and retry_response.json():
-                for gp_metadata in retry_response.json():
-                    norad = int(gp_metadata.get("NORAD_CAT_ID", -1))
-                    if norad > 0:
-                        metadata_dict[norad] = {
-                            "object_type": gp_metadata.get("OBJECT_TYPE", "Unknown"),
-                            "launch_date": gp_metadata.get("LAUNCH", None),
-                            "launch_site": gp_metadata.get("SITE", None),
-                            "decay_date": gp_metadata.get("DECAY", None),
-                            "rcs": gp_metadata.get("RCSVALUE", None),
-                            "purpose": infer_purpose(gp_metadata),
-                            "country": gp_metadata.get("COUNTRY", "Unknown"),
-                        }
-                        print(f"✅ Successfully retrieved missing metadata for NORAD {norad} from GP-class.")
+    for sat in satellites:
+        try:
+            norad_number = int(sat.get("NORAD_CAT_ID", -1))
+            metadata = sat  
 
-            else:
-                print(f"⚠️ API error or empty response for batch {i//batch_size + 1}. Skipping.")
+            # 🚀 **Skip if NORAD already processed**
+            if norad_number in seen_norads:
+                print(f"⚠️ Skipping duplicate NORAD {norad_number}: {metadata.get('OBJECT_NAME', 'Unknown')}")
+                continue
 
-    print(f"✅ Successfully fetched metadata for {len(metadata_dict)} satellites.")
-    return metadata_dict
+            tle_line1 = sat.get("TLE_LINE1", "").strip()
+            tle_line2 = sat.get("TLE_LINE2", "").strip()
 
+            # ✅ Ensure `computed_params` exists and references the right object
+            if "computed_params" not in sat or sat["computed_params"] is None:
+                sat["computed_params"] = {}  # ✅ Ensure it exists
+            computed_params = sat["computed_params"]  # ✅ Maintain the reference
+
+            
+            # ✅ **Fallback to metadata if computed_params is missing or incomplete**
+            if not computed_params or computed_params.get("latitude") is None or computed_params.get("longitude") is None or computed_params.get("altitude_km") is None:
+                print(f"⚠️ Using metadata to compute parameters for {metadata.get('OBJECT_NAME', 'Unknown')} (NORAD {norad_number})")
+                # ✅ Debug: Check if it's getting reset
+                #print(f"🔍 Before computation for NORAD {norad_number}: {computed_params}")
+
+
+                # ✅ Extract required parameters, falling back to metadata
+                computed_params["tle_line1"] = tle_line1
+                computed_params["tle_line2"] = tle_line2
+                computed_params["norad_number"] = int(metadata.get("NORAD_CAT_ID", -1))
+                computed_params["intl_designator"] = metadata.get("OBJECT_ID", "Unknown")
+                computed_params["ephemeris_type"] = int(metadata.get("EPHEMERIS_TYPE", 0))
+                computed_params["epoch"] = metadata.get("EPOCH", None)
+                computed_params["inclination"] = float(metadata.get("INCLINATION", 0.0))
+                computed_params["eccentricity"] = float(metadata.get("ECCENTRICITY", 0.0))
+                computed_params["mean_motion"] = float(metadata.get("MEAN_MOTION", 0.0))
+                computed_params["raan"] = float(metadata.get("RA_OF_ASC_NODE", 0.0))
+                computed_params["arg_perigee"] = float(metadata.get("ARG_OF_PERICENTER", 0.0))
+                computed_params["period"] = float(metadata.get("PERIOD", 0.0))
+                computed_params["semi_major_axis"] = float(metadata.get("SEMIMAJOR_AXIS", 0.0))
+                computed_params["perigee"] = float(metadata.get("PERIAPSIS", 0.0))
+                computed_params["apogee"] = float(metadata.get("APOAPSIS", 0.0))
+                computed_params["velocity"] = sqrt(MU / computed_params["semi_major_axis"]) if isfinite(computed_params["semi_major_axis"]) else None
+                computed_params["orbit_type"] = classify_orbit_type(computed_params["perigee"], computed_params["apogee"])
+                computed_params["bstar"] = float(metadata.get("BSTAR", 0.0))
+                computed_params["rev_num"] = int(metadata.get("REV_AT_EPOCH", 0))
+
+                # ✅ Set lat/lon/alt to None before computing
+                computed_params["latitude"] = None
+                computed_params["longitude"] = None
+                computed_params["altitude_km"] = None
+
+                # ✅ Compute latitude, longitude, altitude & modify in-place
+                fetch_lat_lon(computed_params)
+
+
+            # 🚀 **Final check: If still NaN, skip**
+            if (
+                computed_params.get("latitude") is None 
+                or computed_params.get("longitude") is None 
+                or computed_params.get("altitude_km") is None
+                or (isinstance(computed_params["latitude"], float) and math.isnan(computed_params["latitude"]))
+                or (isinstance(computed_params["longitude"], float) and math.isnan(computed_params["longitude"]))
+                or (isinstance(computed_params["altitude_km"], float) and math.isnan(computed_params["altitude_km"]))
+                or computed_params.get("perigee") < 0  # ✅ Remove negative perigee
+                or computed_params.get("semi_major_axis") < 0  # ✅ Remove negative semi-major axis
+                or computed_params.get("apogee") < computed_params.get("perigee")  # ✅ Apogee must be >= perigee
+            ):
+                print(f"❌ Skipping {metadata.get('OBJECT_NAME', 'Unknown')} (NORAD {norad_number}): Lat/Lon still missing or invalid after recomputation.")
+                print(computed_params)
+                continue
+
+            # 🚀 **Check altitude limits by orbit type**
+            altitude_km = computed_params["altitude_km"]
+            orbit_type = computed_params["orbit_type"]
+
+            if (
+                (orbit_type == 'LEO' and (altitude_km < 120 or altitude_km > 2000)) or
+                (orbit_type == 'MEO' and (altitude_km < 2000 or altitude_km > 35786)) or
+                (orbit_type == 'HEO' and altitude_km < 2000)
+            ):
+                print(f"❌ Skipping {metadata.get('OBJECT_NAME', 'Unknown')} (NORAD {norad_number}): Altitude {altitude_km} km is outside valid range for {orbit_type}.")
+                continue
+
+
+            # ✅ **Prepare satellite data for insertion**
+            sat_data = {
+                "norad_number": norad_number,
+                "name": metadata.get("OBJECT_NAME", "Unknown"),
+                "tle_line1": tle_line1,
+                "tle_line2": tle_line2,
+                "object_type": metadata.get("OBJECT_TYPE", "Unknown"),
+                "launch_date": metadata.get("LAUNCH_DATE") if metadata.get("LAUNCH_DATE") != "Unknown" else None,
+                "launch_site": metadata.get("SITE") if metadata.get("SITE") != "Unknown" else None,
+                "decay_date": metadata.get("DECAY_DATE") if metadata.get("DECAY_DATE") != "Unknown" else None,
+                "rcs": metadata.get("RCS_SIZE") if metadata.get("RCS_SIZE") != "Unknown" else None,
+                "country": metadata.get("COUNTRY_CODE", "Unknown"),
+                **computed_params,  # ✅ Add all computed orbital parameters
+                "purpose": infer_purpose(metadata) or "Unknown",
+            }
+
+            decay_date = sat_data.get("decay_date")
+
+            if (
+                (sat_data.get(orbit_type) == 'LEO' and (sat_data.get(altitude_km) < 120 or sat_data.get(altitude_km) > 2000)) or
+                (sat_data.get(orbit_type) == 'LEO' and (sat_data.get(decay_date) is not None and (sat_data.get(altitude_km) < 120 or sat_data.get(altitude_km) > 2000))) or
+                (sat_data.get(orbit_type) == 'MEO' and (sat_data.get(altitude_km) < 2000 or sat_data.get(altitude_km) > 35786)) or
+                (sat_data.get(orbit_type) == 'HEO' and sat_data.get(altitude_km) < 2000)
+            ):
+                print(f"❌ Skipping {metadata.get('OBJECT_NAME', 'Unknown')} (NORAD {norad_number}): Altitude {altitude_km} km is outside valid range for {orbit_type}.")
+                continue
+
+            
+
+            # ✅ Add to filtered satellites & prevent future duplicates
+            filtered_satellites.append(sat_data)
+            seen_norads.add(norad_number)
+
+        except Exception as e:
+            print(f"⚠️ Error processing satellite {sat.get('OBJECT_NAME', 'Unknown')} (NORAD {norad_number}): {e}")
+
+    print(f"✅ Returning {len(filtered_satellites)} satellites (filtered for active and valid lat/lon).")
+    return filtered_satellites
 
 
 
@@ -714,7 +837,7 @@ def parse_tle_line2(tle_line2):
         rev_number = int(tle_line2[63:68].strip())  # Extract Revolution Number
 
         # 🔍 Debugging: Print extracted values
-        print(f"🔎 Parsed Mean Motion: {mean_motion}, Rev Number: {rev_number}")
+        #print(f"🔎 Parsed Mean Motion: {mean_motion}, Rev Number: {rev_number}")
 
         if not isfinite(mean_motion) or mean_motion <= 0:
             print(f"⚠️ Invalid Mean Motion ({mean_motion}), skipping.")
@@ -728,133 +851,108 @@ def parse_tle_line2(tle_line2):
 
 
 
-def compute_orbital_params(name, tle_line1, tle_line2, ts):
+
+def compute_orbital_params(name, tle_line1, tle_line2):
+    """
+     python-sgp4 + Astropy to compute orbital parameters and 
+    current geodetic coordinates (lat, lon, altitude) from TLEs.
+    """
     try:
+        # 1) Check TLE validity
         if not tle_line1 or not tle_line2:
             print(f"⚠️ Skipping {name}: Missing TLE data")
             return None
-        
-        # 🚀 Initialize Satellite Object
+
+        # 2) Create a Satrec object from TLE lines
         try:
-            satellite = EarthSatellite(tle_line1, tle_line2, name, ts)
+            satrec = Satrec.twoline2rv(tle_line1, tle_line2, WGS72)
         except Exception as e:
-            print(f"❌ Error initializing EarthSatellite for {name} (NORAD UNKNOWN): {e}")
+            print(f"❌ Error initializing Satrec for {name}: {e}")
             return None
 
-        # 🔍 Extract Orbital Parameters
+        # 3) Extract TLE metadata (norad_number, mean_motion, epoch, etc.)
+        # Assume these helper functions are defined elsewhere in your code
         norad_number, intl_designator, ephemeris_type = parse_tle_line1(tle_line1)
         if norad_number is None:
             print(f"⚠️ Skipping {name}: Could not parse NORAD number from TLE")
             return None
-        
+
         mean_motion, rev_num = parse_tle_line2(tle_line2)
         if mean_motion is None:
             print(f"⚠️ Skipping {name} (NORAD {norad_number}): Invalid mean motion.")
             return None
-        
-        epoch = extract_epoch(tle_line1)
+
+        epoch = extract_epoch(tle_line1)  # e.g. "2023-09-15T12:34:56"
         if epoch is None:
             print(f"⚠️ Skipping {name} (NORAD {norad_number}): Invalid epoch.")
             return None
 
-        # 🔎 Debugging: Ensure values before calculations
-        print(f"\n🔍 Checking values for {name} (NORAD {norad_number}):")
-        print(f"   - Mean Motion: {mean_motion}")
-        print(f"   - Epoch: {epoch}")
-        print(f"   - Rev Number: {rev_num}")
+        # 4) Extract SGP4 Model Parameters from satrec
+        inclination = satrec.inclo * (180 / pi)  # deg
+        eccentricity = satrec.ecco
+        bstar = satrec.bstar
+        raan = satrec.nodeo * (180 / pi)  # deg
+        arg_perigee = satrec.argpo * (180 / pi)  # deg
 
-        # ✅ **Check for bad values in Skyfield Model**
         bad_values = []
-        try:
-            inclination = satellite.model.inclo * (180 / pi)
-            eccentricity = satellite.model.ecco
-            bstar = satellite.model.bstar
-            raan = satellite.model.nodeo * (180 / pi)
-            arg_perigee = satellite.model.argpo * (180 / pi)
-        except Exception as e:
-            print(f"❌ Skyfield model error for {name} (NORAD {norad_number}): {e}")
-            return None
-
-        if not isfinite(inclination):
-            bad_values.append("inclination")
-        if not isfinite(eccentricity):
-            bad_values.append("eccentricity")
-        if not isfinite(raan):
-            bad_values.append("raan")
-        if not isfinite(arg_perigee):
-            bad_values.append("arg_perigee")
-        if not isfinite(bstar):
-            bad_values.append("bstar")
-
+        for param_name, param_val in [
+            ("inclination", inclination),
+            ("eccentricity", eccentricity),
+            ("bstar", bstar),
+            ("raan", raan),
+            ("arg_perigee", arg_perigee),
+        ]:
+            if not isfinite(param_val):
+                bad_values.append(param_name)
         if bad_values:
             print(f"⚠️ Skipping {name} (NORAD {norad_number}): Bad values: {', '.join(bad_values)}")
             return None
 
-        # **Orbital Mechanics Constants**
-        mu = 398600.4418  # Earth's gravitational parameter (km³/s²)
-
-        # ✅ **Compute Semi-Major Axis**
+        # 5) Compute Semi-Major Axis, Perigee, Apogee, Period, Velocity
+        mu = 398600.4418  # km^3/s^2
         try:
-            semi_major_axis = (mu / ((mean_motion * 2 * pi / 86400) ** 2)) ** (1 / 3)
+            n_rad_s = mean_motion * 2 * pi / 86400.0
+            semi_major_axis = (mu / (n_rad_s**2)) ** (1 / 3)  # km
             if not isfinite(semi_major_axis) or semi_major_axis <= 0:
                 raise ValueError(f"Invalid semi-major axis computed: {semi_major_axis}")
-        except Exception as e:
-            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Semi-major axis error: {e}")
-            return None
-        
-        print(f"   - Semi-Major Axis: {semi_major_axis} km")
 
-        # ✅ **Compute Perigee, Apogee**
-        perigee = semi_major_axis * (1 - eccentricity) - 6378  # Earth radius subtracted
-        apogee = semi_major_axis * (1 + eccentricity) - 6378
-
-        # ✅ **Compute Velocity**
-        try:
-            velocity = sqrt(mu / semi_major_axis)
-            if not isfinite(velocity) or velocity <= 0:
-                raise ValueError(f"Invalid velocity computed: {velocity}")
+            perigee = semi_major_axis * (1 - eccentricity) - 6378.0
+            apogee  = semi_major_axis * (1 + eccentricity) - 6378.0
+            velocity = math.sqrt(mu / semi_major_axis)  # km/s
+            period = (1.0 / mean_motion) * 1440.0  # minutes
         except Exception as e:
-            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Unable to compute velocity: {e}")
-            return None
-        
-        print(f"   - Velocity: {velocity} km/s")
-
-        # ✅ **Compute Period**
-        try:
-            period = (1 / mean_motion) * 1440  # Convert rev/day to minutes
-            if not isfinite(period) or period <= 0:
-                raise ValueError(f"Invalid period computed: {period}")
-        except Exception as e:
-            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Unable to compute period: {e}")
-            return None
-        
-        print(f"   - Period: {period} minutes")
-
-        # ✅ **Classify Orbit** (⚠️ SAFETY CHECK ADDED)
-        try:
-            if isfinite(perigee) and isfinite(apogee):
-                orbit_type = classify_orbit_type(perigee, apogee)
-            else:
-                raise ValueError("Perigee or apogee is invalid.")
-        except Exception as e:
-            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Unable to classify orbit: {e}")
+            print(f"⚠️ {name} (NORAD {norad_number}): Error computing orbital parameters: {e}")
             return None
 
-        print(f"   - Orbit Type: {orbit_type}")
+        orbit_type = classify_orbit_type(perigee, apogee)
 
-        # ✅ **Compute Latitude & Longitude** (⚠️ SAFETY CHECK ADDED)
-        latitude, longitude = None, None
-        try:
-            geocentric = satellite.at(ts.now())  # Get satellite position
-            subpoint = geocentric.subpoint()
-            latitude = subpoint.latitude.degrees
-            longitude = subpoint.longitude.degrees
-        except Exception as e:
-            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Unable to compute latitude/longitude: {e}")
+        # 6) Propagate to Current UTC Time using SGP4
+        now = datetime.utcnow()
+        #print(f"✅ [DEBUG] Current UTC time: {now}")
+        # Use Astropy Time for high precision Julian date conversion
+        obstime = Time(now, scale='utc')
+        jd_total = obstime.jd
+        jd = math.floor(jd_total)
+        fr = jd_total - jd
 
-        print(f"   - Latitude: {latitude}")
-        print(f"   - Longitude: {longitude}")
+        error_code, r_teme, v_teme = satrec.sgp4(jd, fr)
+        if error_code != 0:
+            print(f"⚠️ [SGP4 Error {error_code}] for {name} (NORAD {norad_number}) at time {now}")
+            return None
 
+        # 7) Convert TEME coordinates to geodetic coordinates using Astropy
+        teme_coord = TEME(
+            x=r_teme[0] * u.km,
+            y=r_teme[1] * u.km,
+            z=r_teme[2] * u.km,
+            obstime=obstime
+        )
+        itrs_coord = teme_coord.transform_to(ITRS(obstime=obstime))
+        lat_deg = itrs_coord.earth_location.lat.to(u.deg).value
+        lon_deg = itrs_coord.earth_location.lon.to(u.deg).value
+        alt_km  = itrs_coord.earth_location.height.to(u.km).value
+
+        # 8) Return final dictionary
         return {
             "norad_number": norad_number,
             "intl_designator": intl_designator,
@@ -873,13 +971,16 @@ def compute_orbital_params(name, tle_line1, tle_line2, ts):
             "orbit_type": orbit_type,
             "bstar": bstar,
             "rev_num": rev_num,
-            "latitude": latitude,  
-            "longitude": longitude
+            "latitude": lat_deg,
+            "longitude": lon_deg,
+            "altitude_km": alt_km,
         }
 
     except Exception as e:
         print(f"❌ Critical error computing {name} (NORAD {norad_number}): {e}")
+        traceback.print_exc()
         return None
+
 
 
 
@@ -916,12 +1017,8 @@ def clean_old_norads():
 
     delete_query = """
     DELETE FROM satellites
-    WHERE decay_date IS NOT NULL
-    AND (
-        (orbit_type = 'LEO' AND decay_date < CURRENT_DATE - INTERVAL '3 days')
-        OR (orbit_type = 'MEO' AND decay_date < CURRENT_DATE - INTERVAL '14 days')
-        OR (orbit_type = 'HEO' AND decay_date < CURRENT_DATE - INTERVAL '30 days')
-    );
+    WHERE (latitude = 'NaN' 
+    AND longitude = 'NaN') OR (orbit_type = 'LEO' AND (altitude_km > 2000 OR altitude_km < 150) AND decay_date IS NOT NULL)
     """
 
     cursor.execute(delete_query)
@@ -993,318 +1090,315 @@ def get_existing_satellite_names():
 
 
 
-def fetch_missing_gp_norads(session, existing_norads):
+def compute_sgp4_position1(tle_line1, tle_line2):
     """
-    Fetch potential objects from GP-class TLEs, applying:
-      - Orbit-based decay date removal
-      - TLE epoch recency thresholds
-      - Combined Apogee/Perigee + Recency Checks
-    Returns a set of new NORAD numbers not in the database.
+    Computes the current satellite latitude and longitude using python-sgp4,
+    and transforms TEME coordinates into geodetic coordinates using Astropy.
     """
+    try:
+        if not tle_line1 or not tle_line2:
+            print("❌ [ERROR] Missing TLE lines!")
+            return None, None, None, -1  # -1 = Missing TLE
 
-    gp_url = "https://www.space-track.org/basicspacedata/query/class/gp/format/json"
-    all_norads = set()
+        try:
+            satrec = Satrec.twoline2rv(tle_line1, tle_line2, WGS72)
+        except Exception as e:
+            print(f"❌ [ERROR] Invalid TLE parse failure: {e}")
+            return None, None, None, -2  # -2 = TLE parse error
 
-    print("📡 Fetching GP-class NORAD numbers from Space-Track...")
+        now = datetime.utcnow()
+        obstime = Time(now, scale='utc')
 
-    response_gp = rate_limited_get(session, gp_url)
-    if response_gp.status_code == 200 and response_gp.json():
-        for metadata in response_gp.json():
-            try:
-                norad_number = int(metadata.get("NORAD_CAT_ID", -1))
-                tle_epoch_str = metadata.get("EPOCH", "")
-                orbit_type = (metadata.get("ORBIT_TYPE") or "UNKNOWN").upper()
-                decay_date_str = metadata.get("DECAY_DATE", None)
+        jd_total = obstime.jd
+        jd = math.floor(jd_total)
+        fr = jd_total - jd
 
-                # 🚀 Orbital parameters
-                apogee_km = metadata.get("APOAPSIS", None)
-                perigee_km = metadata.get("PERIAPSIS", None)
+        # 🚀 **Run SGP4 propagation**
+        error_code, r, v = satrec.sgp4(jd, fr)
+        if error_code != 0:
+            print(f"❌ [ERROR] SGP4 propagation error code: {error_code}")
+            return None, None, None, error_code  # Return error code
 
-                if norad_number <= 0 or not tle_epoch_str:
-                    continue  # Invalid entry
+        # 🚀 **Check if values are realistic**
+        if not all(map(isfinite, r)) or abs(r[0]) > 1e8 or abs(r[1]) > 1e8 or abs(r[2]) > 1e8:
+            print(f"❌ [ERROR] SGP4 returned invalid position values: {r}")
+            return None, None, None, -6  # -6 = Invalid position values
 
-                # ------------------ Decay-Date Check ------------------
-                if decay_date_str:
-                    decay_date = datetime.strptime(decay_date_str, "%Y-%m-%d")
-                    now_utc = datetime.utcnow()
+        # 🚀 **Convert TEME to ITRS only if the values are valid**
+        try:
+            teme_coord = TEME(x=r[0] * u.km, y=r[1] * u.km, z=r[2] * u.km, obstime=obstime)
+            itrs_coord = teme_coord.transform_to(ITRS(obstime=obstime))
 
-                    if orbit_type == "LEO" and decay_date < now_utc - timedelta(days=3):
-                        continue
-                    elif orbit_type == "MEO" and decay_date < now_utc - timedelta(days=14):
-                        continue
-                    elif orbit_type == "HEO" and decay_date < now_utc - timedelta(days=30):
-                        continue
-                    # For GEO, skip if you want them removed once they're decayed, or keep them.
+            lat_deg = itrs_coord.earth_location.lat.to(u.deg).value
+            lon_deg = itrs_coord.earth_location.lon.to(u.deg).value
+            alt_km = itrs_coord.earth_location.height.to(u.km).value
 
-                # ------------------ TLE Epoch Recency Check ------------------
-                tle_epoch_str = tle_epoch_str.replace("T", " ").rstrip("Z")
-                try:
-                    tle_epoch_dt = datetime.strptime(tle_epoch_str, "%Y-%m-%d %H:%M:%S.%f")
-                except ValueError:
-                    tle_epoch_dt = datetime.strptime(tle_epoch_str, "%Y-%m-%d %H:%M:%S")
+        except Exception as e:
+            print(f"❌ [ERROR] Astropy transformation failed: {e}")
+            return None, None, None, -7  # -7 = Astropy conversion error
 
-                days_since_epoch = (datetime.utcnow() - tle_epoch_dt).days
+        # 🚀 **Sanity checks**
+        if lat_deg is None or lon_deg is None or not (-90 <= lat_deg <= 90) or not (-180 <= lon_deg <= 180):
+            print(f"❌ [ERROR] Computed lat/lon out of bounds: lat={lat_deg}, lon={lon_deg}")
+            return None, None, None, -3  # -3 = Out-of-bounds lat/lon
 
-                # ------------------ Combined Apogee/Perigee + Recency Checks ------------------
-                if orbit_type == "LEO":
-                    # 🚀 If TLE is too old OR altitude is too low, it's likely decayed
-                    if (days_since_epoch > 14) and (
-                        (apogee_km is not None and float(apogee_km) < 200) or
-                        (perigee_km is not None and float(perigee_km) < 120)
-                    ):
-                        continue
+        if not isfinite(alt_km) or alt_km < -50 or alt_km > 500000:
+            print(f"❌ [ERROR] Computed altitude out of range: {alt_km} km")
+            return None, None, None, -4  # -4 = Invalid altitude
 
-                elif orbit_type == "MEO":
-                    # 🚀 If TLE is too old AND the apogee is suspiciously low
-                    if (days_since_epoch > 30) and (apogee_km is not None and float(apogee_km) < 200):
-                        continue
+        return lat_deg, lon_deg, alt_km, 0  # 0 = success
 
-                elif orbit_type == "HEO":
-                    # 🚀 If TLE is too old AND it's suspiciously low for HEO
-                    if (days_since_epoch > 60) and (apogee_km is not None and float(apogee_km) < 1000):
-                        continue
-
-                
-                # If it passed all checks, keep it
-                all_norads.add(norad_number)
-
-            except Exception as e:
-                print(f"⚠️ Error processing GP-class NORAD {metadata.get('NORAD_CAT_ID', 'Unknown')}: {e}")
-
-    new_norads = all_norads - existing_norads
-    print(f"✅ Found {len(new_norads)} new GP-class NORADs not in the database.")
-    return new_norads
+    except Exception as e:
+        print(f"⚠️ [ERROR] SGP4 computation failed: {e}")
+        traceback.print_exc()
+        return None, None, None, -5  # -5 = Unknown failure
 
 
 
 
 
+def is_valid_lat_lon(latitude, longitude):
+    """
+    Ensures latitude and longitude are valid (not NaN, None, or invalid).
+    """
+    if latitude is None or longitude is None:
+        #print(f"❌ [FILTER] Invalid lat/lon detected: None values → lat={latitude}, lon={longitude}")
+        return False
+    if isinstance(latitude, float) and math.isnan(latitude):
+        #print(f"❌ [FILTER] Invalid lat/lon detected: Float NaN → lat={latitude}, lon={longitude}")
+        return False
+    if isinstance(longitude, float) and math.isnan(longitude):
+        #print(f"❌ [FILTER] Invalid lat/lon detected: Float NaN → lat={latitude}, lon={longitude}")
+        return False
 
-from psycopg2 import OperationalError, InterfaceError
+    # ✅ Debugging valid cases
+    
+    return True
 
 
-# ✅ Batch size for inserting satellites
-BATCH_SIZE = 500  
+
+def compute_accuracy(sat):
+    """
+    Computes:
+    - Accuracy percentage
+    - Computed latitude and longitude
+    - Error in kilometers (km)
+    - Altitude (km)
+    - SGP4 error code (0 = success, other values indicate failure)
+    """
+    lat, lon, altitude_km, sgp4_error_code = compute_sgp4_position1(sat["tle_line1"], sat["tle_line2"])
+    
+    if sgp4_error_code != 0:
+        return None, None, None, None, None, sgp4_error_code  # Include error code in return
+
+    lat1, lon1, altitude_km1, _ = compute_sgp4_position1(sat["tle_line1"], sat["tle_line2"])
+
+    if not is_valid_lat_lon(lat1, lon1):
+        return None, None, None, None, None, -3  # Indicate invalid lat/lon
+
+    if lat is not None and lon is not None:
+        delta_lat = np.radians(lat1 - lat)
+        delta_lon = np.radians(lon1 - lon)
+
+        a = np.sin(delta_lat / 2) ** 2 + np.cos(np.radians(lat1)) * np.cos(np.radians(lat)) * np.sin(delta_lon / 2) ** 2
+        c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+        error_km = EARTH_RADIUS_KM * c  # Convert to km
+
+        max_possible_error = 180  # Earth's max angular error in degrees
+        accuracy = max(0, 100 - (np.degrees(c) / max_possible_error) * 100)
+
+        return accuracy, lat, lon, error_km, altitude_km, 0  # 0 = success
+
+    return None, None, None, None, None, -4  # Indicate unknown failure
+
+
+
+
 
 def update_satellite_data():
     """
-    Fetch TLE data **ONLY for NORADs in the database**, 
-    fetch **new payloads (NORADs > current max NORAD)**,
-    and update SATCAT data **only for new payloads**.
+    Efficiently update and insert satellite data using PostgreSQL COPY + UPSERT with batch processing.
+    Filters out:
+    - Satellites with SGP4 propagation errors (error codes 1-6)
+    - Invalid lat/lon/altitude values
+    - Negative perigee values
+    - Decayed satellites
+    Logs all skipped NORADs for debugging.
     """
     conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)  # Dictionary cursor for easier column access
+    cursor = conn.cursor()
+
+    existing_norads = set(get_existing_norad_numbers())
+    existing_names = set(get_existing_satellite_names())  
+
     session = get_spacetrack_session()
-
     if not session:
-        print("❌ Could not authenticate with Space-Track. Exiting update process.")
+        print("❌ Failed to authenticate with Space-Track API. Exiting.")
         return
 
-    # ✅ Fetch existing NORAD numbers & satellite names from the database
-    existing_norads = get_existing_norad_numbers()
-    existing_names = get_existing_satellite_names()  # ✅ New function to fetch existing names
-
-    if not existing_norads:
-        print("⚠️ No NORAD numbers found in the database. Skipping update.")
+    all_satellites = fetch_tle_data(session, existing_norads)
+    if not all_satellites:
+        print("⚠️ No new data to process.")
         return
 
-    # 1️⃣ Fetch the current epochs from the DB to compare later
-    existing_epochs = {}
-    cursor.execute("SELECT norad_number, epoch FROM satellites WHERE epoch IS NOT NULL;")
-    for row in cursor.fetchall():
-        # row["epoch"] should already be a datetime if your column is TIMESTAMP
-        existing_epochs[row["norad_number"]] = row["epoch"]
+    batch_existing_names = set(existing_names)
+    batch = []
+    skipped_norads = []  # ✅ List to track skipped satellites
 
-    # 2️⃣ Fetch TLE data **ONLY for existing NORADs**
-    existing_tles = fetch_tle_data(session, existing_norads)
-    print(f"📡 Fetched TLE data for {len(existing_tles)} existing satellites.")
+    print(f"📡 Processing {len(all_satellites)} satellites for database update...")
 
-    # 3️⃣ Filter out TLEs that do NOT have a newer epoch
-    fresh_tles = []
-    for tle in existing_tles:
-        norad = tle["norad_number"]
-        new_epoch_str = tle.get("epoch")
-        if not new_epoch_str:
-            # If there's no epoch in the TLE data, skip it.
-            print(f"⚠️ Skipping NORAD {norad}: No new epoch in TLE data.")
-            continue
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        for sat, (accuracy, lat, lon, error_km, altitude_km, sgp4_error_code) in tqdm(
+            zip(all_satellites, executor.map(compute_accuracy, all_satellites)), 
+            total=len(all_satellites), desc="Computing accuracy"):
 
-        # Parse the new epoch (e.g., "2025-02-26T14:10:11.123456")
-        # Remove trailing "Z" if present and replace "T" with space
-        new_epoch_str = new_epoch_str.replace("T", " ").rstrip("Z")
-        try:
-            # Attempt parsing microseconds first
-            new_epoch_dt = datetime.strptime(new_epoch_str, "%Y-%m-%d %H:%M:%S.%f")
-        except ValueError:
-            # If microseconds are not present
-            new_epoch_dt = datetime.strptime(new_epoch_str, "%Y-%m-%d %H:%M:%S")
+            norad_number = sat.get("norad_number", None)
 
-        old_epoch = existing_epochs.get(norad)  # Might be None or a datetime
+            if norad_number is None:
+                skipped_norads.append(f"{sat['name']} (❌ Missing NORAD)")
+                continue  
 
-        # If there's no existing epoch or the new one is strictly newer, we keep it
-        if not old_epoch or new_epoch_dt > old_epoch:
-            fresh_tles.append(tle)
-        else:
-            print(f"⏭️ Skipping update for NORAD {norad}: New epoch {new_epoch_dt} ≤ DB epoch {old_epoch}")
-
-    print(f"📝 Proceeding to update {len(fresh_tles)} satellites with newer epochs.")
-
-    # 4️⃣ Update existing satellites' TLEs in the database (only those in fresh_tles)
-    for tle in fresh_tles:
-        norad = tle["norad_number"]
-        tle_line1, tle_line2 = tle["tle_line1"], tle["tle_line2"]
-        ephemeris_type = tle.get("ephemeris_type", 0)
-        params = compute_orbital_params(f"Existing NORAD {norad}", tle_line1, tle_line2, ts)
-
-        if not params:
-            print(f"⚠️ Skipping NORAD {norad}: Could not compute parameters")
-            continue
-
-        try:
-            cursor.execute("""
-                UPDATE satellites
-                SET tle_line1 = %(tle_line1)s, 
-                    tle_line2 = %(tle_line2)s, 
-                    epoch = %(epoch)s, 
-                    mean_motion = %(mean_motion)s, 
-                    inclination = %(inclination)s, 
-                    eccentricity = %(eccentricity)s, 
-                    raan = %(raan)s, 
-                    arg_perigee = %(arg_perigee)s, 
-                    velocity = %(velocity)s, 
-                    latitude = %(latitude)s, 
-                    longitude = %(longitude)s, 
-                    orbit_type = %(orbit_type)s, 
-                    period = %(period)s, 
-                    perigee = %(perigee)s, 
-                    apogee = %(apogee)s, 
-                    semi_major_axis = %(semi_major_axis)s, 
-                    bstar = %(bstar)s, 
-                    rev_num = %(rev_num)s, 
-                    ephemeris_type = %(ephemeris_type)s
-                WHERE norad_number = %(norad_number)s;
-            """, {
-                **params,
-                "tle_line1": tle_line1,
-                "tle_line2": tle_line2,
-                "norad_number": norad,
-                "ephemeris_type": ephemeris_type,
-                # Use the new TLE epoch string
-                "epoch": tle["epoch"]
-            })
-        except Exception as e:
-            print(f"⚠️ Error updating NORAD {norad}: {e}")
-            conn.rollback()
-
-    conn.commit()
-    print(f"✅ Updated TLE data for {len(fresh_tles)} satellites.")
+            # 🚀 **Skip satellites with SGP4 error codes (1-6)**
+            if sgp4_error_code and sgp4_error_code != 0:
+                skipped_norads.append(f"{sat['name']} (NORAD {norad_number}) - ❌ SGP4 error {sgp4_error_code}")
+                continue
 
 
+            # 🚀 **Skip satellites with invalid latitude/longitude/altitude**
+            if not is_valid_lat_lon(lat, lon) or altitude_km is None or math.isnan(altitude_km):
+                skipped_norads.append(f"{sat['name']} (NORAD {norad_number}) - ❌ Invalid lat/lon/alt")
+                continue
 
-    # 5️⃣ Fetch new payload NORADs **ONLY if they are greater than max_norad**
-    new_norads = fetch_missing_gp_norads(session, existing_norads)
-    print(f"🚀 Found {len(new_norads)} new payload satellites to be added.")
+            # 🚀 **Skip satellites with negative perigee**
+            if "perigee" in sat and sat["perigee"] < 0:
+                skipped_norads.append(f"{sat['name']} (NORAD {norad_number}) - ❌ Negative perigee {sat['perigee']} km")
+                continue
 
-    if not new_norads:
-        print("✅ No new satellites to add. Skipping new satellite processing.")
-        return
+            # 🚀 **Skip satellites that have already decayed**
+            if sat.get("decay_date") is not None and sat.get("epoch") > sat.get("decay_date"):
+                skipped_norads.append(f"{sat['name']} (NORAD {norad_number}) - ❌ Decayed on {sat['decay_date']}")
+                continue
 
-    # 6️⃣ Fetch metadata & TLEs for new satellites
-    new_satellites_metadata = fetch_spacetrack_data_batch(session, list(new_norads))
-    new_satellites_tles = fetch_tle_data(session, new_norads)
+            original_name = sat["name"]
+            name = original_name
+            suffix = 1
 
-
-    # ✅ Track duplicate names within the batch to avoid conflicts
-    batch_existing_names = set()
-
-    # ✅ Merge TLE & Metadata (with additional safety checks)
-    new_satellites = []
-    for norad in new_norads:
-        metadata = new_satellites_metadata.get(norad, {})
-        tle = next((tle for tle in new_satellites_tles if tle["norad_number"] == norad), None)
-
-        if not tle:
-            print(f"⚠️ No TLE found for {metadata.get('name', 'Unknown')} (NORAD {norad}) - Skipping.")
-            continue  
-
-        tle_line1, tle_line2 = tle["tle_line1"], tle["tle_line2"]
-        ephemeris_type = tle.get("ephemeris_type", 0)
-        params = compute_orbital_params(metadata.get("name", "Unknown"), tle_line1, tle_line2, ts)
-
-        if not params:
-            print(f"⚠️ Skipping {metadata.get('name', 'Unknown')} (NORAD {norad}): Missing computed parameters")
-            continue
-
-        merged_data = {**metadata, **tle, **params, "ephemeris_type": ephemeris_type}
-        new_satellites.append(merged_data)
-
-    print(f"✅ {len(new_satellites)} new satellites with valid TLEs will be added.")
-
-    # ✅ **Batch Insert New Satellites**
-    satellite_batches = [new_satellites[i:i + BATCH_SIZE] for i in range(0, len(new_satellites), BATCH_SIZE)]
-    print(f"🚀 Processing {len(satellite_batches)} batches of satellites...")
-
-    for batch_idx, batch in enumerate(satellite_batches):
-        print(f"🚀 Inserting Batch {batch_idx + 1} / {len(satellite_batches)}")
-
-        try:
-            conn = get_db_connection()  # ✅ Ensure a fresh connection
-            cursor = conn.cursor()
-
-            for sat in batch:
-                norad = sat.get("norad_number")
-                name = sat.get("name", "Unknown")
-
-                # ✅ Ensure unique name across database & batch
-                original_name = name
-                suffix = 1
+            if norad_number not in existing_norads:
                 while name in existing_names or name in batch_existing_names:
                     name = f"{original_name} ({suffix})"
                     suffix += 1
 
-                if name != original_name:
-                    print(f"⚠️ Renaming duplicate satellite: {original_name} → {name}")
-
                 batch_existing_names.add(name)
                 existing_names.add(name)
-                sat["name"] = name  
 
-                try:
-                    cursor.execute("""
-                        INSERT INTO satellites (name, tle_line1, tle_line2, norad_number, epoch,
-                                               inclination, eccentricity, mean_motion, raan, arg_perigee, velocity,
-                                               latitude, longitude, orbit_type, period, perigee, apogee,
-                                               semi_major_axis, bstar, rev_num, ephemeris_type, object_type, 
-                                               launch_date, launch_site, decay_date, rcs, purpose, country)
-                        VALUES (%(name)s, %(tle_line1)s, %(tle_line2)s, %(norad_number)s, %(epoch)s,
-                                %(inclination)s, %(eccentricity)s, %(mean_motion)s, %(raan)s, %(arg_perigee)s, 
-                                %(velocity)s, %(latitude)s, %(longitude)s, %(orbit_type)s, %(period)s, 
-                                %(perigee)s, %(apogee)s, %(semi_major_axis)s, %(bstar)s, %(rev_num)s, 
-                                %(ephemeris_type)s, %(object_type)s, %(launch_date)s, %(launch_site)s, 
-                                %(decay_date)s, %(rcs)s, %(purpose)s, %(country)s)
-                        ON CONFLICT (norad_number) DO NOTHING;
-                    """, sat)
+            sat["name"] = name
+            #sat["altitude_km"] = altitude_km
+            sat["accuracy_percentage"] = accuracy  
+            sat["computed_latitude"] = lat  
+            sat["computed_longitude"] = lon  
+            sat["error_km"] = error_km  
 
-                except (OperationalError, InterfaceError) as e:
-                    print(f"⚠️ Database connection lost while inserting {name} (NORAD {norad}): {e}")
-                    conn.rollback()
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    continue  
+            batch.append(sat)  
 
-            conn.commit()
-            cursor.close()
-            conn.close()
+    # ✅ Log skipped NORADs
+    with open("skipped_norads.log", "w") as log_file:
+        log_file.write("\n".join(skipped_norads))
 
-        except (OperationalError, InterfaceError) as e:
-            print(f"❌ Critical database failure on batch {batch_idx + 1}: {e}")
-            break  
+    # ✅ Create a temporary CSV file for bulk insertion
+    with NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as temp_file:
+        csv_writer = csv.writer(temp_file, delimiter=",")
 
-    print(f"✅ {len(new_satellites)} new satellites added successfully.")
+        # ✅ Write header (must match table columns)
+        csv_writer.writerow([
+            "name", "tle_line1", "tle_line2", "norad_number", "epoch",
+            "inclination", "eccentricity", "mean_motion", "raan", "arg_perigee",
+            "velocity", "latitude", "longitude", "orbit_type", "period",
+            "perigee", "apogee", "semi_major_axis", "bstar", "rev_num",
+            "ephemeris_type", "object_type", "launch_date", "launch_site",
+            "decay_date", "rcs", "purpose", "country", "accuracy_percentage",
+            "error_km", "altitude_km"
+        ])
+
+        # ✅ Write satellite data to CSV file
+        for sat in batch:
+            csv_writer.writerow([
+                sat["name"], sat["tle_line1"], sat["tle_line2"], sat["norad_number"], sat["epoch"],
+                sat["inclination"], sat["eccentricity"], sat["mean_motion"], sat["raan"], sat["arg_perigee"],
+                sat["velocity"], sat["latitude"], sat["longitude"], sat["orbit_type"], sat["period"],
+                sat["perigee"], sat["apogee"], sat["semi_major_axis"], sat["bstar"], sat["rev_num"],
+                sat["ephemeris_type"], sat["object_type"], sat["launch_date"], sat["launch_site"],
+                sat["decay_date"], sat["rcs"], sat["purpose"], sat["country"], sat["accuracy_percentage"],
+                sat["error_km"], sat["altitude_km"]
+            ])
+
+        temp_file_path = temp_file.name
+
+    # ✅ Create a temporary table for staging
+    cursor.execute("""
+        CREATE TEMP TABLE temp_satellites AS TABLE satellites WITH NO DATA;
+    """)
+
+    # ✅ Use PostgreSQL COPY to insert data into the temporary table
+    with open(temp_file_path, "r") as temp_file:
+        cursor.copy_expert(
+            f"""
+            COPY temp_satellites (
+                name, tle_line1, tle_line2, norad_number, epoch,
+                inclination, eccentricity, mean_motion, raan, arg_perigee,
+                velocity, latitude, longitude, orbit_type, period,
+                perigee, apogee, semi_major_axis, bstar, rev_num,
+                ephemeris_type, object_type, launch_date, launch_site,
+                decay_date, rcs, purpose, country, accuracy_percentage,
+                error_km, altitude_km
+            )
+            FROM STDIN WITH CSV HEADER;
+            """,
+            temp_file
+        )
+
+    # ✅ Perform UPSERT (INSERT + UPDATE) from temp table to main table
+    cursor.execute("""
+        INSERT INTO satellites AS main (
+            name, tle_line1, tle_line2, norad_number, epoch,
+            inclination, eccentricity, mean_motion, raan, arg_perigee,
+            velocity, latitude, longitude, orbit_type, period,
+            perigee, apogee, semi_major_axis, bstar, rev_num,
+            ephemeris_type, object_type, launch_date, launch_site,
+            decay_date, rcs, purpose, country, accuracy_percentage,
+            error_km, altitude_km
+        )
+        SELECT 
+            name, tle_line1, tle_line2, norad_number, epoch,
+            inclination, eccentricity, mean_motion, raan, arg_perigee,
+            velocity, latitude, longitude, orbit_type, period,
+            perigee, apogee, semi_major_axis, bstar, rev_num,
+            ephemeris_type, object_type, launch_date, launch_site,
+            decay_date, rcs, purpose, country, accuracy_percentage,
+            error_km, altitude_km
+        FROM temp_satellites
+        ON CONFLICT (norad_number) DO UPDATE 
+        SET epoch = EXCLUDED.epoch, 
+            latitude = EXCLUDED.latitude, 
+            longitude = EXCLUDED.longitude, 
+            accuracy_percentage = EXCLUDED.accuracy_percentage,
+            error_km = EXCLUDED.error_km,
+            altitude_km = EXCLUDED.altitude_km;
+    """)
+
+    cursor.execute("DROP TABLE temp_satellites;")
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    os.remove(temp_file_path)
+
+    print(f"✅ Successfully processed {len(batch)} satellites using COPY + UPSERT.")
+    print(f"⚠️ {len(skipped_norads)} satellites were skipped. See 'skipped_norads.log' for details.")
 
 
 
-
-#if __name__ == "__main__":
+if __name__ == "__main__":
     #update_cdm_data()
-    #update_satellite_data()
+    update_satellite_data()
+    #get_spacetrack_session()

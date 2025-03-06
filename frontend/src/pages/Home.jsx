@@ -206,7 +206,7 @@ export default function Home() {
     const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
     const orbitMaterial = new THREE.LineBasicMaterial({
       color: orbitColor,
-      opacity: 0.7,
+      opacity: 0.99,
       transparent: true,
     });
   
@@ -303,7 +303,7 @@ const loadSatelliteModel = (satellite) => {
     satellite.purpose === "Unknown" ||
     satellite.decay_date !== null; // If decay date exists, it's considered debris
 
-  const sphereColor = isDebrisOrDecayed ? 0xFF073A : 0x00FFFF; // 🔴 Neon Red for debris, 🟦 Neon Teal for others
+  const sphereColor = isDebrisOrDecayed ? 0x00FFFF : 0x00FFFF; // 🔴 Neon Red for debris, 🟦 Neon Teal for others
 
   console.log(`🎨 Rendering sphere for ${satellite.name}: ${isDebrisOrDecayed ? "Neon Red (Debris)" : "Neon Teal (Active)"}`);
 
@@ -965,7 +965,7 @@ useEffect(() => {
   controls.dampingFactor = 0.1;
   controls.rotateSpeed = 0.5;
 
-  controls.minDistance = 6530; // 🔥 Prevents too-close zoom
+  controls.minDistance = 6230; // 🔥 Prevents too-close zoom
   controls.maxDistance = 500000; // 🚀 Allows zooming for deep-space objects
 
   controlsRef.current = controls;
