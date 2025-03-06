@@ -14,5 +14,4 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # ✅ Ensure Python modules are found inside "app" directory
 ENV PYTHONPATH="/app/app"
 
-# ✅ Run the update script (tle_processor.py)
-CMD ["python", "/app/app/tle_processor.py"]
+

@@ -2,7 +2,7 @@
 
 import csv
 import psycopg2
-from skyfield.api import EarthSatellite, load
+from skyfield.api import load
 from tqdm import tqdm
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -11,29 +11,23 @@ import requests
 import time
 from database import get_db_connection  # ✅ Use get_db_connection()
 from math import isfinite, sqrt, pi
-from psycopg2 import OperationalError, InterfaceError
 import json
 from tempfile import NamedTemporaryFile
 import numpy as np  # For NaN detection
 from concurrent.futures import ThreadPoolExecutor
-from dateutil.parser import parse
 from sgp4.api import Satrec, WGS72
-from datetime import datetime, timezone
+from datetime import datetime
 import traceback
 # Astropy imports (for coordinate frames)
-from astropy.coordinates import TEME, ITRS, EarthLocation
+from astropy.coordinates import TEME, ITRS
 from astropy import units as u
 from astropy.time import Time
 import math
-from skyfield.elementslib import osculating_elements_of
 ts = load.timescale()
 eph = load('de421.bsp')
 earth = eph['earth']
-
 MU = 398600.4418  # Earth's standard gravitational parameter (km^3/s^2)
 R_EARTH = 6378.137  # Earth's equatorial radius (km)
-# Earth's gravitational parameter (km³/s²)
-MU = 398600.4418  
 # Load environment variables
 load_dotenv()
 # Load Skyfield timescale
@@ -50,24 +44,6 @@ EARTH_RADIUS_KM = 6371
 
 
 
-
-
-
-# If sgp4.api does not provide jday, define our own:
-def jday(year, mon, day, hr, minute, sec):
-    """
-    Computes the Julian Date for the given UTC date and time.
-    Returns a tuple: (jd, fraction) where jd is the integer part
-    and fraction is the fractional part.
-    """
-    # This algorithm is based on "Fundamentals of Astrodynamics and Applications" (Vallado)
-    jd = (367 * year
-          - int((7 * (year + int((mon + 9) / 12))) / 4)
-          + int((275 * mon) / 9)
-          + day + 1721013.5)
-    # Now add the fractional day:
-    fraction = (hr + minute/60.0 + sec/3600.0) / 24.0
-    return jd, fraction
 
 
 
@@ -277,7 +253,7 @@ def fetch_tle_data(session, existing_norads):
                 tle_data = json.load(file)
 
             # ✅ If file is <1 hour old, use it instead of fetching again
-            if time.time() - tle_data["timestamp"] < 360000:
+            if time.time() - tle_data["timestamp"] < 3600:
                 print("📡 Using cached TLE data (Last Updated: < 1 hour ago)")
                 satellites = tle_data["satellites"]
                 return filter_satellites(satellites, existing_norads)
@@ -1214,17 +1190,12 @@ def compute_accuracy(sat):
 
 
 
-
 def update_satellite_data():
     """
     Efficiently update and insert satellite data using PostgreSQL COPY + UPSERT with batch processing.
-    Filters out:
-    - Satellites with SGP4 propagation errors (error codes 1-6)
-    - Invalid lat/lon/altitude values
-    - Negative perigee values
-    - Decayed satellites
-    Logs all skipped NORADs for debugging.
+    Also stores historical TLEs for time-series analysis and filters invalid entries.
     """
+
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -1244,6 +1215,7 @@ def update_satellite_data():
     batch_existing_names = set(existing_names)
     batch = []
     skipped_norads = []  # ✅ List to track skipped satellites
+    historical_tles = []  # ✅ List to store historical TLEs
 
     print(f"📡 Processing {len(all_satellites)} satellites for database update...")
 
@@ -1263,7 +1235,6 @@ def update_satellite_data():
                 skipped_norads.append(f"{sat['name']} (NORAD {norad_number}) - ❌ SGP4 error {sgp4_error_code}")
                 continue
 
-
             # 🚀 **Skip satellites with invalid latitude/longitude/altitude**
             if not is_valid_lat_lon(lat, lon) or altitude_km is None or math.isnan(altitude_km):
                 skipped_norads.append(f"{sat['name']} (NORAD {norad_number}) - ❌ Invalid lat/lon/alt")
@@ -1274,7 +1245,7 @@ def update_satellite_data():
                 skipped_norads.append(f"{sat['name']} (NORAD {norad_number}) - ❌ Negative perigee {sat['perigee']} km")
                 continue
 
-            # 🚀 **Skip satellites that have already decayed**
+            # 🚀 **Skip satellites with outdated epochs vs. decay_date**
             if sat.get("decay_date") is not None and sat.get("epoch") > sat.get("decay_date"):
                 skipped_norads.append(f"{sat['name']} (NORAD {norad_number}) - ❌ Decayed on {sat['decay_date']}")
                 continue
@@ -1291,8 +1262,12 @@ def update_satellite_data():
                 batch_existing_names.add(name)
                 existing_names.add(name)
 
+            # ✅ **Check if this is a new TLE for historical storage**
+            historical_tles.append((
+                norad_number, sat["epoch"], sat["tle_line1"], sat["tle_line2"]
+            ))
+
             sat["name"] = name
-            #sat["altitude_km"] = altitude_km
             sat["accuracy_percentage"] = accuracy  
             sat["computed_latitude"] = lat  
             sat["computed_longitude"] = lon  
@@ -1304,7 +1279,7 @@ def update_satellite_data():
     with open("skipped_norads.log", "w") as log_file:
         log_file.write("\n".join(skipped_norads))
 
-    # ✅ Create a temporary CSV file for bulk insertion
+    # ✅ Create a temporary CSV file for batch insertion
     with NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as temp_file:
         csv_writer = csv.writer(temp_file, delimiter=",")
 
@@ -1332,6 +1307,13 @@ def update_satellite_data():
             ])
 
         temp_file_path = temp_file.name
+
+    # ✅ Insert Historical TLEs if `epoch` is different
+    cursor.executemany("""
+        INSERT INTO satellite_tle_history (norad_number, epoch, tle_line1, tle_line2)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (norad_number, epoch) DO NOTHING;
+    """, historical_tles)
 
     # ✅ Create a temporary table for staging
     cursor.execute("""
@@ -1367,15 +1349,7 @@ def update_satellite_data():
             decay_date, rcs, purpose, country, accuracy_percentage,
             error_km, altitude_km
         )
-        SELECT 
-            name, tle_line1, tle_line2, norad_number, epoch,
-            inclination, eccentricity, mean_motion, raan, arg_perigee,
-            velocity, latitude, longitude, orbit_type, period,
-            perigee, apogee, semi_major_axis, bstar, rev_num,
-            ephemeris_type, object_type, launch_date, launch_site,
-            decay_date, rcs, purpose, country, accuracy_percentage,
-            error_km, altitude_km
-        FROM temp_satellites
+        SELECT * FROM temp_satellites
         ON CONFLICT (norad_number) DO UPDATE 
         SET epoch = EXCLUDED.epoch, 
             latitude = EXCLUDED.latitude, 
@@ -1394,11 +1368,11 @@ def update_satellite_data():
     os.remove(temp_file_path)
 
     print(f"✅ Successfully processed {len(batch)} satellites using COPY + UPSERT.")
+    print(f"✅ Historical TLEs added where epoch changed.")
     print(f"⚠️ {len(skipped_norads)} satellites were skipped. See 'skipped_norads.log' for details.")
 
 
-
 if __name__ == "__main__":
-    #update_cdm_data()
+    update_cdm_data()
     update_satellite_data()
-    #get_spacetrack_session()
+    
