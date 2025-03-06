@@ -4,6 +4,16 @@ import axios from "axios";
 
 const API_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/satellites/";
 const INFOGRAPHICS_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/infographics/";
+const CDM_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/cdm/";
+const OLD_TLES_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/old_tles/";
+
+
+
+
+
+
+
+
 
 export async function fetchSatellites(page = 1, limit = 500, filter = null) {
   try {
@@ -69,6 +79,53 @@ export async function fetchSatelliteByName(name) {
     return null;
   }
 }
+
+
+
+
+/**
+ * Fetch Old TLEs for a given NORAD number.
+ */
+export async function fetchOldTLEs(noradNumber) {
+  try {
+    const url = `${OLD_TLES_BASE_URL}fetch/${noradNumber}`;
+    console.log(`📡 Fetching old TLEs from: ${url}`);
+
+    const response = await axios.get(url);
+    console.log("📌 Old TLEs API Response:", response.data);
+
+    return response.data;
+  } catch (error) {
+    console.error(`❌ Error fetching old TLEs for NORAD ${noradNumber}:`, error);
+    return { historical_tles: [] };
+  }
+}
+
+
+
+
+
+
+/**
+ * Fetch all CDM Events (Conjunction Data Messages).
+ */
+export async function fetchCDMEvents() {
+  try {
+    const url = `${CDM_BASE_URL}fetch`;
+    console.log(`📡 Fetching CDM events from: ${url}`);
+
+    const response = await axios.get(url);
+    console.log("📌 CDM Events API Response:", response.data);
+
+    return response.data;
+  } catch (error) {
+    console.error("❌ Error fetching CDM events:", error);
+    return { cdm_events: [] };
+  }
+}
+
+
+
 
 
 export async function fetchInfographics(filters) {

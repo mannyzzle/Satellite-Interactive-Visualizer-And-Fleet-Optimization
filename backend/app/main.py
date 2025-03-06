@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import satellites, llm, infographics
+from app.api import satellites, llm, infographics, cdm, old_tles
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
@@ -25,6 +25,8 @@ app.add_middleware(
 app.include_router(satellites.router, prefix="/api/satellites", tags=["Satellites"])
 app.include_router(llm.router, prefix="/api/llm", tags=["LLM"])
 app.include_router(infographics.router, prefix="/api/infographics", tags=["Infographics"])
+app.include_router(cdm.router, prefix="/api/cdm", tags=["CDM"])
+app.include_router(old_tles.router, prefix="/api/old_tles", tags=["Old TLEs"])
 
 @app.get("/")
 def root():

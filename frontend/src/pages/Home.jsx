@@ -19,10 +19,6 @@ const nightTexture = `${basePath}earth_night.jpg`;
 const cloudTexture = `${basePath}clouds.png`;
  
 
-const satelliteModelPath = `${basePath}satellite.glb`;
-
-
-
 export default function Home() {
   const globeRef = useRef(null);
   const cloudRef = useRef(null);
