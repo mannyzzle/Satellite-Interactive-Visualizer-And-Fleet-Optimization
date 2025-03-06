@@ -5,7 +5,7 @@ import axios from "axios";
 const API_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/satellites/";
 const INFOGRAPHICS_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/infographics/";
 
-export async function fetchSatellites(page = 1, limit = 100, filter = null) {
+export async function fetchSatellites(page = 1, limit = 500, filter = null) {
   try {
     let url = `${API_BASE_URL}?page=${page}&limit=${limit}`;
 

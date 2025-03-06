@@ -46,7 +46,7 @@ export default function Home() {
   const [loadingComplete, setLoadingComplete] = useState(false);
   const [page, setPage] = useState(1); // 🚀 Current page of satellites
   const [satellites, setSatellites] = useState([]);
-  const [limit, setLimit] = useState(1000);
+  const [limit, setLimit] = useState(500);
   const [searchQuery, setSearchQuery] = useState(""); // 🔍 For filtering satellites
 
 
@@ -489,7 +489,7 @@ const changePage = async (newPage) => {
       const data = await fetchSatellites(newPage, limit, activeFilters.length > 0 ? activeFilters.join(",") : null);
 
       if (data?.satellites?.length) {
-          const limitedSatellites = data.satellites.slice(0, 1000);
+          const limitedSatellites = data.satellites.slice(0, 500);
           setFilteredSatellites(limitedSatellites);
           setSatellites(limitedSatellites);
           updateSceneWithFilteredSatellites(limitedSatellites);
@@ -616,13 +616,13 @@ const changePage = async (newPage) => {
 
     try {
         console.log(`📡 Fetching satellites (page ${newPage}, filters: ${updatedFilters})`);
-        const data = await fetchSatellites(newPage, 1000, updatedFilters.join(","));
+        const data = await fetchSatellites(newPage, 500, updatedFilters.join(","));
 
         if (data?.satellites?.length) {
             console.log(`📌 Loaded ${data.satellites.length} satellites for page ${newPage}`);
 
             // ✅ Store only 100 satellites
-            const limitedSatellites = data.satellites.slice(0, 1000);
+            const limitedSatellites = data.satellites.slice(0, 500);
             setSatellites(limitedSatellites);
             updateSceneWithFilteredSatellites(limitedSatellites);
         } else {
@@ -657,7 +657,7 @@ const updateSceneWithFilteredSatellites = (satellites) => {
   removeAllOrbitPaths();
 
   // ✅ Ensure only 100 satellites are rendered
-  const limitedSatellites = satellites.slice(0, 1000);
+  const limitedSatellites = satellites.slice(0, 500);
   const newSatelliteIds = new Set(limitedSatellites.map((s) => s.norad_number));
 
   // ✅ Remove satellites NOT in the new list
@@ -686,7 +686,7 @@ const updateSceneWithFilteredSatellites = (satellites) => {
           console.log("🚀 Current satelliteObjectsRef (after update):", Object.keys(satelliteObjectsRef.current));
           console.log("🛰️ Satellites in Scene (after update):", sceneRef.current.children.length);
       }, 300);
-  }, 1000);
+  }, 500);
 };
 
 

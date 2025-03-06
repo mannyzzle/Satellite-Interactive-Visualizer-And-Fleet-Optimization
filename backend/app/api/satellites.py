@@ -16,7 +16,7 @@ def sanitize_value(value):
 @router.get("/")
 def get_all_satellites(
     page: int = Query(1, ge=1),
-    limit: int = Query(1000, ge=1, le=27451),
+    limit: int = Query(500, ge=1, le=32000),
     filter: str = Query(None),
     sort_by: str = Query("altitude", regex="^(altitude|collision)$")  # ✅ Allow sorting option
 ):
