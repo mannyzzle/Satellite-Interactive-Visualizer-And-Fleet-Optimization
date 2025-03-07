@@ -277,7 +277,7 @@ def fetch_tle_data(session, existing_norads):
                 tle_data = json.load(file)
 
             # ✅ Use cached data if <1 hour old
-            if time.time() - tle_data["timestamp"] < 3600:
+            if time.time() - tle_data["timestamp"] < 36000:
                 print("📡 Using cached TLE data (Last Updated: < 1 hour ago)")
                 satellites = tle_data["satellites"]
         except (json.JSONDecodeError, KeyError):
@@ -455,7 +455,7 @@ def filter_satellites(satellites, existing_norads):
                 "purpose": infer_purpose(metadata) or "Unknown",
             }
 
-            print(sat_data)
+            
 
             # ✅ Add to filtered satellites & prevent future duplicates
             filtered_satellites.append(sat_data)
@@ -830,8 +830,10 @@ def compute_orbital_params(name, tle_line1, tle_line2):
         radial_distance = semi_major_axis * (1 - eccentricity * math.cos(eccentric_anomaly))  
         flight_path_angle = math.atan((eccentricity * math.sin(true_anomaly)) / (1 + eccentricity * math.cos(true_anomaly)))  
         
-        if vx is None:
-            print(norad_number, tle_line1, tle_line2, alt_km, mean_anomaly)
+        if vx is None or vy is None or vz is None:
+            print(f"❌ [ERROR] Missing velocity for {name} (NORAD {norad_number})")
+            return None
+
 
         return {
             "norad_number": norad_number,
@@ -1195,7 +1197,7 @@ def compute_accuracy(sat):
                 None, None, None, None, None, None, None, None, None, -3)  # ❌ Invalid lat/lon/altitude
 
     # ✅ **Compute Accuracy by comparing with previous position**
-    lat1, lon1, altitude_km1 = sat.get("computed_latitude"), sat.get("computed_longitude"), sat.get("predicted_altitude_km")
+    lat1, lon1 = sat.get("latitude"), sat.get("longitude")
 
     if lat1 is not None and lon1 is not None:
         delta_lat = np.radians(lat1 - lat)
@@ -1212,10 +1214,10 @@ def compute_accuracy(sat):
         return (accuracy, lat, lon, error_km, altitude_km, velocity, mean_anomaly, eccentric_anomaly,
                 true_anomaly, argument_of_latitude, specific_angular_momentum, radial_distance, 
                 flight_path_angle, predicted_x, predicted_y, predicted_z, 
-                predicted_vx, predicted_vy, predicted_vz)  # ✅ **Returns exactly 20 values**
+                predicted_vx, predicted_vy, predicted_vz, 0)  # ✅ **Returns exactly 20 values**
 
     return (None, None, None, None, None, None, None, None, None, None, 
-            None, None, None, None, None, None, None, None, None, 0 )  # ❌ **Returns exactly 20 values**
+            None, None, None, None, None, None, None, None, None, -1 )  # ❌ **Returns exactly 20 values**
 
 
 
@@ -1267,7 +1269,6 @@ def update_satellite_data():
 
             if error_code != 0:
                 skipped_norads.append(f"{sat['name']} (❌ ERROR CODE PREDICTION)")
-                print(sat)
                 #continue
                  
 
@@ -1324,6 +1325,8 @@ def update_satellite_data():
             sat["predicted_flight_path_angle"] = flight_path_angle  # Angle between velocity vector and orbital plane (deg)  
 
             
+
+            print(sat)
 
             batch.append(sat)  
 
@@ -1481,7 +1484,6 @@ def update_satellite_data():
             specific_angular_momentum = EXCLUDED.specific_angular_momentum,
             radial_distance = EXCLUDED.radial_distance,
             flight_path_angle = EXCLUDED.flight_path_angle
-        WHERE main.epoch != EXCLUDED.epoch;
     """)
 
     conn.commit()
@@ -1495,6 +1497,6 @@ def update_satellite_data():
    
 
 if __name__ == "__main__":
-    update_cdm_data()
+    #update_cdm_data()
     update_satellite_data()
     
