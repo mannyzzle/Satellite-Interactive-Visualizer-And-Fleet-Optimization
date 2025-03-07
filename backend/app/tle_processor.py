@@ -253,7 +253,7 @@ def fetch_tle_data(session, existing_norads):
                 tle_data = json.load(file)
 
             # ✅ If file is <1 hour old, use it instead of fetching again
-            if time.time() - tle_data["timestamp"] < 36000:
+            if time.time() - tle_data["timestamp"] < 3600:
                 print("📡 Using cached TLE data (Last Updated: < 1 hour ago)")
                 satellites = tle_data["satellites"]
                 return filter_satellites(satellites, existing_norads)
@@ -494,25 +494,39 @@ def filter_satellites(satellites, existing_norads):
                 print(f"❌ Skipping {metadata.get('OBJECT_NAME', 'Unknown')} (NORAD {norad_number}): Lat/Lon still missing or invalid after recomputation.")
                 continue
 
-            # 🚀 **Convert decay_date & apply filtering**
+                # 🚀 **Convert decay_date & apply filtering**
             decay_date = parse_datetime(metadata.get("DECAY_DATE"))
-            altitude_km = computed_params["altitude_km"]
-            orbit_type = computed_params["orbit_type"]
-            latitude = computed_params["latitude"]
-            longitude = computed_params["longitude"]
+            altitude_km = computed_params.get("altitude_km")
+            orbit_type = computed_params.get("orbit_type")
+            latitude = computed_params.get("latitude")
+            longitude = computed_params.get("longitude")
+            perigee = computed_params.get("perigee")
+            apogee = computed_params.get("apogee")
+            semi_major_axis = computed_params.get("semi_major_axis")
 
+            # 🚀 **Filter Out Invalid & Non-Orbiting Objects**
             if (
-                (latitude == "NaN" and longitude == "NaN") or
-                (computed_params.get("latitude") is None or computed_params.get("longitude") is None) or
-                (decay_date is not None and decay_date < datetime.now(timezone.utc) - timedelta(days=7)) or 
+                # 1️⃣ **Invalid Latitude/Longitude**
+                (latitude in ["NaN", None] or longitude in ["NaN", None]) or  
+
+                # 2️⃣ **Objects with Confirmed Decay (Beyond 7-Day Threshold)**
+                (decay_date is not None and decay_date < datetime.now(timezone.utc) - timedelta(days=7)) or  
+
+                # 3️⃣ **LEO Objects with Bad Altitude**
                 (orbit_type == "LEO" and (
-                    (decay_date is not None and decay_date < datetime.now(timezone.utc) - timedelta(days=7)) or  # 🚀 Remove old decay_date
-                    (altitude_km is not None and (altitude_km < 50 or altitude_km > 2000))  # 🚀 Remove LEO with bad altitude
-                ))
+                    (altitude_km is not None and (altitude_km < 120 or altitude_km > 2000)) or  # ❌ Below 120 km (too low) or Above 2000 km (not LEO)
+                    (perigee is not None and perigee < 120) or  # ❌ Perigee below 120 km (immediate reentry)
+                    (apogee is not None and apogee > 2000)  # ❌ Apogee outside of LEO range
+                )) or  
+
+                # 4️⃣ **Unrealistic Orbits (Filtering out unstable or decayed objects)**
+                (semi_major_axis is not None and semi_major_axis < 6378) or  # ❌ Semi-major axis below Earth's radius (inside planet!)
+                (perigee is not None and perigee < 120)  # ❌ Perigee below 120 km (guaranteed deorbit)
             ):
                 print(f"❌ Skipping {metadata.get('OBJECT_NAME', 'Unknown')} (NORAD {metadata.get('NORAD_CAT_ID')}): "
-                    f"Invalid lat/lon, old decay date, or altitude {altitude_km} km is outside valid range for {orbit_type}.")
-                continue
+                    f"Invalid lat/lon, old decay date, unstable orbit, or unrealistic parameters.")
+                continue  # ✅ Skip this satellite
+
 
             
             # ✅ **Prepare satellite data for insertion**
@@ -996,11 +1010,26 @@ def clean_old_norads():
 
     print("🧹 Cleaning outdated NORADs from the database...")
 
-    delete_query = """
+    
+    delete_query =  """
     DELETE FROM satellites
-    WHERE (latitude = 'NaN' 
-    AND longitude = 'NaN') OR (orbit_type = 'LEO' AND decay_date IS NOT NULL AND decay_date < NOW() - INTERVAL '7 days');
-    """
+    WHERE 
+        -- ❌ Remove objects with invalid position
+        (latitude IS NULL OR longitude IS NULL OR latitude = 'NaN' OR longitude = 'NaN') 
+
+        -- ❌ Remove decayed objects (older than 7 days)
+        OR (decay_date IS NOT NULL AND decay_date < NOW() - INTERVAL '7 days')
+
+        -- ❌ Remove unrealistic orbits (satellites that have already reentered)
+        OR (perigee IS NOT NULL AND perigee < 120)  -- Below 80 km = Atmospheric burn-up
+
+        -- ❌ Remove objects with invalid semi-major axis (should not be inside the Earth)
+        OR (semi_major_axis IS NOT NULL AND semi_major_axis < 6378)
+
+        -- ❌ Remove broken entries where altitude is missing
+        OR (altitude_km IS NULL OR altitude_km = 'NaN' OR altitude_km < 120) AND (epoch < NOW() - INTERVAL '7 days');
+
+        """
 
     cursor.execute(delete_query)
     conn.commit()
@@ -1242,15 +1271,35 @@ def update_satellite_data():
                 skipped_norads.append(f"{sat['name']} (NORAD {norad_number}) - ❌ SGP4 error {sgp4_error_code}")
                 continue
 
+            perigee = sat.get("perigee")
+
+            apogee = sat.get("apogee")
+
+            epoch = sat.get("epoch")
+            if isinstance(epoch, str):
+                epoch = parse_datetime(epoch)
+
+
             if (
-                (lat == "NaN" or lon == "NaN" or altitude_km == "NaN") or 
-                (lat is None or lon is None or altitude_km is None) or
-                (sat.get("orbit_type") == "LEO" and decay_date is not None and decay_date < datetime.now(timezone.utc) - timedelta(days=7)) or
-                (decay_date is not None and decay_date < datetime.now(timezone.utc) - timedelta(days=7)) or
-                (sat.get("orbit_type") == "LEO" and (altitude_km > 2000 or altitude_km < 50))
+            # ❌ **Invalid latitude/longitude**
+            (lat in ["NaN", None] or lon in ["NaN", None] or altitude_km in ["NaN", None]) or  
+
+            # ❌ **Objects that have already decayed (beyond 7-day threshold)**
+            (decay_date is not None and decay_date < datetime.now(timezone.utc) - timedelta(days=7)) or  
+
+            # ❌ **LEO satellites with invalid altitude, perigee, or apogee**
+            (sat.get("orbit_type") == "LEO" and (
+                (altitude_km < 120 or altitude_km > 2000) or  # 🚀 Below 120 km (decayed) or Above 2000 km (not LEO)
+                (perigee is not None and perigee < 120) or  # 🚀 Perigee < 120 km = Immediate reentry
+                (apogee is not None and apogee > 2000)  # 🚀 Apogee > 2000 km = Not LEO
+            )) or  
+
+           
+            # ❌ **Invalid altitude handling & old TLE check**
+            ((altitude_km is None or altitude_km < 120) and (epoch is not None and epoch < datetime.now(timezone.utc) - timedelta(days=7)))
             ):
-                skipped_norads.append(f"{sat['name']} (NORAD {norad_number}) - ❌ Invalid lat/lon or decay_date too old.")
-                print("SKIPPING INCORRECT NORAD{sat['norad']}")
+                skipped_norads.append(f"{sat['name']} (NORAD {norad_number}) - ❌ Invalid lat/lon, decay date too old, unstable orbit, or outdated TLE.")
+                print(f"SKIPPING INCORRECT NORAD {norad_number}")
                 continue
 
             # ✅ **Check for duplicate NORAD numbers only within this batch**
@@ -1289,7 +1338,11 @@ def update_satellite_data():
     with open("skipped_norads.log", "w") as log_file:
         log_file.write("\n".join(skipped_norads))
 
-    # ✅ Use COPY instead of executemany() for Historical TLEs
+
+
+    # ✅ Create a TEMP table for historical TLEs to handle conflicts properly
+    cursor.execute("CREATE TEMP TABLE temp_tle_history AS TABLE satellite_tle_history WITH NO DATA;")
+
     print(f"📜 Inserting {len(historical_tles)} historical TLEs...")
     with NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as temp_file:
         csv_writer = csv.writer(temp_file, delimiter=",")
@@ -1299,11 +1352,21 @@ def update_satellite_data():
 
     with open(temp_file_path, "r") as temp_file:
         cursor.copy_expert("""
-            COPY satellite_tle_history (norad_number, epoch, tle_line1, tle_line2, inserted_at)
+            COPY temp_tle_history (norad_number, epoch, tle_line1, tle_line2, inserted_at)
             FROM STDIN WITH CSV HEADER;
         """, temp_file)
 
-    os.remove(temp_file_path)
+    # ✅ Insert TLEs from TEMP table while avoiding duplicates
+    cursor.execute("""
+        INSERT INTO satellite_tle_history (norad_number, epoch, tle_line1, tle_line2, inserted_at)
+        SELECT norad_number, epoch, tle_line1, tle_line2, inserted_at FROM temp_tle_history
+        ON CONFLICT (norad_number, epoch) DO NOTHING;
+    """)
+
+    cursor.execute("DROP TABLE temp_tle_history;")  # ✅ Cleanup TEMP table
+    os.remove(temp_file_path)  # ✅ Remove temporary CSV FILE
+    conn.commit()
+
 
     # ✅ Create a temporary CSV file for batch insertion
     with NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as temp_file:
@@ -1315,7 +1378,7 @@ def update_satellite_data():
             "perigee", "apogee", "semi_major_axis", "bstar", "rev_num",
             "ephemeris_type", "object_type", "launch_date", "launch_site",
             "decay_date", "rcs", "purpose", "country", "accuracy_percentage",
-            "error_km", "altitude_km"
+            "error_km", "altitude_km", "computed_latitude", "computed_longitude"
         ])
 
         for sat in tqdm(batch, desc="Writing to CSV", unit="sat"):
@@ -1326,7 +1389,7 @@ def update_satellite_data():
                 sat["perigee"], sat["apogee"], sat["semi_major_axis"], sat["bstar"], sat["rev_num"],
                 sat["ephemeris_type"], sat["object_type"], sat["launch_date"], sat["launch_site"],
                 sat["decay_date"], sat["rcs"], sat["purpose"], sat["country"], sat["accuracy_percentage"],
-                sat["error_km"], sat["altitude_km"]
+                sat["error_km"], sat["altitude_km"], sat["computed_latitude"], sat["computed_longitude"]
             ])
 
         temp_file_path = temp_file.name
@@ -1344,7 +1407,7 @@ def update_satellite_data():
                 perigee, apogee, semi_major_axis, bstar, rev_num,
                 ephemeris_type, object_type, launch_date, launch_site,
                 decay_date, rcs, purpose, country, accuracy_percentage,
-                error_km, altitude_km
+                error_km, altitude_km, computed_latitude, computed_longitude
             )
             FROM STDIN WITH CSV HEADER;
         """, temp_file)
@@ -1358,7 +1421,7 @@ def update_satellite_data():
             perigee, apogee, semi_major_axis, bstar, rev_num,
             ephemeris_type, object_type, launch_date, launch_site,
             decay_date, rcs, purpose, country, accuracy_percentage,
-            error_km, altitude_km
+            error_km, altitude_km, computed_latitude, computed_longitude
         )
         SELECT 
             name, tle_line1, tle_line2, norad_number, epoch,
@@ -1367,7 +1430,7 @@ def update_satellite_data():
             perigee, apogee, semi_major_axis, bstar, rev_num,
             ephemeris_type, object_type, launch_date, launch_site,
             decay_date, rcs, purpose, country, accuracy_percentage,
-            error_km, altitude_km
+            error_km, altitude_km, computed_latitude, computed_longitude
         FROM temp_satellites
         ON CONFLICT (norad_number) DO UPDATE 
         SET 
@@ -1399,7 +1462,9 @@ def update_satellite_data():
             country = EXCLUDED.country,
             accuracy_percentage = EXCLUDED.accuracy_percentage,
             error_km = EXCLUDED.error_km,
-            altitude_km = EXCLUDED.altitude_km
+            altitude_km = EXCLUDED.altitude_km,
+            computed_latitude  = EXCLUDED.computed_latitude,
+            computed_longitude = EXCLUDED.computed_longitude
         WHERE main.epoch != EXCLUDED.epoch;
     """)
 
