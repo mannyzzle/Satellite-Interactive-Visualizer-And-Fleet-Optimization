@@ -13,6 +13,7 @@ def sanitize_value(value):
         return None
     return value
 
+
 @router.get("/")
 def get_all_satellites(
     page: int = Query(1, ge=1),
@@ -46,7 +47,7 @@ def get_all_satellites(
                    eccentricity, period, perigee, apogee, epoch, raan, 
                    arg_perigee, mean_motion, semi_major_axis, tle_line1, 
                    tle_line2, intl_designator, object_type, 
-                   launch_date, launch_site, decay_date, rcs, purpose, country
+                   launch_date, launch_site, decay_date, rcs, purpose, country, active_status
             FROM satellites
         """
 
@@ -100,7 +101,8 @@ def get_all_satellites(
                     "decay_date": sat["decay_date"],
                     "rcs": sanitize_value(sat["rcs"]),
                     "purpose": sat["purpose"],
-                    "country": sat["country"]
+                    "country": sat["country"],
+                    "active_status": sat["active_status"]
                 }
                 for sat in satellites
             ]
@@ -156,8 +158,8 @@ def get_filter_condition(filter):
 
         # 🚀 Launch & Decay Filters
         "Recent Launches": "launch_date > NOW() - INTERVAL '30 days'",
-        "Decayed": "decay_date IS NOT NULL",
-        "Active Satellites": "decay_date IS NULL"
+        "Decaying": "decay_date IS NOT NULL OR active_status = 'Inactive' ",
+        "Active Satellites": "decay_date IS NULL AND object_type  = 'PAYLOAD' "
     }
 
 
@@ -214,7 +216,7 @@ def get_satellite_by_name(satellite_name: str):
                eccentricity, period, perigee, apogee, epoch, raan, 
                arg_perigee, mean_motion, semi_major_axis, tle_line1, 
                tle_line2, intl_designator, object_type, 
-               launch_date, launch_site, decay_date, rcs, purpose, country
+               launch_date, launch_site, decay_date, rcs, purpose, country, active_status
         FROM satellites WHERE LOWER(name) = %s
     """, (formatted_name,))  # ✅ Case-insensitive lookup
 
@@ -256,5 +258,6 @@ def get_satellite_by_name(satellite_name: str):
         "decay_date": satellite["decay_date"],
         "rcs": satellite["rcs"],
         "purpose": satellite["purpose"],
-        "country": satellite["country"]
+        "country": satellite["country"],
+        "active_status": satellite["active_status"]
     }

@@ -5,17 +5,13 @@ import * as THREE from "three";
 import Navbar from "../components/Navbar";  // ✅ Ensure correct path
 import { useCallback } from "react";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { fetchSatellites } from "../api/satelliteService";
 import Infographics from "../components/Infographics"; // Ensure correct path
 import { twoline2satrec, propagate, gstime, eciToGeodetic, degreesLong, degreesLat } from "satellite.js";
 
 const basePath = import.meta.env.BASE_URL;  // ✅ Dynamically fetch the base URL
-
-
 const dayTexture = `${basePath}earth_day.jpg`;
 const nightTexture = `${basePath}earth_night.jpg`;
-
 const cloudTexture = `${basePath}clouds.png`;
  
 
@@ -168,35 +164,11 @@ export default function Home() {
       "Space Debris": 0xFF0000,  // 🔴 Bright Red
       "Rocket Body (Debris)": 0xFF0000,  // 🔴 Bright Red
       "Unknown": 0xFF0000,  // 🔴 Bright Red
+      "Unknown Payload": 0xFF0000
   
-    //Communications  
-  "Communications": 0x32CD32,  // 🔵 green (High visibility for communication-based satellites)
-  "Starlink Constellation": 0xFFFFFF,  // ✨ Pure White (Neon-like, futuristic Starlink identity)
-  "OneWeb Constellation": 0xFFFFFF,  // 🟦 Light Blue (Soft and neutral satellite coverage)
-  "Iridium NEXT Constellation": 0xFFFFFF,  // 🟦 Light Sky Blue (Recognizable, satellite phone network)
-
-  // 🛰️ Navigation & Positioning (Green Shades)
-  "Navigation": 0x32CD32,  // 🟢 Bright Lime Green
-  "Military/Reconnaissance": 0x32CD32,  // 🟢 Dark Green
-  // 🌦️ Environmental & Earth Monitoring (Yellow Variants)
-  "Weather Monitoring": 0x32CD32,  // 🟢 Bright Lime Green
-  "Earth Observation": 0x32CD32,  // 0x32CD32,  // 🟢 Bright Lime Green
-
-
-  // 🔬 Science & Research (Purple Variants)
-  "Scientific Research": 0x32CD32,  // 🟣 Pure Purple (General science and research)
-  "Deep Space Exploration": 0x32CD32,  // 💜 Dark Violet (Cosmic, deep space)
-  "Human Spaceflight": 0x32CD32,  // 💜 Amethyst (Human-centric but within science)
-
-  // 🛠️ Technology & Infrastructure (Orange Variants)
-  "Technology Demonstration": 0x32CD32,  // 🟠 Dark Orange (Experimental tech)
-  "Space Infrastructure": 0x32CD32,  // 🟠 Orange-Red (Construction, support systems)
-  "Satellite Servicing & Logistics": 0x32CD32  // 🟠 Orange-Red (Construction, support systems)
-
-
     };
   
-    const orbitColor = purposeColors[satellite.purpose] || 0x89CFF0; // Default Light Blue for unclassified
+    const orbitColor = purposeColors[satellite.purpose] || 0x00FFFF; // Default Light Blue for unclassified
   
     // ✅ Step 3: Create Orbit Path
     const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
@@ -292,16 +264,33 @@ const loadSatelliteModel = (satellite) => {
     return;
   }
 
-  // 🚀 **Check if it's debris or has a decay date**
-  const isDebrisOrDecayed = 
-    satellite.purpose === "Rocket Body (Debris)" ||
-    satellite.purpose === "Space Debris" ||
-    satellite.purpose === "Unknown" ||
-    satellite.decay_date !== null; // If decay date exists, it's considered debris
-
-  const sphereColor = isDebrisOrDecayed ? 0x00FFFF : 0x00FFFF; // 🔴 Neon Red for debris, 🟦 Neon Teal for others
-
-  console.log(`🎨 Rendering sphere for ${satellite.name}: ${isDebrisOrDecayed ? "Neon Red (Debris)" : "Neon Teal (Active)"}`);
+  const purposeColors = {
+    "Communications": 0x0000FF, // 🟦 Blue
+    "Navigation": 0x0000FF, // 🟦 Blue
+    "OneWeb Constellation": 0x0000FF, // 🟦 Blue
+    "Iridium NEXT Constellation": 0x0000FF, // 🟦 Blue
+    "Starlink Constellation": 0x0000FF, // 🟦 Blue
+  
+    "Weather Monitoring": 0x00FF00, // 🟩 Green
+    "Earth Observation": 0x00FF00, // 🟩 Green
+    "Scientific Research": 0x00FF00, // 🟩 Green
+    "Space Infrastructure": 0x00FF00, // 🟩 Green
+  
+    "Technology Demonstration": 0xFFA500, // 🟧 Orange
+    "Human Spaceflight": 0xFFA500, // 🟧 Orange
+    "Satellite Servicing & Logistics": 0xFFA500, // 🟧 Orange
+    "Deep Space Exploration": 0xFFA500, // 🟧 Orange
+    "Military/Reconnaissance": 0xFFA500, // 🟧 Orange
+  
+    "Rocket Body (Debris)": 0xFF0000, // 🟥 Red
+    "Space Debris": 0xFF0000, // 🟥 Red
+    "Unknown Payload": 0xFF0000, // 🟥 Red
+    "Unknown": 0xFF0000, // 🟥 Red
+  };
+  
+  // 🚀 **Determine Color Based on Purpose**
+  const sphereColor = purposeColors[satellite.purpose] || 0xFFFFFF; // Default to white if undefined
+  
 
   // ✅ Create Sphere for Satellite
   const sphereGeometry = new THREE.SphereGeometry(0.1, 8, 8);
@@ -1912,3 +1901,4 @@ return (
 
 );
 }
+

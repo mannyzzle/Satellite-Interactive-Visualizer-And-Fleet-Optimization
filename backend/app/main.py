@@ -59,3 +59,4 @@ def startup_event():
 @app.on_event("shutdown")
 def shutdown_event():
     print("🛑 Backend is shutting down...")
+

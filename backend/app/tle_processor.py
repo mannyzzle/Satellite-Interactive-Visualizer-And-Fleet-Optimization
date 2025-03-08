@@ -42,12 +42,8 @@ def clean_old_norads():
     DELETE FROM satellites
         
     WHERE 
-        -- ❌ **Invalid latitude/longitude**
-        (latitude IS NULL OR longitude IS NULL OR altitude_km IS NULL OR 
-        latitude = 'NaN' OR longitude = 'NaN' OR altitude_km = 'NaN') 
-
         -- ❌ **Objects that have already decayed (beyond 7-day threshold)**
-        OR (decay_date IS NOT NULL AND decay_date < NOW() - INTERVAL '7 days')
+        (decay_date IS NOT NULL AND decay_date < NOW() - INTERVAL '7 days')
 
         -- ❌ **LEO satellites with old TLE (> 7 days tracking)**
         OR (orbit_type = 'LEO' AND (epoch IS NULL OR epoch < NOW() - INTERVAL '30 days'))
@@ -69,7 +65,6 @@ def clean_old_norads():
         -- ❌ **Invalid altitude handling & old TLE check**
         OR (altitude_km IS NULL OR altitude_km < 80)
 
-        OR (epoch > NOW())
 
             """
 
@@ -509,7 +504,7 @@ def update_satellite_data():
             "decay_date", "rcs", "purpose", "country", "altitude_km",
             "x", "y", "z", "vx", "vy", "vz",
             "mean_anomaly", "eccentric_anomaly", "true_anomaly", "argument_of_latitude",
-            "specific_angular_momentum", "radial_distance", "flight_path_angle"
+            "specific_angular_momentum", "radial_distance", "flight_path_angle", "active_status"
         ])
 
         for sat in tqdm(batch, desc="Writing to CSV", unit="sat"):
@@ -522,7 +517,7 @@ def update_satellite_data():
                 sat["decay_date"], sat["rcs"], sat["purpose"], sat["country"], sat["altitude_km"],
                 sat["x"], sat["y"], sat["z"], sat["vx"], sat["vy"], sat["vz"],
                 sat["mean_anomaly"], sat["eccentric_anomaly"], sat["true_anomaly"], sat["argument_of_latitude"],
-                sat["specific_angular_momentum"], sat["radial_distance"], sat["flight_path_angle"]
+                sat["specific_angular_momentum"], sat["radial_distance"], sat["flight_path_angle"], sat["active_status"]
             ])
 
         temp_file_path = temp_file.name
@@ -544,7 +539,7 @@ def update_satellite_data():
                 decay_date, rcs, purpose, country, altitude_km,
                 x, y, z, vx, vy, vz,
                 mean_anomaly, eccentric_anomaly, true_anomaly, argument_of_latitude,
-                specific_angular_momentum, radial_distance, flight_path_angle
+                specific_angular_momentum, radial_distance, flight_path_angle, active_status
             )
             FROM STDIN WITH CSV HEADER;
         """, temp_file)
@@ -560,7 +555,7 @@ def update_satellite_data():
             decay_date, rcs, purpose, country, altitude_km,
             x, y, z, vx, vy, vz,
             mean_anomaly, eccentric_anomaly, true_anomaly, argument_of_latitude,
-            specific_angular_momentum, radial_distance, flight_path_angle
+            specific_angular_momentum, radial_distance, flight_path_angle, active_status
         )
         SELECT 
             name, tle_line1, tle_line2, norad_number, epoch,
@@ -571,7 +566,7 @@ def update_satellite_data():
             decay_date, rcs, purpose, country, altitude_km,
             x, y, z, vx, vy, vz,
             mean_anomaly, eccentric_anomaly, true_anomaly, argument_of_latitude,
-            specific_angular_momentum, radial_distance, flight_path_angle
+            specific_angular_momentum, radial_distance, flight_path_angle, active_status
         FROM temp_satellites
         ON CONFLICT (norad_number) DO UPDATE 
         SET 
@@ -614,7 +609,8 @@ def update_satellite_data():
             argument_of_latitude = EXCLUDED.argument_of_latitude,
             specific_angular_momentum = EXCLUDED.specific_angular_momentum,
             radial_distance = EXCLUDED.radial_distance,
-            flight_path_angle = EXCLUDED.flight_path_angle
+            flight_path_angle = EXCLUDED.flight_path_angle,
+            active_status = EXCLUDED.active_status;
     """)
 
     conn.commit()

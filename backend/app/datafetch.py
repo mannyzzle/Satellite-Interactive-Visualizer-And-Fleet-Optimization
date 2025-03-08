@@ -90,7 +90,7 @@ def fetch_tle_data(session, existing_norads):
                 tle_data = json.load(file)
 
             # ✅ Use cached data if <1 hour old
-            if time.time() - tle_data["timestamp"] < 3600:
+            if time.time() - tle_data["timestamp"] < 36000:
                 print("📡 Using cached TLE data (Last Updated: < 1 hour ago)")
                 satellites = tle_data["satellites"]
         except (json.JSONDecodeError, KeyError):
@@ -150,6 +150,71 @@ def fetch_tle_data(session, existing_norads):
 
 
 
+from datetime import datetime, timezone
+
+def classify_satellite_activity(orbit_type, epoch, perigee):
+    """
+    Determines if a satellite is Active, Inactive, or Debris based on industry-defined standards.
+    If a satellite exceeds the extended threshold, it will be skipped.
+    """
+    now = datetime.utcnow().replace(tzinfo=timezone.utc)  # ✅ Ensure UTC timezone
+
+    
+    if epoch.tzinfo is None:
+        epoch = epoch.replace(tzinfo=timezone.utc)  # ✅ Ensure `epoch` is UTC-aware
+
+    days_since_epoch = (now - epoch).days  # ✅ Now safe to subtract
+
+    # 🛰️ **LEO Satellites**
+    if orbit_type == "LEO":
+        if days_since_epoch > 30:
+            return "Skip"  # ❌ Skip (Too old for tracking)
+        elif days_since_epoch > 7:
+            return "Inactive"
+        else:
+            return "Active"
+
+    # 🛰️ **MEO Satellites**
+    if orbit_type == "MEO":
+        if days_since_epoch > 180:  
+            return "Skip"  # ❌ Skip (Older than 6 months)
+        elif days_since_epoch > 30:
+            return "Inactive"
+        else:
+            return "Active"
+
+    # 🛰️ **HEO Satellites**
+    if orbit_type == "HEO":
+        if perigee is not None and perigee < 2000:
+            if days_since_epoch > 365:
+                return "Skip"  # ❌ Skip (Older than 1 year)
+            elif days_since_epoch > 30:
+                return "Inactive"
+            else:
+                return "Active"
+        elif perigee is not None and perigee >= 2000:
+            if days_since_epoch > 365:
+                return "Skip"
+            elif days_since_epoch > 90:
+                return "Inactive"
+            else:
+                return "Active"
+
+    # 🛰️ **GEO Satellites**
+    if orbit_type == "GEO":
+        if days_since_epoch > 730:
+            return "Skip"  # ❌ Skip (Older than 2 years)
+        elif days_since_epoch > 180:
+            return "Inactive"
+        else:
+            return "Active"
+
+    return "Active"  # ✅ Default to Active if none of the conditions apply
+
+
+
+
+
 def filter_satellites(satellites, existing_norads):
     """
     Filters the downloaded TLE dataset to:
@@ -179,11 +244,10 @@ def filter_satellites(satellites, existing_norads):
             # ✅ Ensure computed_params exists and contains valid lat/lon
             if not computed_params or computed_params.get("latitude") is None or computed_params.get("longitude") is None or computed_params.get("altitude_km") is None:
                 continue
+ 
 
-            for_prediction = True  # 🚀 Set to False for tracking mode
-
-            # 🚀 **Convert decay_date & apply filtering**
             decay_date = parse_datetime(metadata.get("DECAY_DATE"))
+
             if decay_date is not None and decay_date.tzinfo is None:
                 decay_date = decay_date.replace(tzinfo=timezone.utc)  # ✅ Ensure UTC timezone
 
@@ -199,58 +263,33 @@ def filter_satellites(satellites, existing_norads):
 
             if isinstance(epoch, str):
                 epoch = parse_datetime(epoch)
+
             if epoch is not None and epoch.tzinfo is None:
-                epoch = epoch.replace(tzinfo=timezone.utc) 
-                
-            
-
-            # 🚀 **Define TLE age limits based on mode**
-            now = datetime.now().astimezone(timezone.utc)
-            
-        
-
-            if for_prediction:
-                seven_days_ago = now - timedelta(days=30)  # **LEO extended to 30 days**
-                six_months_ago = now - timedelta(days=180)  # **MEO extended to 6 months**
-                one_year_ago = now - timedelta(days=365)  # **HEO & GEO extended to 1 year**
-                six_months1_ago = now - timedelta(days=365)  # **GEO max 1 year**
-            else:
-                seven_days_ago = now - timedelta(days=7)  # **LEO tracking mode**
-                six_months_ago = now - timedelta(days=30)  # **MEO tracking mode**
-                one_year_ago = now - timedelta(days=90)  # **HEO & GEO standard limits**
-                six_months1_ago = now - timedelta(days=180)  # **GEO max 6 months in tracking mode**
+                epoch = epoch.replace(tzinfo=timezone.utc)  # ✅ Ensure UTC timezone
 
 
-            if ((decay_date is not None and decay_date < now - timedelta(days=7))):
-                continue
-                
+            now = datetime.utcnow().replace(tzinfo=timezone.utc)
 
-            if (
-                # ❌ **Invalid latitude/longitude**
-                (latitude in ["NaN", None] or longitude in ["NaN", None] or altitude_km in ["NaN", None]) or  
 
-                # ❌ **LEO satellites with old TLE**
-                (orbit_type == "LEO" and (epoch is None or epoch < seven_days_ago)) or  
+            # ✅ **Classify activity (Active, Inactive, Debris, or Skip)**
+            activity_status = classify_satellite_activity(orbit_type, epoch, perigee)
 
-                # ❌ **MEO satellites with old TLE**
-                (orbit_type == "MEO" and (epoch is None or epoch < six_months_ago)) or  
 
-                # ❌ **HEO satellites with different epoch limits**
-                ((orbit_type == "HEO") and (
-                    (perigee is not None and perigee < 2000 and (epoch is None or epoch < now - timedelta(days=30))) or  
-                    (perigee is not None and perigee >= 2000 and (epoch is None or epoch < one_year_ago))  
-                )) 
-                
-                or (orbit_type == "GEO" and (epoch is None or epoch < now - timedelta(days=730))  ) or
+            # 🚀 **Skip any satellites that exceed the thresholds**
+            if activity_status == "Skip":
+                print(f"❌ Skipping {metadata.get('OBJECT_NAME', 'Unknown')} (NORAD {metadata.get('NORAD_CAT_ID')}): "
+                    f"TLE too old for tracking.")
+                continue  # ✅ Completely skip this satellite
 
-                
-                ((altitude_km is None or altitude_km < 80))
-            ):
+
+
+            # 🚀 **Skip satellites with invalid lat/lon or unrealistic parameters**
+            if ((decay_date is not None and decay_date < now - timedelta(days=7)) 
+                or (latitude in ["NaN", None] or longitude in ["NaN", None] or altitude_km in ["NaN", None])
+                or (altitude_km is None or altitude_km < 80)):  # Invalid altitude
                 print(f"❌ Skipping {metadata.get('OBJECT_NAME', 'Unknown')} (NORAD {metadata.get('NORAD_CAT_ID')}): "
                     f"Invalid lat/lon, unstable orbit, or unrealistic parameters.")
-                
                 continue  # ✅ Skip this satellite
-
 
 
 
@@ -269,9 +308,11 @@ def filter_satellites(satellites, existing_norads):
                 "country": metadata.get("COUNTRY_CODE", "Unknown"),
                 **computed_params,  # ✅ Add all computed orbital parameters
                 "purpose": infer_purpose(metadata) or "Unknown",
+                "active_status": activity_status  # ✅ Classification added
             }
 
-            
+
+                        
 
             # ✅ Add to filtered satellites & prevent future duplicates
             filtered_satellites.append(sat_data)
