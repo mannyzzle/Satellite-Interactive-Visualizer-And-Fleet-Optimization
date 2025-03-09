@@ -5,7 +5,7 @@ import psycopg2
 from skyfield.api import load
 from tqdm import tqdm
 from database import get_db_connection  # ✅ Use get_db_connection()
-from datafetch import get_spacetrack_session, fetch_tle_data
+from tle_fetch import get_spacetrack_session, fetch_tle_data
 from tempfile import NamedTemporaryFile
 import numpy as np  # For NaN detection
 from concurrent.futures import ThreadPoolExecutor
@@ -17,6 +17,8 @@ from astropy import units as u
 from astropy.time import Time
 import math
 import os
+import sys
+from concurrent.futures import ThreadPoolExecutor
 from astropy.utils.iers import conf
 conf.iers_auto_url = "https://datacenter.iers.org/data/latest/finals2000A.all"
 conf.auto_download = True  # Ensure automatic updates
@@ -145,13 +147,13 @@ def compute_sgp4_position1(tle_line1, tle_line2):
     """
     try:
         if not tle_line1 or not tle_line2:
-            print("❌ [ERROR] Missing TLE lines!")
+            #print("❌ [ERROR] Missing TLE lines!")
             return None  # Error: Missing TLE
 
         try:
             satrec = Satrec.twoline2rv(tle_line1, tle_line2, WGS72)
         except Exception as e:
-            print(f"❌ [ERROR] Invalid TLE parse failure: {e}")
+            #print(f"❌ [ERROR] Invalid TLE parse failure: {e}")
             return None  # Error: TLE parse failure
 
         now = datetime.utcnow()
@@ -164,12 +166,12 @@ def compute_sgp4_position1(tle_line1, tle_line2):
         # 🚀 **Run SGP4 propagation**
         error_code, r, v = satrec.sgp4(jd, fr)
         if error_code != 0:
-            print(f"❌ [ERROR] SGP4 propagation error code: {error_code}")
+            #print(f"❌ [ERROR] SGP4 propagation error code: {error_code}")
             return None  # Return error code
 
         # 🚀 **Check if values are realistic**
         if not all(map(math.isfinite, r)) or abs(r[0]) > 1e8 or abs(r[1]) > 1e8 or abs(r[2]) > 1e8:
-            print(f"❌ [ERROR] SGP4 returned invalid position values: {r}")
+            #print(f"❌ [ERROR] SGP4 returned invalid position values: {r}")
             return None  # Invalid position values
 
         # 🚀 **Convert TEME to ITRS (geodetic coordinates)**
@@ -245,7 +247,7 @@ def compute_sgp4_position1(tle_line1, tle_line2):
         }
 
     except Exception as e:
-        print(f"⚠️ [ERROR] SGP4 computation failed: {e}")
+        #print(f"⚠️ [ERROR] SGP4 computation failed: {e}")
         traceback.print_exc()
         return None
 
@@ -346,7 +348,6 @@ def compute_accuracy(sat):
             None, None, None, None, None, None, None, None, None, -1 )  # ❌ **Returns exactly 20 values**
 
 
-
 def update_satellite_data():
     """
     Efficiently update and insert satellite data using PostgreSQL COPY + UPSERT with batch processing.
@@ -357,7 +358,7 @@ def update_satellite_data():
     cursor = conn.cursor()
 
     existing_norads = set(get_existing_norad_numbers())  # ✅ Get existing NORADs
-    existing_names = set(get_existing_satellite_names())  # ✅ Get existing names
+    existing_names = set(get_existing_satellite_names()) # ✅ Get existing names
 
     session = get_spacetrack_session()
     if not session:
@@ -369,102 +370,98 @@ def update_satellite_data():
         print("⚠️ No new data to process.")
         return
 
-    batch_existing_norads = set()  # ✅ Track NORADs only in the current batch
-    batch_existing_names = set(existing_names)  # ✅ Track already known names
+    batch_existing_norads = set()
+    batch_existing_names = set(existing_names)
     batch = []
-    skipped_norads = []  
-    historical_tles = []  
+    skipped_norads = []
+    historical_tles = []
 
     print(f"📡 Processing {len(all_satellites)} satellites for database update...")
 
+    # Determine if we are in a TTY (interactive) environment
+    is_tty = sys.stdout.isatty()
+
     with ThreadPoolExecutor(max_workers=8) as executor:
-        for sat, (accuracy, lat, lon, error_km, altitude_km, velocity, mean_anomaly, eccentric_anomaly, 
-                true_anomaly, argument_of_latitude, specific_angular_momentum, radial_distance, 
-                flight_path_angle, predicted_x, predicted_y, predicted_z, 
-                predicted_vx, predicted_vy, predicted_vz, error_code) in tqdm(
-            zip(all_satellites, executor.map(compute_accuracy, all_satellites)), 
-            total=len(all_satellites), desc="Computing accuracy", unit="sat"
+        # We wrap the zip(...) in tqdm to track progress
+        # miniters=100 updates the progress bar every 100 items
+        # mininterval=1.0 updates at least every 1 second in a TTY
+        # disable=not is_tty hides the bar if no TTY (cron logs)
+        for sat, (accuracy, lat, lon, error_km, altitude_km, velocity,
+                  mean_anomaly, eccentric_anomaly, true_anomaly,
+                  argument_of_latitude, specific_angular_momentum, radial_distance,
+                  flight_path_angle, predicted_x, predicted_y, predicted_z,
+                  predicted_vx, predicted_vy, predicted_vz, error_code) in tqdm(
+            zip(all_satellites, executor.map(compute_accuracy, all_satellites)),
+            total=len(all_satellites),
+            desc="Computing accuracy",
+            unit="sat",
+            miniters=100,
+            mininterval=1.0,
+            disable=not is_tty
         ):
-
-
-            norad_number = sat.get("norad_number", None)
-
+            norad_number = sat.get("norad_number")
             if norad_number is None:
                 skipped_norads.append(f"{sat['name']} (❌ Missing NORAD)")
-                continue 
+                continue
 
             if error_code != 0:
                 skipped_norads.append(f"{sat['name']} (❌ ERROR CODE PREDICTION)")
-                #continue
-                 
+                # continue
 
-
-
-            # ✅ **Check for duplicate NORAD numbers only within this batch**
             if norad_number in batch_existing_norads:
-                skipped_norads.append(f"{sat['name']} (NORAD {norad_number}) - ❌ Already processed in batch.")
-                continue  
+                skipped_norads.append(f"{sat['name']} (NORAD {norad_number}) - ❌ Duplicate in batch.")
+                continue
 
-            # ✅ **Ensure Unique Name**
+            # Ensure unique name
             original_name = sat["name"]
             name = original_name
             suffix = 1
-
             while name in batch_existing_names:
                 name = f"{original_name} ({suffix})"
                 suffix += 1
+            batch_existing_names.add(name)
+            sat["name"] = name
 
-            batch_existing_names.add(name)  # ✅ Track name in this batch
-            sat["name"] = name  
-
-            # ✅ **Check if this is a new TLE for historical storage**
+            # Mark TLE for historical storage
             historical_tles.append((
                 norad_number, sat["epoch"], sat["tle_line1"], sat["tle_line2"], datetime.now(timezone.utc)
             ))
-
-            # ✅ **Mark NORAD as processed only after passing all checks**
             batch_existing_norads.add(norad_number)
 
+            # Fill computed values
+            sat["accuracy_percentage"] = accuracy
+            sat["predicted_latitude"] = lat
+            sat["predicted_longitude"] = lon
+            sat["error_km"] = error_km
+            sat["predicted_altitude_km"] = altitude_km
+            sat["predicted_velocity"] = velocity
 
+            sat["predicted_x"] = predicted_x
+            sat["predicted_y"] = predicted_y
+            sat["predicted_z"] = predicted_z
+            sat["predicted_vx"] = predicted_vx
+            sat["predicted_vy"] = predicted_vy
+            sat["predicted_vz"] = predicted_vz
+            sat["predicted_mean_anomaly"] = mean_anomaly
+            sat["predicted_eccentric_anomaly"] = eccentric_anomaly
+            sat["predicted_true_anomaly"] = true_anomaly
+            sat["predicted_argument_of_latitude"] = argument_of_latitude
+            sat["predicted_specific_angular_momentum"] = specific_angular_momentum
+            sat["predicted_radial_distance"] = radial_distance
+            sat["predicted_flight_path_angle"] = flight_path_angle
 
-            # ✅ Assign real computed values (Accuracy & Position Error)
-            sat["accuracy_percentage"] = accuracy  
-            sat["predicted_latitude"] = lat  
-            sat["predicted_longitude"] = lon  
-            sat["error_km"] = error_km  
-            # ✅ Assign predicted values
-            sat["predicted_altitude_km"] = altitude_km  
-            sat["predicted_velocity"] = velocity  
-            # ✅ Assign **all** predicted computed values for TEME position & velocity
-            sat["predicted_x"] = predicted_x  # TEME Position X (km)  
-            sat["predicted_y"] = predicted_y  # TEME Position Y (km)  
-            sat["predicted_z"] = predicted_z  # TEME Position Z (km)  
-            sat["predicted_vx"] = predicted_vx  # TEME Velocity X (km/s)  
-            sat["predicted_vy"] = predicted_vy  # TEME Velocity Y (km/s)  
-            sat["predicted_vz"] = predicted_vz  # TEME Velocity Z (km/s)  
-            sat["predicted_mean_anomaly"] = mean_anomaly  # Mean anomaly (deg)  
-            sat["predicted_eccentric_anomaly"] = eccentric_anomaly  # Eccentric anomaly (deg)  
-            sat["predicted_true_anomaly"] = true_anomaly  # True anomaly (deg)  
-            sat["predicted_argument_of_latitude"] = argument_of_latitude  # Argument of latitude (deg)  
-            sat["predicted_specific_angular_momentum"] = specific_angular_momentum  # Specific angular momentum (km²/s)  
-            sat["predicted_radial_distance"] = radial_distance  # Distance from Earth's center (km)  
-            sat["predicted_flight_path_angle"] = flight_path_angle  # Angle between velocity vector and orbital plane (deg)  
+            # Remove or comment out the print(sat) to avoid spamming logs
+            # If you *really* want a single line debug:
+            # tqdm.write(f"Ingested sat: {sat['norad_number']} - {sat['name']}")
 
-            
+            batch.append(sat)
 
-            print(sat)
-
-            batch.append(sat)  
-
-    # ✅ Log skipped NORADs
+    # Save skipped norads
     with open("skipped_norads.log", "w") as log_file:
         log_file.write("\n".join(skipped_norads))
 
-
-
-    # ✅ Create a TEMP table for historical TLEs to handle conflicts properly
+    # Insert historical TLEs
     cursor.execute("CREATE TEMP TABLE temp_tle_history AS TABLE satellite_tle_history WITH NO DATA;")
-
     print(f"📜 Inserting {len(historical_tles)} historical TLEs...")
     with NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as temp_file:
         csv_writer = csv.writer(temp_file, delimiter=",")
@@ -477,24 +474,18 @@ def update_satellite_data():
             COPY temp_tle_history (norad_number, epoch, tle_line1, tle_line2, inserted_at)
             FROM STDIN WITH CSV HEADER;
         """, temp_file)
-
-    # ✅ Insert TLEs from TEMP table while avoiding duplicates
     cursor.execute("""
         INSERT INTO satellite_tle_history (norad_number, epoch, tle_line1, tle_line2, inserted_at)
         SELECT norad_number, epoch, tle_line1, tle_line2, inserted_at FROM temp_tle_history
         ON CONFLICT (norad_number, epoch) DO NOTHING;
     """)
-
-    cursor.execute("DROP TABLE temp_tle_history;")  # ✅ Cleanup TEMP table
-    os.remove(temp_file_path)  # ✅ Remove temporary CSV FILE
+    cursor.execute("DROP TABLE temp_tle_history;")
+    os.remove(temp_file_path)
     conn.commit()
 
-
-        # ✅ Create a temporary CSV file for batch insertion
+    # Now create CSV + upsert for main satellites table
     with NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as temp_file:
         csv_writer = csv.writer(temp_file, delimiter=",")
-        
-        # ✅ Updated columns (excluding accuracy-related fields)
         csv_writer.writerow([
             "name", "tle_line1", "tle_line2", "norad_number", "epoch",
             "inclination", "eccentricity", "mean_motion", "raan", "arg_perigee",
@@ -507,11 +498,19 @@ def update_satellite_data():
             "specific_angular_momentum", "radial_distance", "flight_path_angle", "active_status"
         ])
 
-        for sat in tqdm(batch, desc="Writing to CSV", unit="sat"):
+        # We can also wrap this in tqdm, but reduce updates similarly:
+        for sat in tqdm(
+            batch,
+            desc="Writing to CSV",
+            unit="sat",
+            miniters=100,
+            mininterval=1.0,
+            disable=not is_tty
+        ):
             csv_writer.writerow([
                 sat["name"], sat["tle_line1"], sat["tle_line2"], sat["norad_number"], sat["epoch"],
                 sat["inclination"], sat["eccentricity"], sat["mean_motion"], sat["raan"], sat["arg_perigee"],
-                sat["velocity"], sat["latitude"], sat["longitude"], sat["orbit_type"], sat["period"],
+                sat["velocity"], sat["latitude"], sat["longitude"], sat.get("orbit_type", "Unknown"), sat.get("period"),
                 sat["perigee"], sat["apogee"], sat["semi_major_axis"], sat["bstar"], sat["rev_num"],
                 sat["ephemeris_type"], sat["object_type"], sat["launch_date"], sat["launch_site"],
                 sat["decay_date"], sat["rcs"], sat["purpose"], sat["country"], sat["altitude_km"],
@@ -522,7 +521,6 @@ def update_satellite_data():
 
         temp_file_path = temp_file.name
 
-    # Drop and recreate temp_satellites to ensure it has all columns
     cursor.execute("DROP TABLE IF EXISTS temp_satellites;")
     cursor.execute("CREATE UNLOGGED TABLE temp_satellites AS TABLE satellites WITH NO DATA;")
     cursor.execute("TRUNCATE temp_satellites;")
@@ -621,8 +619,7 @@ def update_satellite_data():
     print(f"✅ Successfully processed {len(batch)} satellites using COPY + UPSERT.")
     print(f"✅ Historical TLEs added where epoch changed.")
     print(f"⚠️ {len(skipped_norads)} satellites were skipped.")
-   
+
 
 if __name__ == "__main__":
     update_satellite_data()
-    

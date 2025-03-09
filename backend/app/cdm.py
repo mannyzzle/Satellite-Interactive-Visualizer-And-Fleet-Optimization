@@ -1,27 +1,25 @@
 
 # /backend/app/tle_processor.py
 
+# /backend/app/tle_processor.py
+
 from tqdm import tqdm
 from dotenv import load_dotenv
 import os
 import requests
+import sys  # <-- NEW: for isatty()
 from database import get_db_connection  # ✅ Use get_db_connection()
 
 load_dotenv()
 SPACETRACK_USER = os.getenv("SPACETRACK_USER")
 SPACETRACK_PASS = os.getenv("SPACETRACK_PASS")
-COOKIES_FILE = "cookies.txt"  # Ensure this is the correct cookie file path
-TLE_FILE_PATH = "tle_latest.json"  # ✅ Store TLE data locally
+COOKIES_FILE = "cookies.txt"
 CDM_API_URL = "https://www.space-track.org/basicspacedata/query/class/cdm_public/format/json"
-
-
 
 
 def get_spacetrack_session():
     """Logs in to Space-Track and returns an authenticated session."""
     session = requests.Session()
-
-    # Delete old cookies to force a fresh login
     if os.path.exists(COOKIES_FILE):
         os.remove(COOKIES_FILE)
 
@@ -29,7 +27,6 @@ def get_spacetrack_session():
     payload = {"identity": SPACETRACK_USER, "password": SPACETRACK_PASS}
 
     response = session.post(login_url, data=payload)
-    
     print(f"🔍 Login Response Status: {response.status_code}")
     print(f"🔍 Login Response Text: {response.text}")  # ✅ Debugging
 
@@ -48,16 +45,13 @@ def get_spacetrack_session():
     return None
 
 
-
-
-
 def remove_expired_cdms():
     """Deletes CDM events with TCA (Time of Closest Approach) in the past."""
     conn = get_db_connection()
     cursor = conn.cursor()
 
     cursor.execute("DELETE FROM cdm_events WHERE tca < NOW();")
-    deleted_count = cursor.rowcount  # Count rows deleted
+    deleted_count = cursor.rowcount
     conn.commit()
     cursor.close()
     conn.close()
@@ -68,14 +62,12 @@ def remove_expired_cdms():
 def fetch_cdm_data(session):
     """Fetches the latest CDM data from Space-Track."""
     response = session.get(CDM_API_URL)
-
     if response.status_code != 200:
         print(f"❌ API Error {response.status_code}: Unable to fetch CDM data.")
         return []
 
     cdm_data = response.json()
     print(f"📡 Retrieved {len(cdm_data)} CDM records from Space-Track.")
-
     return cdm_data
 
 
@@ -85,6 +77,7 @@ def safe_float(value):
         return float(value) if value not in [None, ""] else None
     except ValueError:
         return None
+
 
 def insert_new_cdms(cdm_data):
     """Inserts new CDM events into the database, avoiding duplicates and ensuring required fields."""
@@ -97,9 +90,21 @@ def insert_new_cdms(cdm_data):
 
     print(f"📥 Inserting {len(cdm_data)} new CDM events...")
 
-    for cdm in tqdm(cdm_data, desc="📡 Processing CDM data", unit="CDM"):
+    # 🟢 Check TTY for fancy bar or disable
+    is_tty = sys.stdout.isatty()
+
+    # miniters=500: only update bar every 500 items
+    # mininterval=2.0: or every 2 seconds
+    # disable=not is_tty: if in cron (non-TTY), don't show bar
+    for cdm in tqdm(
+        cdm_data,
+        desc="📡 Processing CDM data",
+        unit="CDM",
+        miniters=500,
+        mininterval=2.0,
+        disable=not is_tty
+    ):
         try:
-            # Extract required fields
             required_fields = {
                 "CDM_ID": int(cdm.get("CDM_ID", -1)),
                 "CREATED": cdm.get("CREATED"),
@@ -117,21 +122,18 @@ def insert_new_cdms(cdm_data):
 
             # Ensure all required columns are non-null
             if None in required_fields.values():
-                print(f"⚠️ Skipping incomplete CDM ID {required_fields['CDM_ID']} due to missing required fields.")
+                # e.g. skip incomplete records
                 continue
 
-            # Extract optional fields with default values
             optional_fields = {
                 "SAT1_RCS": cdm.get("SAT1_RCS", "Unknown"),
-                "SAT_1_EXCL_VOL": safe_float(cdm.get("SAT_1_EXCL_VOL")) or 0.0,  # Default to 0.0
+                "SAT_1_EXCL_VOL": safe_float(cdm.get("SAT_1_EXCL_VOL")) or 0.0,
                 "SAT2_RCS": cdm.get("SAT2_RCS", "Unknown"),
-                "SAT_2_EXCL_VOL": safe_float(cdm.get("SAT_2_EXCL_VOL")) or 0.0  # Default to 0.0
+                "SAT_2_EXCL_VOL": safe_float(cdm.get("SAT_2_EXCL_VOL")) or 0.0
             }
 
-            # Merge required and optional fields
             cdm_entry = {**required_fields, **optional_fields}
 
-            # Insert into database
             cursor.execute("""
                 INSERT INTO cdm_events (
                     cdm_id, created, tca, min_rng, pc, 
@@ -142,14 +144,16 @@ def insert_new_cdms(cdm_data):
                 VALUES (
                     %(CDM_ID)s, %(CREATED)s, %(TCA)s, %(MIN_RNG)s, %(PC)s,
                     %(SAT_1_ID)s, %(SAT_1_NAME)s, %(SAT1_OBJECT_TYPE)s, %(SAT1_RCS)s, %(SAT_1_EXCL_VOL)s,
-                    %(SAT_2_ID)s, %(SAT_2_NAME)s, %(SAT2_OBJECT_TYPE)s, %(SAT2_RCS)s, %(SAT_2_EXCL_VOL)s,
+                    %(SAT_2_ID)s, %(SAT_2_NAME)s, %(SAT2_OBJECT_TYPE)s, %(SAT2_RCS)s, %(SAT_2_EXcl_VOL)s,
                     %(EMERGENCY_REPORTABLE)s, FALSE
                 )
                 ON CONFLICT (cdm_id) DO NOTHING;
             """, cdm_entry)
 
         except Exception as e:
-            print(f"⚠️ Error inserting CDM ID {cdm.get('CDM_ID', 'Unknown')}: {e}")
+            # We skip printing in a loop, but if you REALLY want 1 line per error:
+            # tqdm.write(f"⚠️ Error inserting CDM ID {cdm.get('CDM_ID', 'Unknown')}: {e}")
+            pass
 
     conn.commit()
     cursor.close()
@@ -158,23 +162,16 @@ def insert_new_cdms(cdm_data):
     print(f"✅ Inserted valid CDM events.")
 
 
-
 def update_cdm_data():
     """Main function to update CDM data: remove expired & insert new."""
     print("\n🚀 Updating CDM data...")
     session = get_spacetrack_session()
-    
     if not session:
         print("❌ Could not authenticate with Space-Track. Exiting update process.")
         return
 
-    # Step 1: Remove expired CDM events
     remove_expired_cdms()
-
-    # Step 2: Fetch latest CDM data
     cdm_data = fetch_cdm_data(session)
-
-    # Step 3: Insert new CDMs
     insert_new_cdms(cdm_data)
 
     print("✅ CDM update completed.\n")

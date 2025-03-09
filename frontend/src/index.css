@@ -197,3 +197,219 @@ nav {
     gap: 10px;
   }
 }
+
+.glow-text {
+  text-shadow: 0px 0px 8px rgba(0, 255, 255, 0.8);
+}
+
+
+
+
+
+
+
+
+/* 🚀 3D Wireframe Satellite Container */
+.satellite-container {
+  width: 200px;
+  height: 200px;
+  perspective: 1000px;
+}
+
+/* 🚀 Satellite Main Structure */
+.satellite {
+  position: relative;
+  width: 100px;
+  height: 140px; /* Increase height to fit antenna */
+  transform-style: preserve-3d;
+  animation: rotateSatellite 10s linear infinite;
+}
+
+/* 🌍 Central Satellite Body (Perfectly Vertical) */
+.satellite-body {
+  width: 70px;
+  height: 100px;
+  background: transparent;
+  border-radius: 10px;
+  border: 2px solid rgba(0, 255, 255, 0.8);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotateY(0deg) rotateX(0deg);
+  box-shadow: inset 0 0 10px rgba(0, 255, 255, 0.4);
+}
+
+/* 📡 Radio Dish (Bowl Shape) */
+.radio-dish {
+  width: 50px;
+  height: 25px;
+  background: transparent;
+  border: 2px solid rgba(0, 255, 255, 0.8);
+  border-radius: 50%;
+  position: absolute;
+  left: 50%;
+  top: 3px; /* Position above satellite body */
+  transform: translateX(-50%) rotateX(50deg);
+  box-shadow: inset 0 0 10px rgba(0, 255, 255, 0.3);
+}
+
+/* 📡 Antenna */
+.antenna {
+  width: 4px;
+  height: 20px;
+  background: rgba(0, 255, 255, 0.8);
+  position: absolute;
+  left: 50%;
+  top: -5px; /* Extends above the radio dish */
+  transform: translateX(-50%);
+  box-shadow: 0 0 5px rgba(0, 255, 255, 0.6);
+}
+
+/* 🔵 Little Ball on Top of Antenna */
+.antenna-ball {
+  width: 8px;
+  height: 8px;
+  background: rgba(0, 255, 255, 1);
+  border-radius: 50%;
+  position: absolute;
+  left: 50%;
+  top: -10px; /* Position at the top of antenna */
+  transform: translateX(-50%);
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.8), 0 0 20px rgba(0, 255, 255, 0.6);
+  animation: pulseGlow 1.5s infinite alternate ease-in-out;
+}
+
+/* ☀️ Solar Panels */
+.solar-panel {
+  width: 80px;
+  height: 20px;
+  background: linear-gradient(180deg, rgba(0, 20, 60, 0.9), rgba(0, 60, 140, 0.9)); /* Deep blue panel look */
+  border: 2px solid rgba(0, 255, 255, 0.6);
+  position: absolute;
+  top: 40%;
+  transform: translateX(-50%) rotateX(30deg);
+  box-shadow: inset 0 0 10px rgba(0, 255, 255, 0.3), 0 0 5px rgba(0, 255, 255, 0.3); /* Glow effect */
+
+  /* 🏗️ Add a Grid to Resemble Solar Cells */
+  background-image: repeating-linear-gradient(
+    90deg, 
+    rgba(255, 255, 255, 0.1) 0px, 
+    rgba(255, 255, 255, 0.1) 2px, 
+    transparent 2px, 
+    transparent 10px
+  ),
+  repeating-linear-gradient(
+    0deg, 
+    rgba(255, 255, 255, 0.1) 0px, 
+    rgba(255, 255, 255, 0.1) 2px, 
+    transparent 2px, 
+    transparent 10px
+  );
+}
+
+
+/* ☀️ Left Panel */
+.solar-panel.left {
+  left: -25px;
+  transform: translateX(-50%) rotateX(30deg);
+}
+
+/* ☀️ Right Panel */
+.solar-panel.right {
+  right: -105px;
+  transform: translateX(-50%) rotateX(30deg);
+}
+
+/* 🚀 Satellite Rotation Animation */
+@keyframes rotateSatellite {
+  from {
+    transform: rotateY(0deg) rotateX(15deg);
+  }
+  to {
+    transform: rotateY(360deg) rotateX(15deg);
+  }
+}
+
+
+
+
+/* 🚀 Satellite Rotation Animation */
+@keyframes rotateSatellite {
+  from {
+    transform: rotateY(0deg) rotateX(10deg) rotateZ(45deg);
+  }
+  to {
+    transform: rotateY(360deg) rotateX(10deg) rotateZ(45deg);
+  }
+}
+
+
+
+/* 🌌 Deep Space Background */
+.welcome-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: start;
+  padding-top: 15rem;
+  background: radial-gradient(circle at center, rgba(15, 15, 15, 0.7) 10%, rgba(0, 0, 0, 1) 90%);
+  color: white;
+  font-size: 1.25rem;
+  font-weight: bold;
+  text-align: center;
+  transition: opacity 0.3s ease-in-out;
+  animation: fadeIn 1.5s ease-in-out;
+  overflow: hidden;
+}
+
+/* 🌠 Sparse Twinkling Teal Stars */
+.welcome-screen::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    radial-gradient(rgba(0, 255, 255, 0.3) 1.5px, transparent 1px),
+    radial-gradient(rgba(0, 255, 255, 0.2) 2px, transparent 1px);
+  background-size: 250px 250px, 400px 400px;
+  background-position: 20% 10%, 80% 60%;
+  opacity: 0.15;
+  animation: twinkleStars 8s infinite alternate;
+  pointer-events: none;
+}
+
+/* ✨ Teal Stars Twinkle Slowly */
+@keyframes twinkleStars {
+  0% {
+    opacity: 0.1;
+    transform: translateY(0px);
+  }
+  100% {
+    opacity: 0.25;
+    transform: translateY(-2px);
+  }
+}
+
+/* 🌌 Subtle Fade-In Effect */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ✨ Pulsing Glow Animation for the Ball */
+@keyframes pulseGlow {
+  from {
+    box-shadow: 0 0 10px rgba(0, 255, 255, 1), 0 0 15px rgba(0, 255, 255, 0.6);
+  }
+  to {
+    box-shadow: 0 0 15px rgba(0, 255, 255, 1), 0 0 25px rgba(0, 255, 255, 0.8);
+  }
+}

@@ -15,13 +15,23 @@
   "dependencies": {
     "@mui/icons-material": "^6.4.2",
     "@mui/material": "^6.4.2",
+    "@radix-ui/react-select": "^2.1.6",
+    "@react-three/drei": "^10.0.4",
+    "@react-three/fiber": "^9.1.0",
     "axios": "^1.7.9",
+    "class-variance-authority": "^0.7.1",
+    "d3": "^7.9.0",
+    "framer-motion": "^12.4.10",
     "lodash": "^4.17.21",
     "react": "^18.3.1",
+    "react-countup": "^6.5.3",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.1.5",
+    "react-type-animation": "^3.2.0",
     "recharts": "^2.15.1",
+    "regl": "^2.1.1",
     "satellite.js": "^5.0.0",
+    "tailwind-variants": "^0.3.1",
     "three": "^0.173.0"
   },
   "devDependencies": {

@@ -279,7 +279,7 @@ def parse_tle_line1(tle_line1):
         ephemeris_type = int(tle_line1[62:63].strip())  # Extract Ephemeris Type
         return norad_number, intl_designator, ephemeris_type
     except Exception as e:
-        print(f"❌ Error parsing TLE Line 1: {e}")
+        #print(f"❌ Error parsing TLE Line 1: {e}")
         return None, None, None
 
 
@@ -317,7 +317,7 @@ def compute_orbital_params(name, tle_line1, tle_line2):
     """
     try:
         if not tle_line1 or not tle_line2:
-            print(f"⚠️ Skipping {name}: Missing TLE data")
+            #print(f"⚠️ Skipping {name}: Missing TLE data")
             return None
 
         satrec = Satrec.twoline2rv(tle_line1, tle_line2, WGS72)
@@ -327,7 +327,7 @@ def compute_orbital_params(name, tle_line1, tle_line2):
         epoch = extract_epoch(tle_line1)
 
         if None in [norad_number, mean_motion, epoch]:
-            print(f"⚠️ Skipping {name} (NORAD {norad_number}): Invalid TLE data.")
+            #print(f"⚠️ Skipping {name} (NORAD {norad_number}): Invalid TLE data.")
             return None
 
         # Convert epoch to Julian Date
@@ -383,7 +383,7 @@ def compute_orbital_params(name, tle_line1, tle_line2):
         flight_path_angle = math.atan((eccentricity * math.sin(true_anomaly)) / (1 + eccentricity * math.cos(true_anomaly)))  
         
         if vx is None or vy is None or vz is None:
-            print(f"❌ [ERROR] Missing velocity for {name} (NORAD {norad_number})")
+            #print(f"❌ [ERROR] Missing velocity for {name} (NORAD {norad_number})")
             return None
 
 
@@ -424,7 +424,7 @@ def compute_orbital_params(name, tle_line1, tle_line2):
         }
 
     except Exception as e:
-        print(f"❌ Error: {e}")
+        #print(f"❌ Error: {e}")
         traceback.print_exc()
         return None
 
