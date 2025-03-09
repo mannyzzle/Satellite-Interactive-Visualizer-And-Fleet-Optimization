@@ -1,8 +1,8 @@
 name: Generate Satellite Infographics
 
 on:
-  schedule:
-    - cron: "50 14 * * *"  # ✅ Runs every day at 13:50 UTC
+  #schedule:
+    #- cron: "50 14 * * *"  # ✅ Runs every day at 13:50 UTC
   workflow_dispatch:
 
 jobs:
