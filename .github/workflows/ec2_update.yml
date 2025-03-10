@@ -1,4 +1,5 @@
-name: Deploy to AWS EC2
+name: Deploy to AWS S3 & EC2 via SSM
+
 on:
   push:
     branches:
@@ -11,8 +12,21 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Deploy to AWS EC2
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+
+      - name: Upload Code to S3
         run: |
-          echo "${{ secrets.EC2_PRIVATE_KEY }}" > private_key.pem
-          chmod 400 private_key.pem
-          rsync -avz -e "ssh -i private_key.pem -o StrictHostKeyChecking=no" ./ ec2-user@3.12.74.152:~/Satellite-Interactive-Visualizer-And-Fleet-Optimization/
+          aws s3 sync . s3://satellite-deploy-bucket-1741650405/Satellite-Interactive-Visualizer-And-Fleet-Optimization/ --delete
+
+      - name: Deploy to EC2 via SSM
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets Key=instanceIds,Values=i-00c9fcbd5c444d78a \
+            --parameters 'commands=["aws s3 sync s3://satellite-deploy-bucket-1741650405/Satellite-Interactive-Visualizer-And-Fleet-Optimization/ ~/Satellite-Interactive-Visualizer-And-Fleet-Optimization/ --delete", "bash ~/Satellite-Interactive-Visualizer-And-Fleet-Optimization/deploy.sh"]' \
+            --region us-east-2
