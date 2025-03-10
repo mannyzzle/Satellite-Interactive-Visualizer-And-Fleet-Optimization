@@ -1,0 +1,18 @@
+name: Deploy to AWS EC2
+on:
+  push:
+    branches:
+      - main  # Runs when you push to main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to AWS EC2
+        run: |
+          echo "${{ secrets.EC2_PRIVATE_KEY }}" > private_key.pem
+          chmod 400 private_key.pem
+          rsync -avz -e "ssh -i private_key.pem -o StrictHostKeyChecking=no" ./ ec2-user@3.12.74.152:~/Satellite-Interactive-Visualizer-And-Fleet-Optimization/
