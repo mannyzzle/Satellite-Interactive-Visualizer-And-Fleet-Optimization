@@ -120,20 +120,11 @@ def fetch_tle_data(session, existing_norads):
         decay_date = parse_datetime(sat.get("DECAY_DATE"))
         if decay_date is not None and decay_date.tzinfo is None:
             decay_date = decay_date.replace(tzinfo=timezone.utc)
-
         if ((decay_date is not None and decay_date < now - timedelta(days=7))):
             continue
 
 
 
-        epoch = sat.get("EPOCH")
-        if isinstance(epoch, str):
-            epoch = parse_datetime(epoch)
-        if epoch is not None and epoch.tzinfo is None:
-            epoch = epoch.replace(tzinfo=timezone.utc) 
-                
-        if (epoch is None or epoch < now - timedelta(days=730) or epoch > now):
-            continue
 
         sat["computed_params"] = compute_orbital_params(
             sat.get("OBJECT_NAME", "Unknown"),
@@ -150,8 +141,6 @@ def fetch_tle_data(session, existing_norads):
 
 
 
-from datetime import datetime, timezone
-
 def classify_satellite_activity(orbit_type, epoch, perigee):
     """
     Determines if a satellite is Active, Inactive, or Debris based on industry-defined standards.
@@ -167,18 +156,15 @@ def classify_satellite_activity(orbit_type, epoch, perigee):
 
     # 🛰️ **LEO Satellites**
     if orbit_type == "LEO":
-        if days_since_epoch > 30:
-            return "Skip"  # ❌ Skip (Too old for tracking)
-        elif days_since_epoch > 7:
+        if days_since_epoch > 7:
             return "Inactive"
         else:
             return "Active"
 
     # 🛰️ **MEO Satellites**
     if orbit_type == "MEO":
-        if days_since_epoch > 180:  
-            return "Skip"  # ❌ Skip (Older than 6 months)
-        elif days_since_epoch > 30:
+    
+        if days_since_epoch > 30:
             return "Inactive"
         else:
             return "Active"
@@ -186,25 +172,19 @@ def classify_satellite_activity(orbit_type, epoch, perigee):
     # 🛰️ **HEO Satellites**
     if orbit_type == "HEO":
         if perigee is not None and perigee < 2000:
-            if days_since_epoch > 365:
-                return "Skip"  # ❌ Skip (Older than 1 year)
-            elif days_since_epoch > 30:
+            if days_since_epoch > 30:
                 return "Inactive"
             else:
                 return "Active"
         elif perigee is not None and perigee >= 2000:
-            if days_since_epoch > 365:
-                return "Skip"
-            elif days_since_epoch > 90:
+            if days_since_epoch > 90:
                 return "Inactive"
             else:
                 return "Active"
 
     # 🛰️ **GEO Satellites**
     if orbit_type == "GEO":
-        if days_since_epoch > 730:
-            return "Skip"  # ❌ Skip (Older than 2 years)
-        elif days_since_epoch > 180:
+        if days_since_epoch > 180:
             return "Inactive"
         else:
             return "Active"
@@ -222,15 +202,17 @@ def filter_satellites(satellites, existing_norads):
     - Store additional metadata fields
     - Prevent duplicates (NORADs)
     - Ignore satellites with NaN lat/lon
+    - Return two lists: active satellites and inactive satellites
     """
     filtered_satellites = []
+    inactive_satellites = []
     existing_norads_set = set(existing_norads)
     seen_norads = set()  # ✅ Track added NORADs
 
     for sat in satellites:
         try:
             norad_number = int(sat.get("NORAD_CAT_ID", -1))
-            metadata = sat  
+            metadata = sat
 
             # 🚀 **Skip if NORAD already processed**
             if norad_number in seen_norads:
@@ -242,12 +224,11 @@ def filter_satellites(satellites, existing_norads):
             computed_params = sat["computed_params"]  # ✅ Maintain the reference
 
             # ✅ Ensure computed_params exists and contains valid lat/lon
-            if not computed_params or computed_params.get("latitude") is None or computed_params.get("longitude") is None or computed_params.get("altitude_km") is None:
+            if not computed_params or computed_params.get("latitude") is None \
+               or computed_params.get("longitude") is None or computed_params.get("altitude_km") is None:
                 continue
- 
 
             decay_date = parse_datetime(metadata.get("DECAY_DATE"))
-
             if decay_date is not None and decay_date.tzinfo is None:
                 decay_date = decay_date.replace(tzinfo=timezone.utc)  # ✅ Ensure UTC timezone
 
@@ -255,11 +236,11 @@ def filter_satellites(satellites, existing_norads):
             orbit_type = computed_params.get("orbit_type")
             latitude = computed_params.get("latitude")
             longitude = computed_params.get("longitude")
-            perigee = computed_params.get("perigee")  
+            perigee = computed_params.get("perigee")
             epoch = computed_params.get("epoch")
 
             if norad_number is None:
-                continue  
+                continue
 
             if isinstance(epoch, str):
                 epoch = parse_datetime(epoch)
@@ -267,31 +248,23 @@ def filter_satellites(satellites, existing_norads):
             if epoch is not None and epoch.tzinfo is None:
                 epoch = epoch.replace(tzinfo=timezone.utc)  # ✅ Ensure UTC timezone
 
-
             now = datetime.utcnow().replace(tzinfo=timezone.utc)
 
-
-            # ✅ **Classify activity (Active, Inactive, Debris, or Skip)**
+            # ✅ **Classify activity (Active, Inactive, Debris)**
             activity_status = classify_satellite_activity(orbit_type, epoch, perigee)
 
-
-            # 🚀 **Skip any satellites that exceed the thresholds**
-            if activity_status == "Skip":
-                
-                continue  # ✅ Completely skip this satellite
-
-
+            # If satellite is inactive, place it into the separate list and do not
+            # include it in the primary filtered list.
+            if activity_status == "Inactive":
+                continue
 
             # 🚀 **Skip satellites with invalid lat/lon or unrealistic parameters**
-            if ((decay_date is not None and decay_date < now - timedelta(days=7)) 
+            if ((decay_date is not None and decay_date < now - timedelta(days=7))
                 or (latitude in ["NaN", None] or longitude in ["NaN", None] or altitude_km in ["NaN", None])
                 or (altitude_km is None or altitude_km < 80)):  # Invalid altitude
-                continue  # ✅ Skip this satellite
+                continue  # ✅ Skip entirely
 
-
-
-
-            # ✅ **Prepare satellite data for insertion**
+            # ✅ **Prepare satellite data for insertion (active satellites)**
             sat_data = {
                 "norad_number": norad_number,
                 "name": metadata.get("OBJECT_NAME", "Unknown"),
@@ -300,27 +273,21 @@ def filter_satellites(satellites, existing_norads):
                 "object_type": metadata.get("OBJECT_TYPE", "Unknown"),
                 "launch_date": metadata.get("LAUNCH_DATE") if metadata.get("LAUNCH_DATE") != "Unknown" else None,
                 "launch_site": metadata.get("SITE") if metadata.get("SITE") != "Unknown" else None,
-                "decay_date": decay_date,  # ✅ Now a datetime object
+                "decay_date": decay_date,
                 "rcs": metadata.get("RCS_SIZE") if metadata.get("RCS_SIZE") != "Unknown" else None,
                 "country": metadata.get("COUNTRY_CODE", "Unknown"),
                 **computed_params,  # ✅ Add all computed orbital parameters
                 "purpose": infer_purpose(metadata) or "Unknown",
-                "active_status": activity_status  # ✅ Classification added
+                "active_status": activity_status
             }
 
-
-                        
-
-            # ✅ Add to filtered satellites & prevent future duplicates
             filtered_satellites.append(sat_data)
             seen_norads.add(norad_number)
 
         except Exception as e:
             continue
 
-    print(f"✅ Returning {len(filtered_satellites)} satellites (filtered for active and valid lat/lon).")
-    return filtered_satellites
-
-
+    print(f"✅ Returning {len(filtered_satellites)} active satellites and {len(inactive_satellites)} inactive satellites.")
+    return filtered_satellites, inactive_satellites
 
 

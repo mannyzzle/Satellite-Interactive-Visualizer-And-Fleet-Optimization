@@ -29,55 +29,102 @@ EARTH_RADIUS_KM = 6371
 
 
 
+
 def clean_old_norads():
     """
-    Deletes NORAD numbers from the database that no longer meet the criteria based on orbit type and decay date.
+    Moves outdated satellites from `satellites` to `satellites_inactive`,
+    then deletes them from `satellites`.
     """
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    print("🧹 Cleaning outdated NORADs from the database...")
+    print("🧹 Moving and cleaning outdated NORADs from the 'satellites' table...")
 
-    
-    delete_query =  """
-    DELETE FROM satellites
-        
-    WHERE 
-        -- ❌ **Objects that have already decayed (beyond 7-day threshold)**
-        (decay_date IS NOT NULL AND decay_date < NOW() - INTERVAL '7 days')
-
-        -- ❌ **LEO satellites with old TLE (> 7 days tracking)**
-        OR (orbit_type = 'LEO' AND (epoch IS NULL OR epoch < NOW() - INTERVAL '30 days'))
-
-        -- ❌ **MEO satellites with old TLE (> 30 days tracking)**
-        OR (orbit_type = 'MEO' AND (epoch IS NULL OR epoch < NOW() - INTERVAL '180 days'))
-
-        OR (orbit_type = 'GEO' AND (epoch IS NULL OR epoch < NOW() - INTERVAL '730 days'))
-
-        -- ❌ **HEO satellites with different epoch limits**
-        OR (
-            orbit_type = 'HEO' AND (
-                (perigee IS NOT NULL AND perigee < 2000 AND (epoch IS NULL OR epoch < NOW() - INTERVAL '30 days'))  -- 🚀 HEO Perigee < 2000 km → Max 30 days old
-                OR
-                (perigee IS NOT NULL AND perigee >= 2000 AND (epoch IS NULL OR epoch < NOW() - INTERVAL '365 days'))  -- 🚀 HEO Perigee > 2000 km → Max 3 months old
-            )
+    # 1) Insert matching rows into satellites_inactive,
+    #    ignoring duplicates (ON CONFLICT DO NOTHING) if norad_number is the PK
+    insert_inactive_query = """
+        INSERT INTO satellites_inactive (
+            norad_number, name, tle_line1, tle_line2, epoch,
+            inclination, eccentricity, mean_motion, raan, arg_perigee,
+            velocity, latitude, longitude, orbit_type, period,
+            perigee, apogee, semi_major_axis, bstar, rev_num,
+            ephemeris_type, object_type, launch_date, launch_site,
+            decay_date, rcs, purpose, country, altitude_km,
+            x, y, z, vx, vy, vz,
+            mean_anomaly, eccentric_anomaly, true_anomaly, argument_of_latitude,
+            specific_angular_momentum, radial_distance, flight_path_angle,
+            active_status
         )
+        SELECT
+            norad_number, name, tle_line1, tle_line2, epoch,
+            inclination, eccentricity, mean_motion, raan, arg_perigee,
+            velocity, latitude, longitude, orbit_type, period,
+            perigee, apogee, semi_major_axis, bstar, rev_num,
+            ephemeris_type, object_type, launch_date, launch_site,
+            decay_date, rcs, purpose, country, altitude_km,
+            x, y, z, vx, vy, vz,
+            mean_anomaly, eccentric_anomaly, true_anomaly, argument_of_latitude,
+            specific_angular_momentum, radial_distance, flight_path_angle,
+            -- You can override active_status to 'Inactive' if you prefer
+            active_status
+        FROM satellites
+        WHERE 
+            -- ❌ **Objects that have already decayed (beyond 7-day threshold)**
+            (decay_date IS NOT NULL AND decay_date < NOW() - INTERVAL '7 days')
 
-        -- ❌ **Invalid altitude handling & old TLE check**
-        OR (altitude_km IS NULL OR altitude_km < 80)
+            -- ❌ **LEO satellites with old TLE (> 7 days tracking)**
+            OR (orbit_type = 'LEO' AND (epoch IS NULL OR epoch < NOW() - INTERVAL '7 days'))
 
+            -- ❌ **MEO satellites with old TLE (> 30 days tracking)**
+            OR (orbit_type = 'MEO' AND (epoch IS NULL OR epoch < NOW() - INTERVAL '30 days'))
 
-            """
+            -- ❌ **HEO satellites with different epoch limits**
+            OR (
+                orbit_type = 'HEO' AND (
+                    (perigee IS NOT NULL AND perigee < 2000 AND (epoch IS NULL OR epoch < NOW() - INTERVAL '30 days'))  -- 🚀 HEO Perigee < 2000 km → Max 30 days old
+                    OR
+                    (perigee IS NOT NULL AND perigee >= 2000 AND (epoch IS NULL OR epoch < NOW() - INTERVAL '90 days'))  -- 🚀 HEO Perigee > 2000 km → Max 3 months old
+                )
+            )
 
+            OR (orbit_type = 'GEO' AND (epoch IS NULL OR epoch < NOW() - INTERVAL '180 days'))
+
+            -- ❌ **Invalid altitude handling & old TLE check**
+            OR (altitude_km IS NULL OR altitude_km < 80)
+
+        ON CONFLICT (norad_number) DO NOTHING;  -- Avoid duplicate errors
+    """
+    cursor.execute(insert_inactive_query)
+
+    # 2) Delete the same rows from satellites
+    delete_query = """
+        DELETE FROM satellites
+        WHERE
+            (decay_date IS NOT NULL AND decay_date < NOW() - INTERVAL '7 days')
+            OR (orbit_type = 'LEO' AND (epoch IS NULL OR epoch < NOW() - INTERVAL '7 days'))
+            OR (orbit_type = 'MEO' AND (epoch IS NULL OR epoch < NOW() - INTERVAL '30 days'))
+            OR (
+                orbit_type = 'HEO' AND (
+                    (perigee IS NOT NULL AND perigee < 2000 AND (epoch IS NULL OR epoch < NOW() - INTERVAL '30 days'))  -- 🚀 HEO Perigee < 2000 km → Max 30 days old
+                    OR
+                    (perigee IS NOT NULL AND perigee >= 2000 AND (epoch IS NULL OR epoch < NOW() - INTERVAL '90 days'))  -- 🚀 HEO Perigee > 2000 km → Max 3 months old
+                )
+            )
+            OR (orbit_type = 'GEO' AND (epoch IS NULL OR epoch < NOW() - INTERVAL '180 days'))
+            OR (altitude_km IS NULL OR altitude_km < 80)
+    """
     cursor.execute(delete_query)
     conn.commit()
-    
+
     deleted_rows = cursor.rowcount
-    print(f"✅ Deleted {deleted_rows} outdated NORADs.")
+    print(f"✅ Moved and deleted {deleted_rows} outdated NORADs from 'satellites'.")
 
     cursor.close()
     conn.close()
+
+
+
 
 
 
@@ -348,71 +395,85 @@ def compute_accuracy(sat):
             None, None, None, None, None, None, None, None, None, -1 )  # ❌ **Returns exactly 20 values**
 
 
+
+
+
+
+
 def update_satellite_data():
     """
-    Efficiently update and insert satellite data using PostgreSQL COPY + UPSERT with batch processing.
-    Also stores historical TLEs for time-series analysis and filters invalid entries.
+    Efficiently update and insert satellite data using two separate tables:
+    - 'satellites' for active satellites, with SGP4-based computations
+    - 'satellites_inactive' for inactive satellites (skip SGP4)
+    Also stores historical TLEs for time-series analysis, if desired.
     """
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    existing_norads = set(get_existing_norad_numbers())  # ✅ Get existing NORADs
-    existing_names = set(get_existing_satellite_names()) # ✅ Get existing names
+    existing_norads = set(get_existing_norad_numbers())
+    existing_names = set(get_existing_satellite_names())
 
     session = get_spacetrack_session()
     if not session:
         print("❌ Failed to authenticate with Space-Track API. Exiting.")
         return
 
-    all_satellites = fetch_tle_data(session, existing_norads)
-    if not all_satellites:
-        print("⚠️ No new data to process.")
-        return
+    # 1) Fetch all TLE data
+    active_sats, inactive_sats = fetch_tle_data(session, existing_norads)
+    
 
+    print(f"📡 Total Active satellites fetched from Space-Track: {len(active_sats)}")
+    print(f"📡 Total Inactive satellites fetched from Space-Track: {len(inactive_sats)}")
+
+    
+
+    # 3) Prepare sets for batch processing
     batch_existing_norads = set()
     batch_existing_names = set(existing_names)
-    batch = []
+    batch_active = []     # Will hold active satellites
+    batch_inactive = []   # Will hold inactive satellites
     skipped_norads = []
     historical_tles = []
-
-    print(f"📡 Processing {len(all_satellites)} satellites for database update...")
 
     # Determine if we are in a TTY (interactive) environment
     is_tty = sys.stdout.isatty()
 
+    # ----------------------------------------------------------------
+    # PROCESS **ACTIVE** SATELLITES
+    # ----------------------------------------------------------------
+    print(f"🛰️ Processing {len(active_sats)} ACTIVE satellites with SGP4...")
+
+    # We only run ThreadPoolExecutor for the active satellites
     with ThreadPoolExecutor(max_workers=8) as executor:
-        # We wrap the zip(...) in tqdm to track progress
-        # miniters=100 updates the progress bar every 100 items
-        # mininterval=1.0 updates at least every 1 second in a TTY
-        # disable=not is_tty hides the bar if no TTY (cron logs)
         for sat, (accuracy, lat, lon, error_km, altitude_km, velocity,
                   mean_anomaly, eccentric_anomaly, true_anomaly,
                   argument_of_latitude, specific_angular_momentum, radial_distance,
                   flight_path_angle, predicted_x, predicted_y, predicted_z,
                   predicted_vx, predicted_vy, predicted_vz, error_code) in tqdm(
-            zip(all_satellites, executor.map(compute_accuracy, all_satellites)),
-            total=len(all_satellites),
-            desc="Computing accuracy",
+            zip(active_sats, executor.map(compute_accuracy, active_sats)),
+            total=len(active_sats),
+            desc="Computing accuracy (ACTIVE)",
             unit="sat",
-            miniters=100,
+            miniters=50,
             mininterval=1.0,
             disable=not is_tty
         ):
             norad_number = sat.get("norad_number")
-            if norad_number is None:
+            if not norad_number:
                 skipped_norads.append(f"{sat['name']} (❌ Missing NORAD)")
                 continue
 
+            # If SGP4 had an error (error_code != 0), skip or handle differently
             if error_code != 0:
-                skipped_norads.append(f"{sat['name']} (❌ ERROR CODE PREDICTION)")
-                # continue
+                skipped_norads.append(f"{sat['name']} (❌ SGP4 Error Code)")
+                # continue  # skip if you don't want them in the DB
 
             if norad_number in batch_existing_norads:
                 skipped_norads.append(f"{sat['name']} (NORAD {norad_number}) - ❌ Duplicate in batch.")
                 continue
 
-            # Ensure unique name
+            # Ensure unique satellite name in this batch
             original_name = sat["name"]
             name = original_name
             suffix = 1
@@ -422,47 +483,94 @@ def update_satellite_data():
             batch_existing_names.add(name)
             sat["name"] = name
 
-            # Mark TLE for historical storage
+            # Collect TLE for historical storage
             historical_tles.append((
-                norad_number, sat["epoch"], sat["tle_line1"], sat["tle_line2"], datetime.now(timezone.utc)
+                norad_number,
+                sat["epoch"],
+                sat["tle_line1"],
+                sat["tle_line2"],
+                datetime.now(timezone.utc)
             ))
+
+            # Mark them "seen" so we don't insert duplicates in the same run
             batch_existing_norads.add(norad_number)
 
-            # Fill computed values
-            sat["accuracy_percentage"] = accuracy
-            sat["predicted_latitude"] = lat
-            sat["predicted_longitude"] = lon
-            sat["error_km"] = error_km
-            sat["predicted_altitude_km"] = altitude_km
-            sat["predicted_velocity"] = velocity
+            # Fill in the predicted/accuracy columns
+            #sat["accuracy_percentage"] = accuracy
+            #sat["predicted_latitude"] = lat
+            #sat["predicted_longitude"] = lon
+            #sat["error_km"] = error_km
+            #sat["predicted_altitude_km"] = altitude_km
+            #sat["predicted_velocity"] = velocity
+            #sat["predicted_x"] = predicted_x
+            #sat["predicted_y"] = predicted_y
+            #sat["predicted_z"] = predicted_z
+            #sat["predicted_vx"] = predicted_vx
+            #sat["predicted_vy"] = predicted_vy
+            #sat["predicted_vz"] = predicted_vz
+            #sat["predicted_mean_anomaly"] = mean_anomaly
+            #sat["predicted_eccentric_anomaly"] = eccentric_anomaly
+            #sat["predicted_true_anomaly"] = true_anomaly
+            #sat["predicted_argument_of_latitude"] = argument_of_latitude
+            #sat["predicted_specific_angular_momentum"] = specific_angular_momentum
+            #sat["predicted_radial_distance"] = radial_distance
+            #sat["predicted_flight_path_angle"] = flight_path_angle
 
-            sat["predicted_x"] = predicted_x
-            sat["predicted_y"] = predicted_y
-            sat["predicted_z"] = predicted_z
-            sat["predicted_vx"] = predicted_vx
-            sat["predicted_vy"] = predicted_vy
-            sat["predicted_vz"] = predicted_vz
-            sat["predicted_mean_anomaly"] = mean_anomaly
-            sat["predicted_eccentric_anomaly"] = eccentric_anomaly
-            sat["predicted_true_anomaly"] = true_anomaly
-            sat["predicted_argument_of_latitude"] = argument_of_latitude
-            sat["predicted_specific_angular_momentum"] = specific_angular_momentum
-            sat["predicted_radial_distance"] = radial_distance
-            sat["predicted_flight_path_angle"] = flight_path_angle
+            batch_active.append(sat)
 
-            # Remove or comment out the print(sat) to avoid spamming logs
-            # If you *really* want a single line debug:
-            # tqdm.write(f"Ingested sat: {sat['norad_number']} - {sat['name']}")
+    # ----------------------------------------------------------------
+    # PROCESS **INACTIVE** SATELLITES (NO SGP4!)
+    # ----------------------------------------------------------------
+    print(f"🛰️ Processing {len(inactive_sats)} INACTIVE satellites (skipping SGP4)...")
+    for sat in tqdm(
+        inactive_sats,
+        desc="Building batch (INACTIVE)",
+        unit="sat",
+        miniters=50,
+        mininterval=1.0,
+        disable=not is_tty
+    ):
+        norad_number = sat.get("norad_number")
+        if not norad_number:
+            skipped_norads.append(f"{sat['name']} (❌ Missing NORAD)")
+            continue
 
-            batch.append(sat)
+        if norad_number in batch_existing_norads:
+            skipped_norads.append(f"{sat['name']} (NORAD {norad_number}) - ❌ Duplicate in batch.")
+            continue
 
-    # Save skipped norads
-    with open("skipped_norads.log", "w") as log_file:
-        log_file.write("\n".join(skipped_norads))
+        # Make the satellite name unique in this batch
+        original_name = sat["name"]
+        name = original_name
+        suffix = 1
+        while name in batch_existing_names:
+            name = f"{original_name} ({suffix})"
+            suffix += 1
+        batch_existing_names.add(name)
+        sat["name"] = name
 
-    # Insert historical TLEs
-    cursor.execute("CREATE TEMP TABLE temp_tle_history AS TABLE satellite_tle_history WITH NO DATA;")
+        
+
+        batch_existing_norads.add(norad_number)
+
+        # For inactive satellites, we do NOT set predicted_x, etc.
+        # but you can fill them with None or skip them altogether
+        # e.g. sat["predicted_altitude_km"] = None
+
+        batch_inactive.append(sat)
+
+    # ----------------------------------------------------------------
+    # 4) WRITE SKIPPED NORADS LOG
+    # ----------------------------------------------------------------
+    if skipped_norads:
+        with open("skipped_norads.log", "w") as log_file:
+            log_file.write("\n".join(skipped_norads))
+
+    # ----------------------------------------------------------------
+    # 5) INSERT HISTORICAL TLES (for both active & inactive)
+    # ----------------------------------------------------------------
     print(f"📜 Inserting {len(historical_tles)} historical TLEs...")
+    cursor.execute("CREATE TEMP TABLE temp_tle_history AS TABLE satellite_tle_history WITH NO DATA;")
     with NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as temp_file:
         csv_writer = csv.writer(temp_file, delimiter=",")
         csv_writer.writerow(["norad_number", "epoch", "tle_line1", "tle_line2", "inserted_at"])
@@ -483,52 +591,70 @@ def update_satellite_data():
     os.remove(temp_file_path)
     conn.commit()
 
-    # Now create CSV + upsert for main satellites table
-    with NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as temp_file:
-        csv_writer = csv.writer(temp_file, delimiter=",")
-        csv_writer.writerow([
-            "name", "tle_line1", "tle_line2", "norad_number", "epoch",
-            "inclination", "eccentricity", "mean_motion", "raan", "arg_perigee",
-            "velocity", "latitude", "longitude", "orbit_type", "period",
-            "perigee", "apogee", "semi_major_axis", "bstar", "rev_num",
-            "ephemeris_type", "object_type", "launch_date", "launch_site",
-            "decay_date", "rcs", "purpose", "country", "altitude_km",
-            "x", "y", "z", "vx", "vy", "vz",
-            "mean_anomaly", "eccentric_anomaly", "true_anomaly", "argument_of_latitude",
-            "specific_angular_momentum", "radial_distance", "flight_path_angle", "active_status"
-        ])
-
-        # We can also wrap this in tqdm, but reduce updates similarly:
-        for sat in tqdm(
-            batch,
-            desc="Writing to CSV",
-            unit="sat",
-            miniters=100,
-            mininterval=1.0,
-            disable=not is_tty
-        ):
+    # ----------------------------------------------------------------
+    # 6) UPSERT ACTIVE SATELLITES
+    # ----------------------------------------------------------------
+    if batch_active:
+        print(f"📤 Preparing {len(batch_active)} active satellites for DB upsert...")
+        with NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as temp_file:
+            csv_writer = csv.writer(temp_file, delimiter=",")
+            # Adjust columns as needed:
             csv_writer.writerow([
-                sat["name"], sat["tle_line1"], sat["tle_line2"], sat["norad_number"], sat["epoch"],
-                sat["inclination"], sat["eccentricity"], sat["mean_motion"], sat["raan"], sat["arg_perigee"],
-                sat["velocity"], sat["latitude"], sat["longitude"], sat.get("orbit_type", "Unknown"), sat.get("period"),
-                sat["perigee"], sat["apogee"], sat["semi_major_axis"], sat["bstar"], sat["rev_num"],
-                sat["ephemeris_type"], sat["object_type"], sat["launch_date"], sat["launch_site"],
-                sat["decay_date"], sat["rcs"], sat["purpose"], sat["country"], sat["altitude_km"],
-                sat["x"], sat["y"], sat["z"], sat["vx"], sat["vy"], sat["vz"],
-                sat["mean_anomaly"], sat["eccentric_anomaly"], sat["true_anomaly"], sat["argument_of_latitude"],
-                sat["specific_angular_momentum"], sat["radial_distance"], sat["flight_path_angle"], sat["active_status"]
+                "name", "tle_line1", "tle_line2", "norad_number", "epoch",
+                "inclination", "eccentricity", "mean_motion", "raan", "arg_perigee",
+                "velocity", "latitude", "longitude", "orbit_type", "period",
+                "perigee", "apogee", "semi_major_axis", "bstar", "rev_num",
+                "ephemeris_type", "object_type", "launch_date", "launch_site",
+                "decay_date", "rcs", "purpose", "country", "altitude_km",
+                "x", "y", "z", "vx", "vy", "vz",
+                "mean_anomaly", "eccentric_anomaly", "true_anomaly", "argument_of_latitude",
+                "specific_angular_momentum", "radial_distance", "flight_path_angle", 
+                "active_status"
+                
             ])
 
-        temp_file_path = temp_file.name
+            for sat in tqdm(batch_active, desc="Writing ACTIVE to CSV", disable=not is_tty):
+                csv_writer.writerow([
+                    sat["name"], sat["tle_line1"], sat["tle_line2"], sat["norad_number"], sat["epoch"],
+                    sat["inclination"], sat["eccentricity"], sat["mean_motion"], sat["raan"], sat["arg_perigee"],
+                    sat["velocity"], sat["latitude"], sat["longitude"], sat.get("orbit_type", "Unknown"), sat.get("period"),
+                    sat["perigee"], sat["apogee"], sat["semi_major_axis"], sat["bstar"], sat["rev_num"],
+                    sat["ephemeris_type"], sat["object_type"], sat["launch_date"], sat["launch_site"],
+                    sat["decay_date"], sat["rcs"], sat["purpose"], sat["country"], sat["altitude_km"],
+                    sat["x"], sat["y"], sat["z"], sat["vx"], sat["vy"], sat["vz"],
+                    sat["mean_anomaly"], sat["eccentric_anomaly"], sat["true_anomaly"], sat["argument_of_latitude"],
+                    sat["specific_angular_momentum"], sat["radial_distance"], sat["flight_path_angle"],
+                    sat["active_status"]
+                ])
+            temp_file_path = temp_file.name
 
-    cursor.execute("DROP TABLE IF EXISTS temp_satellites;")
-    cursor.execute("CREATE UNLOGGED TABLE temp_satellites AS TABLE satellites WITH NO DATA;")
-    cursor.execute("TRUNCATE temp_satellites;")
+        # Load into temp table for active satellites
+        cursor.execute("DROP TABLE IF EXISTS temp_satellites;")
+        cursor.execute("CREATE UNLOGGED TABLE temp_satellites AS TABLE satellites WITH NO DATA;")
+        cursor.execute("TRUNCATE temp_satellites;")
 
-    print("📤 Loading CSV into temp_satellites...")
-    with open(temp_file_path, "r") as temp_file:
-        cursor.copy_expert("""
-            COPY temp_satellites (
+        print("📤 Loading CSV into temp_satellites (ACTIVE)...")
+        with open(temp_file_path, "r") as temp_file:
+            cursor.copy_expert("""
+                COPY temp_satellites (
+                    name, tle_line1, tle_line2, norad_number, epoch,
+                    inclination, eccentricity, mean_motion, raan, arg_perigee,
+                    velocity, latitude, longitude, orbit_type, period,
+                    perigee, apogee, semi_major_axis, bstar, rev_num,
+                    ephemeris_type, object_type, launch_date, launch_site,
+                    decay_date, rcs, purpose, country, altitude_km,
+                    x, y, z, vx, vy, vz,
+                    mean_anomaly, eccentric_anomaly, true_anomaly, argument_of_latitude,
+                    specific_angular_momentum, radial_distance, flight_path_angle, active_status
+                    
+                )
+                FROM STDIN WITH CSV HEADER;
+            """, temp_file)
+        os.remove(temp_file_path)
+
+        print("🔄 Performing UPSERT on 'satellites' table (ACTIVE)...")
+        cursor.execute("""
+            INSERT INTO satellites AS main (
                 name, tle_line1, tle_line2, norad_number, epoch,
                 inclination, eccentricity, mean_motion, raan, arg_perigee,
                 velocity, latitude, longitude, orbit_type, period,
@@ -538,88 +664,216 @@ def update_satellite_data():
                 x, y, z, vx, vy, vz,
                 mean_anomaly, eccentric_anomaly, true_anomaly, argument_of_latitude,
                 specific_angular_momentum, radial_distance, flight_path_angle, active_status
+                
             )
-            FROM STDIN WITH CSV HEADER;
-        """, temp_file)
+            SELECT
+                name, tle_line1, tle_line2, norad_number, epoch,
+                inclination, eccentricity, mean_motion, raan, arg_perigee,
+                velocity, latitude, longitude, orbit_type, period,
+                perigee, apogee, semi_major_axis, bstar, rev_num,
+                ephemeris_type, object_type, launch_date, launch_site,
+                decay_date, rcs, purpose, country, altitude_km,
+                x, y, z, vx, vy, vz,
+                mean_anomaly, eccentric_anomaly, true_anomaly, argument_of_latitude,
+                specific_angular_momentum, radial_distance, flight_path_angle, active_status
+                
+            FROM temp_satellites
+            ON CONFLICT (norad_number) DO UPDATE 
+            SET 
+                -- Example: only update name if main.name is TBA or null
+                name = CASE 
+                    WHEN main.name LIKE 'TBA%' OR main.name IS NULL THEN EXCLUDED.name 
+                    ELSE main.name 
+                END,
+                epoch = EXCLUDED.epoch,
+                tle_line1 = EXCLUDED.tle_line1,
+                tle_line2 = EXCLUDED.tle_line2,
+                inclination = EXCLUDED.inclination,
+                eccentricity = EXCLUDED.eccentricity,
+                mean_motion = EXCLUDED.mean_motion,
+                raan = EXCLUDED.raan,
+                arg_perigee = EXCLUDED.arg_perigee,
+                velocity = EXCLUDED.velocity,
+                latitude = EXCLUDED.latitude,
+                longitude = EXCLUDED.longitude,
+                orbit_type = EXCLUDED.orbit_type,
+                period = EXCLUDED.period,
+                perigee = EXCLUDED.perigee,
+                apogee = EXCLUDED.apogee,
+                semi_major_axis = EXCLUDED.semi_major_axis,
+                bstar = EXCLUDED.bstar,
+                rev_num = EXCLUDED.rev_num,
+                ephemeris_type = EXCLUDED.ephemeris_type,
+                object_type = EXCLUDED.object_type,
+                launch_date = EXCLUDED.launch_date,
+                launch_site = EXCLUDED.launch_site,
+                decay_date = EXCLUDED.decay_date,
+                rcs = EXCLUDED.rcs,
+                purpose = EXCLUDED.purpose,
+                country = EXCLUDED.country,
+                altitude_km = EXCLUDED.altitude_km,
+                x = EXCLUDED.x,
+                y = EXCLUDED.y,
+                z = EXCLUDED.z,
+                vx = EXCLUDED.vx,
+                vy = EXCLUDED.vy,
+                vz = EXCLUDED.vz,
+                mean_anomaly = EXCLUDED.mean_anomaly,
+                eccentric_anomaly = EXCLUDED.eccentric_anomaly,
+                true_anomaly = EXCLUDED.true_anomaly,
+                argument_of_latitude = EXCLUDED.argument_of_latitude,
+                specific_angular_momentum = EXCLUDED.specific_angular_momentum,
+                radial_distance = EXCLUDED.radial_distance,
+                flight_path_angle = EXCLUDED.flight_path_angle,
+                active_status = EXCLUDED.active_status;
+                
+        """)
+        conn.commit()
 
-    print("🔄 Performing UPSERT on satellites...")
-    cursor.execute("""
-        INSERT INTO satellites AS main (
-            name, tle_line1, tle_line2, norad_number, epoch,
-            inclination, eccentricity, mean_motion, raan, arg_perigee,
-            velocity, latitude, longitude, orbit_type, period,
-            perigee, apogee, semi_major_axis, bstar, rev_num,
-            ephemeris_type, object_type, launch_date, launch_site,
-            decay_date, rcs, purpose, country, altitude_km,
-            x, y, z, vx, vy, vz,
-            mean_anomaly, eccentric_anomaly, true_anomaly, argument_of_latitude,
-            specific_angular_momentum, radial_distance, flight_path_angle, active_status
-        )
-        SELECT 
-            name, tle_line1, tle_line2, norad_number, epoch,
-            inclination, eccentricity, mean_motion, raan, arg_perigee,
-            velocity, latitude, longitude, orbit_type, period,
-            perigee, apogee, semi_major_axis, bstar, rev_num,
-            ephemeris_type, object_type, launch_date, launch_site,
-            decay_date, rcs, purpose, country, altitude_km,
-            x, y, z, vx, vy, vz,
-            mean_anomaly, eccentric_anomaly, true_anomaly, argument_of_latitude,
-            specific_angular_momentum, radial_distance, flight_path_angle, active_status
-        FROM temp_satellites
-        ON CONFLICT (norad_number) DO UPDATE 
-        SET 
-            epoch = EXCLUDED.epoch,
-            tle_line1 = EXCLUDED.tle_line1,
-            tle_line2 = EXCLUDED.tle_line2,
-            inclination = EXCLUDED.inclination,
-            eccentricity = EXCLUDED.eccentricity,
-            mean_motion = EXCLUDED.mean_motion,
-            raan = EXCLUDED.raan,
-            arg_perigee = EXCLUDED.arg_perigee,
-            velocity = EXCLUDED.velocity,
-            latitude = EXCLUDED.latitude,
-            longitude = EXCLUDED.longitude,
-            orbit_type = EXCLUDED.orbit_type,
-            period = EXCLUDED.period,
-            perigee = EXCLUDED.perigee,
-            apogee = EXCLUDED.apogee,
-            semi_major_axis = EXCLUDED.semi_major_axis,
-            bstar = EXCLUDED.bstar,
-            rev_num = EXCLUDED.rev_num,
-            ephemeris_type = EXCLUDED.ephemeris_type,
-            object_type = EXCLUDED.object_type,
-            launch_date = EXCLUDED.launch_date,
-            launch_site = EXCLUDED.launch_site,
-            decay_date = EXCLUDED.decay_date,
-            rcs = EXCLUDED.rcs,
-            purpose = EXCLUDED.purpose,
-            country = EXCLUDED.country,
-            altitude_km = EXCLUDED.altitude_km,
-            x = EXCLUDED.x,
-            y = EXCLUDED.y,
-            z = EXCLUDED.z,
-            vx = EXCLUDED.vx,
-            vy = EXCLUDED.vy,
-            vz = EXCLUDED.vz,
-            mean_anomaly = EXCLUDED.mean_anomaly,
-            eccentric_anomaly = EXCLUDED.eccentric_anomaly,
-            true_anomaly = EXCLUDED.true_anomaly,
-            argument_of_latitude = EXCLUDED.argument_of_latitude,
-            specific_angular_momentum = EXCLUDED.specific_angular_momentum,
-            radial_distance = EXCLUDED.radial_distance,
-            flight_path_angle = EXCLUDED.flight_path_angle,
-            active_status = EXCLUDED.active_status;
-    """)
+    # ----------------------------------------------------------------
+    # 7) UPSERT INACTIVE SATELLITES
+    # ----------------------------------------------------------------
+    if batch_inactive:
+        print(f"📤 Preparing {len(batch_inactive)} INACTIVE satellites for DB upsert...")
+        with NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as temp_file:
+            csv_writer = csv.writer(temp_file, delimiter=",")
+            # Adjust columns as needed, typically the same as for active, but
+            # you might skip predicted_* columns if not used:
+            csv_writer.writerow([
+                "name", "tle_line1", "tle_line2", "norad_number", "epoch",
+                "inclination", "eccentricity", "mean_motion", "raan", "arg_perigee",
+                "velocity", "latitude", "longitude", "orbit_type", "period",
+                "perigee", "apogee", "semi_major_axis", "bstar", "rev_num",
+                "ephemeris_type", "object_type", "launch_date", "launch_site",
+                "decay_date", "rcs", "purpose", "country", "altitude_km",
+                "x", "y", "z", "vx", "vy", "vz",
+                "mean_anomaly", "eccentric_anomaly", "true_anomaly", "argument_of_latitude",
+                "specific_angular_momentum", "radial_distance", "flight_path_angle", 
+                "active_status"
+            ])
 
-    conn.commit()
+            for sat in tqdm(batch_inactive, desc="Writing INACTIVE to CSV", disable=not is_tty):
+                csv_writer.writerow([
+                    sat["name"], sat["tle_line1"], sat["tle_line2"], sat["norad_number"], sat["epoch"],
+                    sat["inclination"], sat["eccentricity"], sat["mean_motion"], sat["raan"], sat["arg_perigee"],
+                    sat["velocity"], sat["latitude"], sat["longitude"], sat.get("orbit_type", "Unknown"), sat.get("period"),
+                    sat["perigee"], sat["apogee"], sat["semi_major_axis"], sat["bstar"], sat["rev_num"],
+                    sat["ephemeris_type"], sat["object_type"], sat["launch_date"], sat["launch_site"],
+                    sat["decay_date"], sat["rcs"], sat["purpose"], sat["country"], sat["altitude_km"],
+                    sat["x"], sat["y"], sat["z"], sat["vx"], sat["vy"], sat["vz"],
+                    sat["mean_anomaly"], sat["eccentric_anomaly"], sat["true_anomaly"], sat["argument_of_latitude"],
+                    sat["specific_angular_momentum"], sat["radial_distance"], sat["flight_path_angle"],
+                    sat["active_status"]
+                ])
+            temp_file_path = temp_file.name
+
+        cursor.execute("DROP TABLE IF EXISTS temp_satellites_inactive;")
+        cursor.execute("CREATE UNLOGGED TABLE temp_satellites_inactive AS TABLE satellites_inactive WITH NO DATA;")
+        cursor.execute("TRUNCATE temp_satellites_inactive;")
+
+        print("📤 Loading CSV into temp_satellites_inactive...")
+        with open(temp_file_path, "r") as temp_file:
+            cursor.copy_expert("""
+                COPY temp_satellites_inactive (
+                    name, tle_line1, tle_line2, norad_number, epoch,
+                    inclination, eccentricity, mean_motion, raan, arg_perigee,
+                    velocity, latitude, longitude, orbit_type, period,
+                    perigee, apogee, semi_major_axis, bstar, rev_num,
+                    ephemeris_type, object_type, launch_date, launch_site,
+                    decay_date, rcs, purpose, country, altitude_km,
+                    x, y, z, vx, vy, vz,
+                    mean_anomaly, eccentric_anomaly, true_anomaly, argument_of_latitude,
+                    specific_angular_momentum, radial_distance, flight_path_angle,
+                    active_status
+                )
+                FROM STDIN WITH CSV HEADER;
+            """, temp_file)
+        os.remove(temp_file_path)
+
+        print("🔄 Performing UPSERT on 'satellites_inactive' table...")
+        cursor.execute("""
+            INSERT INTO satellites_inactive AS main_inactive (
+                name, tle_line1, tle_line2, norad_number, epoch,
+                inclination, eccentricity, mean_motion, raan, arg_perigee,
+                velocity, latitude, longitude, orbit_type, period,
+                perigee, apogee, semi_major_axis, bstar, rev_num,
+                ephemeris_type, object_type, launch_date, launch_site,
+                decay_date, rcs, purpose, country, altitude_km,
+                x, y, z, vx, vy, vz,
+                mean_anomaly, eccentric_anomaly, true_anomaly, argument_of_latitude,
+                specific_angular_momentum, radial_distance, flight_path_angle,
+                active_status
+            )
+            SELECT
+                name, tle_line1, tle_line2, norad_number, epoch,
+                inclination, eccentricity, mean_motion, raan, arg_perigee,
+                velocity, latitude, longitude, orbit_type, period,
+                perigee, apogee, semi_major_axis, bstar, rev_num,
+                ephemeris_type, object_type, launch_date, launch_site,
+                decay_date, rcs, purpose, country, altitude_km,
+                x, y, z, vx, vy, vz,
+                mean_anomaly, eccentric_anomaly, true_anomaly, argument_of_latitude,
+                specific_angular_momentum, radial_distance, flight_path_angle,
+                active_status
+            FROM temp_satellites_inactive
+            ON CONFLICT (norad_number) DO UPDATE 
+            SET
+                name = EXCLUDED.name,
+                epoch = EXCLUDED.epoch,
+                tle_line1 = EXCLUDED.tle_line1,
+                tle_line2 = EXCLUDED.tle_line2,
+                inclination = EXCLUDED.inclination,
+                eccentricity = EXCLUDED.eccentricity,
+                mean_motion = EXCLUDED.mean_motion,
+                raan = EXCLUDED.raan,
+                arg_perigee = EXCLUDED.arg_perigee,
+                velocity = EXCLUDED.velocity,
+                latitude = EXCLUDED.latitude,
+                longitude = EXCLUDED.longitude,
+                orbit_type = EXCLUDED.orbit_type,
+                period = EXCLUDED.period,
+                perigee = EXCLUDED.perigee,
+                apogee = EXCLUDED.apogee,
+                semi_major_axis = EXCLUDED.semi_major_axis,
+                bstar = EXCLUDED.bstar,
+                rev_num = EXCLUDED.rev_num,
+                ephemeris_type = EXCLUDED.ephemeris_type,
+                object_type = EXCLUDED.object_type,
+                launch_date = EXCLUDED.launch_date,
+                launch_site = EXCLUDED.launch_site,
+                decay_date = EXCLUDED.decay_date,
+                rcs = EXCLUDED.rcs,
+                purpose = EXCLUDED.purpose,
+                country = EXCLUDED.country,
+                altitude_km = EXCLUDED.altitude_km,
+                x = EXCLUDED.x,
+                y = EXCLUDED.y,
+                z = EXCLUDED.z,
+                vx = EXCLUDED.vx,
+                vy = EXCLUDED.vy,
+                vz = EXCLUDED.vz,
+                mean_anomaly = EXCLUDED.mean_anomaly,
+                eccentric_anomaly = EXCLUDED.eccentric_anomaly,
+                true_anomaly = EXCLUDED.true_anomaly,
+                argument_of_latitude = EXCLUDED.argument_of_latitude,
+                specific_angular_momentum = EXCLUDED.specific_angular_momentum,
+                radial_distance = EXCLUDED.radial_distance,
+                flight_path_angle = EXCLUDED.flight_path_angle,
+                active_status = EXCLUDED.active_status;
+        """)
+        conn.commit()
+
+    # ----------------------------------------------------------------
+    # 8) CLEAN UP
+    # ----------------------------------------------------------------
     cursor.close()
     conn.close()
-    os.remove(temp_file_path)
 
-    print(f"✅ Successfully processed {len(batch)} satellites using COPY + UPSERT.")
-    print(f"✅ Historical TLEs added where epoch changed.")
+    print(f"✅ Successfully processed:")
+    print(f"   - {len(batch_active)} ACTIVE satellites (stored in 'satellites').")
+    print(f"   - {len(batch_inactive)} INACTIVE satellites (stored in 'satellites_inactive').")
+    print(f"✅ Historical TLEs added (total: {len(historical_tles)}).")
     print(f"⚠️ {len(skipped_norads)} satellites were skipped.")
-
 
 if __name__ == "__main__":
     update_satellite_data()

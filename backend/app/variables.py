@@ -310,6 +310,7 @@ def parse_tle_line2(tle_line2):
 
 
 
+
 def compute_orbital_params(name, tle_line1, tle_line2):
     """
     Compute all possible orbital parameters strictly at the TLE epoch 
@@ -385,6 +386,10 @@ def compute_orbital_params(name, tle_line1, tle_line2):
         if vx is None or vy is None or vz is None:
             #print(f"❌ [ERROR] Missing velocity for {name} (NORAD {norad_number})")
             return None
+
+
+
+
 
 
         return {
