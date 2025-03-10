@@ -3,7 +3,8 @@ name: Deploy to AWS S3 & EC2 via SSM
 on:
   push:
     branches:
-      - main  # Runs when you push to main branch
+      - main
+  workflow_dispatch:  # 👈 Allows running manually in GitHub Actions UI
 
 jobs:
   deploy:
