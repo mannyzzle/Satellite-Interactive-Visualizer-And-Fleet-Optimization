@@ -1,10 +1,10 @@
-name: Deploy to AWS S3 & EC2 via SSM
+name: Deploy Backend to AWS S3 & EC2 via SSM
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:  # 👈 Allows running manually in GitHub Actions UI
+  workflow_dispatch:  # 👈 Allows manual trigger from GitHub Actions UI
 
 jobs:
   deploy:
@@ -20,14 +20,14 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-2
 
-      - name: Upload Code to S3
+      - name: Upload Backend Code to S3
         run: |
-          aws s3 sync . s3://satellite-deploy-bucket-1741650405/Satellite-Interactive-Visualizer-And-Fleet-Optimization/ --delete
+          aws s3 sync ./backend s3://satellite-deploy-bucket-1741650405/Satellite-Interactive-Visualizer-And-Fleet-Optimization/backend/ --delete
 
-      - name: Deploy to EC2 via SSM
+      - name: Deploy Backend to EC2 via SSM
         run: |
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets Key=instanceIds,Values=i-00c9fcbd5c444d78a \
-            --parameters 'commands=["aws s3 sync s3://satellite-deploy-bucket-1741650405/Satellite-Interactive-Visualizer-And-Fleet-Optimization/ ~/Satellite-Interactive-Visualizer-And-Fleet-Optimization/ --delete", "bash ~/Satellite-Interactive-Visualizer-And-Fleet-Optimization/deploy.sh"]' \
+            --parameters 'commands=["aws s3 sync s3://satellite-deploy-bucket-1741650405/Satellite-Interactive-Visualizer-And-Fleet-Optimization/backend/ ~/Satellite-Interactive-Visualizer-And-Fleet-Optimization/backend/ --delete", "bash ~/Satellite-Interactive-Visualizer-And-Fleet-Optimization/backend/deploy.sh"]' \
             --region us-east-2
