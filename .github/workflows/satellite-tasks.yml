@@ -2,9 +2,9 @@ name: Satellite Tasks Scheduler
 
 on:
   schedule:
-    - cron: '15 */6 * * *'  # Runs every 6 hours at minute 15
-    - cron: '45 */8 * * *'  # Runs every 8 hours at minute 45
-    - cron: '0 * * * *'  # Runs every hour at minute 0
+    - cron: '15 */6 * * *'  # Runs TLE Processor every 6 hours at minute 15
+    - cron: '45 */8 * * *'  # Runs CDM Processor every 8 hours at minute 45
+    - cron: '0 * * * *'  # Runs Fetch All every hour at minute 0
   workflow_dispatch:  # Allows manual trigger from GitHub UI
 
 env:
@@ -17,30 +17,54 @@ env:
   SPACETRACK_PASS: ${{ secrets.SPACETRACK_PASS }}
 
 jobs:
-  tle_processor:
+  build_image:
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.12.7
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.12.7'
-          cache: 'pip'
-
-      - name: Install dependencies
+      - name: Build Docker Image
         run: |
-          pip install --upgrade pip
-          pip install -r backend/requirements.txt
+          docker build -t satellite_tasks_image -f backend/Updater.Dockerfile .
+
+      - name: Save Docker Image as Artifact
+        run: |
+          docker save -o /tmp/satellite_tasks_image.tar satellite_tasks_image
+
+      - name: Upload Docker Image Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: satellite_tasks_image
+          path: /tmp/satellite_tasks_image.tar
+
+  tle_processor:
+    needs: build_image
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '15 */6 * * *' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Docker Image
+        uses: actions/download-artifact@v4
+        with:
+          name: satellite_tasks_image
+          path: /tmp
+
+      - name: Load Docker Image
+        run: docker load -i /tmp/satellite_tasks_image.tar
 
       - name: Run TLE Processor
         run: |
-          set -e
-          LOG_FILE="backend/app/logs/tle_log.txt"
-          echo "$(date '+[%Y-%m-%d %H:%M:%S]') Running tle_processor" >> "$LOG_FILE"
-          python3 backend/app/tle_processor.py >> "$LOG_FILE" 2>&1
+          docker run --rm \
+            -e DB_HOST=${{ secrets.DB_HOST }} \
+            -e DB_PORT=5432 \
+            -e DB_USER=${{ secrets.DB_USER }} \
+            -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            -e DB_NAME=${{ secrets.DB_NAME }} \
+            -e SPACETRACK_USER=${{ secrets.SPACETRACK_USER }} \
+            -e SPACETRACK_PASS=${{ secrets.SPACETRACK_PASS }} \
+            satellite_tasks_image python3 app/tle_processor.py
 
       - name: Upload Logs
         uses: actions/upload-artifact@v4
@@ -49,29 +73,33 @@ jobs:
           path: backend/app/logs/tle_log.txt
 
   cdm:
+    needs: build_image
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event.schedule == '45 */8 * * *' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.12.7
-        uses: actions/setup-python@v4
+      - name: Download Docker Image
+        uses: actions/download-artifact@v4
         with:
-          python-version: '3.12.7'
-          cache: 'pip'
+          name: satellite_tasks_image
+          path: /tmp
 
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r backend/requirements.txt
+      - name: Load Docker Image
+        run: docker load -i /tmp/satellite_tasks_image.tar
 
-      - name: Run CDM
+      - name: Run CDM Processor
         run: |
-          set -e
-          LOG_FILE="backend/app/logs/cdm_log.txt"
-          echo "$(date '+[%Y-%m-%d %H:%M:%S]') Running cdm" >> "$LOG_FILE"
-          python3 backend/app/cdm.py >> "$LOG_FILE" 2>&1
+          docker run --rm \
+            -e DB_HOST=${{ secrets.DB_HOST }} \
+            -e DB_PORT=5432 \
+            -e DB_USER=${{ secrets.DB_USER }} \
+            -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            -e DB_NAME=${{ secrets.DB_NAME }} \
+            -e SPACETRACK_USER=${{ secrets.SPACETRACK_USER }} \
+            -e SPACETRACK_PASS=${{ secrets.SPACETRACK_PASS }} \
+            satellite_tasks_image python3 app/cdm.py
 
       - name: Upload Logs
         uses: actions/upload-artifact@v4
@@ -80,29 +108,33 @@ jobs:
           path: backend/app/logs/cdm_log.txt
 
   fetch_all:
+    needs: build_image
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event.schedule == '0 * * * *' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.12.7
-        uses: actions/setup-python@v4
+      - name: Download Docker Image
+        uses: actions/download-artifact@v4
         with:
-          python-version: '3.12.7'
-          cache: 'pip'
+          name: satellite_tasks_image
+          path: /tmp
 
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r backend/requirements.txt
+      - name: Load Docker Image
+        run: docker load -i /tmp/satellite_tasks_image.tar
 
       - name: Run Fetch All
         run: |
-          set -e
-          LOG_FILE="backend/app/logs/fetch_all_log.txt"
-          echo "$(date '+[%Y-%m-%d %H:%M:%S]') Running fetch_all" >> "$LOG_FILE"
-          python3 backend/app/omni_low.py fetch_all >> "$LOG_FILE" 2>&1
+          docker run --rm \
+            -e DB_HOST=${{ secrets.DB_HOST }} \
+            -e DB_PORT=5432 \
+            -e DB_USER=${{ secrets.DB_USER }} \
+            -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            -e DB_NAME=${{ secrets.DB_NAME }} \
+            -e SPACETRACK_USER=${{ secrets.SPACETRACK_USER }} \
+            -e SPACETRACK_PASS=${{ secrets.SPACETRACK_PASS }} \
+            satellite_tasks_image python3 app/omni_low.py fetch_all
 
       - name: Upload Logs
         uses: actions/upload-artifact@v4
