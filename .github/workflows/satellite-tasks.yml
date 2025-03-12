@@ -1,0 +1,97 @@
+name: Satellite Tasks Scheduler
+
+on:
+  schedule:
+    - cron: '15 */6 * * *'  # Runs every 6 hours at minute 15
+    - cron: '45 */8 * * *'  # Runs every 8 hours at minute 45
+    - cron: '0 * * * *'  # Runs every hour at minute 0
+  workflow_dispatch:  # Allows manual trigger from GitHub UI
+
+env:
+  DB_HOST: ${{ secrets.DB_HOST }}
+  DB_PORT: 5432
+  DB_USER: ${{ secrets.DB_USER }}
+  DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+  DB_NAME: ${{ secrets.DB_NAME }}
+  SPACETRACK_USER: ${{ secrets.SPACETRACK_USER }}
+  SPACETRACK_PASS: ${{ secrets.SPACETRACK_PASS }}
+  
+
+jobs:
+  tle_processor:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '15 */6 * * *'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: pip install -r backend/app/requirements.txt
+
+      - name: Run TLE Processor
+        run: |
+          echo "$(date '+[%Y-%m-%d %H:%M:%S]') Running tle_processor" >> backend/app/logs/tle_log.txt
+          python3 backend/app/tle_processor.py >> backend/app/logs/tle_log.txt 2>&1
+
+      - name: Upload Logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: tle_logs
+          path: backend/app/logs/tle_log.txt
+
+  cdm:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '45 */8 * * *'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: pip install -r backend/app/requirements.txt
+
+      - name: Run CDM
+        run: |
+          echo "$(date '+[%Y-%m-%d %H:%M:%S]') Running cdm" >> backend/app/logs/cdm_log.txt
+          python3 backend/app/cdm.py >> backend/app/logs/cdm_log.txt 2>&1
+
+      - name: Upload Logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdm_logs
+          path: backend/app/logs/cdm_log.txt
+
+  fetch_all:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 * * * *'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: pip install -r backend/app/requirements.txt
+
+      - name: Run Fetch All
+        run: |
+          echo "$(date '+[%Y-%m-%d %H:%M:%S]') Running fetch_all" >> backend/app/logs/fetch_all_log.txt
+          python3 backend/app/omni_low.py fetch_all >> backend/app/logs/fetch_all_log.txt 2>&1
+
+      - name: Upload Logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: fetch_all_logs
+          path: backend/app/logs/fetch_all_log.txt

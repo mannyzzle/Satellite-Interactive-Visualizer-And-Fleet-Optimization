@@ -1,0 +1,79 @@
+[2025-03-11 13:10:10] Running tle_processor
+WARNING: IERSWarning: failed to download https://datacenter.iers.org/data/latest/finals2000A.all: HTTP Error 404: Not Found [astropy.utils.iers.iers]
+WARNING: Tried to get polar motions for times before IERS data is valid. Defaulting to polar motion from the 50-yr mean for those. This may affect precision at the arcsec level. Please check your astropy.utils.iers.conf.iers_auto_url and point it to a newer version if necessary. [astropy.coordinates.builtin_frames.utils]
+/opt/anaconda3/lib/python3.12/site-packages/erfa/core.py:133: ErfaWarning: ERFA function "dtf2d" yielded 1 of "dubious year (Note 6)"
+  warn(f'ERFA function "{func_name}" yielded {wmsg}', ErfaWarning)
+/opt/anaconda3/lib/python3.12/site-packages/erfa/core.py:133: ErfaWarning: ERFA function "utcut1" yielded 1 of "dubious year (Note 3)"
+  warn(f'ERFA function "{func_name}" yielded {wmsg}', ErfaWarning)
+/Users/mannyzzle/Satellite-Interactive-Visualizer-And-Fleet-Optimization/backend/app/tle_processor.py:207: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  fr = jd_total - jd
+✅ Database connection established successfully!
+✅ Database connection established successfully!
+🧹 Moving and cleaning outdated NORADs from the 'satellites' table...
+✅ Moved and deleted 60 outdated NORADs from 'satellites'.
+✅ Database connection established successfully!
+✅ Found 26733 existing NORAD numbers in the database.
+✅ Database connection established successfully!
+✅ Found 26733 existing satellite names in the database.
+🔍 Login Response Status: 200
+🔍 Login Response Text: ""
+✅ Space-Track login successful.
+📡 Fetching latest TLE data from Space-Track...
+⚠️ Skipping SOLRAD 11A (NORAD: 8748) - Future EPOCH: 2025-03-17 21:34:46.272288+00:00
+⚠️ Skipping SOLRAD 11A/B AKM (NORAD: 8753) - Future EPOCH: 2025-03-15 22:56:05.067744+00:00
+⚠️ Skipping ASTRON (NORAD: 13901) - Future EPOCH: 2025-03-15 17:20:53.942784+00:00
+⚠️ Skipping YZ-1 R/B (NORAD: 41929) - Future EPOCH: 2025-03-14 10:55:19.161696+00:00
+⚠️ Skipping ARIANE 5 R/B (NORAD: 25990) - Future EPOCH: 2025-03-13 02:52:25.999104+00:00
+⚠️ Skipping SL-12 R/B(2) (NORAD: 20413) - Future EPOCH: 2025-03-13 01:59:04.245792+00:00
+⚠️ Skipping XMM (NORAD: 25989) - Future EPOCH: 2025-03-12 15:34:22.438848+00:00
+⚠️ Skipping CXO (NORAD: 25867) - Future EPOCH: 2025-03-12 14:15:08.633088+00:00
+⚠️ Skipping VELA 2 (NORAD: 674) - Future EPOCH: 2025-03-12 14:08:41.152416+00:00
+⚠️ Skipping TITAN 3C TRANSTAGE R/B (NORAD: 3956) - Future EPOCH: 2025-03-12 05:29:01.867776+00:00
+⚠️ Skipping TITAN 3C TRANSTAGE R/B (NORAD: 50000) - Future EPOCH: 2025-03-12 05:27:38.853792+00:00
+⚠️ Skipping CLUSTER II-FM7 (NORAD: 26410) - Future EPOCH: 2025-03-12 02:07:44.542272+00:00
+⚠️ Skipping TITAN 3C TRANSTAGE R/B (NORAD: 2770) - Future EPOCH: 2025-03-11 22:29:57.363936+00:00
+⚠️ [SGP4 Error 3] for JWST (NORAD 50463) at epoch 2021-12-28 00:00:00
+⚠️ [SGP4 Error 6] for COSMOS 2251 DEB (NORAD 35827) at epoch 2014-04-24 15:47:47.975424
+⚠️ [SGP4 Error 6] for COSMOS 2251 DEB (NORAD 36388) at epoch 2013-07-21 08:09:43.820928
+⚠️ [SGP4 Error 6] for ATLAS 5 CENTAUR R/B (NORAD 38754) at epoch 2012-08-30 09:18:54.856224
+⚠️ [SGP4 Error 6] for SL-4 R/B (NORAD 33400) at epoch 2008-10-16 02:06:11.359008
+⚠️ [SGP4 Error 6] for SUITSAT (NORAD 28933) at epoch 2006-09-07 13:30:11.047968
+⚠️ [SGP4 Error 6] for SS-18 DEB (NORAD 25694) at epoch 2002-12-12 08:03:17.363232
+⚠️ [SGP4 Error 6] for SL-6 PLAT (NORAD 27411) at epoch 2002-04-18 18:19:53.114880
+⚠️ [SGP4 Error 6] for SL-12 DEB (NORAD 26797) at epoch 2001-12-20 13:08:51.565920
+⚠️ [SGP4 Error 6] for SL-11 PLAT (NORAD 2659) at epoch 1967-01-25 18:07:14.232576
+⚠️ [SGP4 Error 6] for ATLAS D DEB (NORAD 2283) at epoch 1966-06-21 03:57:32.957856
+⚠️ [SGP4 Error 6] for ATLAS D DEB (NORAD 2279) at epoch 1966-06-20 22:36:54.325152
+✅ Processed TLE data for 61765 satellites.
+✅ Returning 26792 active satellites and 0 inactive satellites.
+📡 Total Active satellites fetched from Space-Track: 26792
+📡 Total Inactive satellites fetched from Space-Track: 0
+🛰️ Processing 26792 ACTIVE satellites with SGP4...
+🛰️ Processing 0 INACTIVE satellites (skipping SGP4)...
+📜 Inserting 26792 historical TLEs...
+📤 Preparing 26792 active satellites for DB upsert...
+📤 Loading CSV into temp_satellites (ACTIVE)...
+🔄 Performing UPSERT on 'satellites' table (ACTIVE)...
+✅ Successfully processed:
+   - 26792 ACTIVE satellites (stored in 'satellites').
+   - 0 INACTIVE satellites (stored in 'satellites_inactive').
+✅ Historical TLEs added (total: 26792).
+⚠️ 28 satellites were skipped.
+WARNING: IERSWarning: failed to download https://datacenter.iers.org/data/latest/finals2000A.all: HTTP Error 404: Not Found [astropy.utils.iers.iers]
+Traceback (most recent call last):
+  File "/Users/mannyzzle/Satellite-Interactive-Visualizer-And-Fleet-Optimization/backend/app/tle_processor.py", line 8, in <module>
+    from tle_fetch import get_spacetrack_session, fetch_tle_data
+  File "/Users/mannyzzle/Satellite-Interactive-Visualizer-And-Fleet-Optimization/backend/app/tle_fetch.py", line 4, in <module>
+    from variables import compute_orbital_params, infer_purpose
+  File "/Users/mannyzzle/Satellite-Interactive-Visualizer-And-Fleet-Optimization/backend/app/variables.py", line 19, in <module>
+    eph = load('de421.bsp')
+          ^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/skyfield/iokit.py", line 193, in __call__
+    path = self._assure(url, filename, reload, backup)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/skyfield/iokit.py", line 214, in _assure
+    download(url, path, self.verbose, backup=backup)
+  File "/opt/anaconda3/lib/python3.12/site-packages/skyfield/iokit.py", line 546, in download
+    fd = os.open(tempname, flags, 0o666)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 30] Read-only file system: 'de421.bsp.download'

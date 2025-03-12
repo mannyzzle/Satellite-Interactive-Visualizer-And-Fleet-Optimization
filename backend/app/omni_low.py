@@ -39,15 +39,16 @@ def download_file(url, filename):
 
 
 
+import datetime
 
 def parse_f107(filepath):
-    """Parse F10.7 flux, sunspots, X-ray flux, and solar flares from NOAA data."""
+    """Parse only relevant F10.7 flux, sunspots, and X-ray flux for AI-enhanced SGP4 modeling."""
     data = []
     with open(filepath, "r") as f:
         for line in f:
             parts = line.split()
             
-            # Ignore headers and malformed lines (ensure at least 9 columns exist)
+            # Ignore headers and malformed lines (ensure at least required columns exist)
             if len(parts) < 9 or not parts[0].isdigit():
                 continue
             
@@ -62,31 +63,17 @@ def parse_f107(filepath):
                 # Extract SESC Sunspot Number
                 sunspot_number = int(parts[4]) if parts[4] != "-999" else None
 
-                # Extract Sunspot Area (in 10⁻⁶ hemispheres)
-                sunspot_area = int(parts[5]) if parts[5] != "-999" else None
+                
 
-                # Extract Number of New Regions
-                new_regions = int(parts[6]) if parts[6] != "-999" else None
-
-                # Extract Mean Magnetic Field (Stanford)
-                mean_field = float(parts[7]) if parts[7] != "-999" else None
-
-                # Extract GOES X-Ray Background Flux (if available, otherwise None)
-                xray_flux = float(parts[8]) if parts[8] != "*" else None
-
-                # Extract Solar Flare Counts (C, M, X-Class)
-                flare_c = int(parts[9]) if parts[9] != "-999" else None
-                flare_m = int(parts[10]) if parts[10] != "-999" else None
-                flare_x = int(parts[11]) if parts[11] != "-999" else None
-
-                # Append parsed data as a tuple
-                data.append((date, f107, sunspot_number, sunspot_area, new_regions, mean_field, xray_flux, flare_c, flare_m, flare_x))
+                # Append only relevant data
+                data.append((date, f107, sunspot_number))
 
             except ValueError:
                 print(f"⚠️ Skipping malformed line: {line}")
                 continue  # Skip bad lines
 
     return data
+
 
 
 
@@ -145,18 +132,24 @@ def parse_dst(filepath):
 
 
 
-
 def parse_solar_wind(file_path):
-    """Parse solar wind data, filtering out invalid values."""
+    """Parse solar wind data, allowing NULL values for density, speed, and temperature but requiring dsflag."""
     with open(file_path, "r") as file:
         data = json.load(file)
 
     clean_data = [
-        (entry["time_tag"], entry["dens"], entry["speed"], entry["temperature"])
+        (
+            entry["time_tag"],  
+            entry.get("dens"),  # Allow NULL if missing
+            entry.get("speed"),  # Allow NULL if missing
+            entry.get("temperature"),  # Allow NULL if missing
+            entry["dsflag"]  # Ensure dsflag is always present
+        )
         for entry in data
-        if entry["dens"] is not None and entry["speed"] is not None and entry["temperature"] is not None
+        if entry.get("dsflag") is not None  # ✅ Filter out entries with NULL dsflag
     ]
     
+
     return clean_data
 
 
@@ -167,7 +160,10 @@ def parse_solar_wind(file_path):
 
 
 def insert_f107(data):
-    """Insert F10.7 solar flux and related solar activity into PostgreSQL."""
+    """
+    Insert F10.7 solar flux, sunspot number, and X-ray flux into PostgreSQL for AI-enhanced SGP4 modeling.
+    Drops irrelevant columns to optimize storage and speed.
+    """
     if not data:
         print("⚠️ No F10.7 data to insert.")
         return
@@ -175,75 +171,94 @@ def insert_f107(data):
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    # ✅ Create optimized table (keeping only relevant columns)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS f107_flux (
             date DATE PRIMARY KEY,
-            f107 FLOAT,
-            sunspot_number INT,
-            sunspot_area INT,
-            new_regions INT,
-            mean_field FLOAT,
-            xray_flux FLOAT,
-            flare_c INT,
-            flare_m INT,
-            flare_x INT
+            f107 FLOAT(6),        -- ✅ Limits precision for efficiency
+            sunspot_number INT   -- ✅ Sunspot activity affects atmospheric drag
+            
         );
     """)
 
-    execute_values(cursor, """
-        INSERT INTO f107_flux (
-            date, f107, sunspot_number, sunspot_area, new_regions, mean_field, xray_flux, flare_c, flare_m, flare_x
-        )
-        VALUES %s
-        ON CONFLICT (date) DO UPDATE SET
-            f107 = EXCLUDED.f107,
-            sunspot_number = EXCLUDED.sunspot_number,
-            sunspot_area = EXCLUDED.sunspot_area,
-            new_regions = EXCLUDED.new_regions,
-            mean_field = EXCLUDED.mean_field,
-            xray_flux = EXCLUDED.xray_flux,
-            flare_c = EXCLUDED.flare_c,
-            flare_m = EXCLUDED.flare_m,
-            flare_x = EXCLUDED.flare_x;
-    """, data)
+    try:
+        # ✅ Insert only necessary columns
+        execute_values(cursor, """
+            INSERT INTO f107_flux (date, f107, sunspot_number)
+            VALUES %s
+            ON CONFLICT (date) DO UPDATE SET
+                f107 = EXCLUDED.f107,
+                sunspot_number = EXCLUDED.sunspot_number;
+        """, data)
 
-    conn.commit()
-    cursor.close()
-    conn.close()
-    print(f"✅ Inserted {len(data)} F10.7 records into DB")
+        conn.commit()
+        print(f"✅ Inserted {len(data)} F10.7 records into DB")
+
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ Database insert failed: {e}")
+
+    finally:
+        cursor.close()
+        conn.close()
 
 
 
 
 
 def insert_geomagnetic(data):
-    """Insert Ap/Kp indices into PostgreSQL."""
+    """
+    Insert Ap/Kp indices into PostgreSQL using the new unpivoted format.
+    Ensures each Kp value corresponds to its 3-hour interval and avoids duplicates.
+    """
+    if not data:
+        print("⚠️ No geomagnetic data to insert.")
+        return
+
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
+    # ✅ Ensure the new table exists (time-based Kp values)
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS geomagnetic_indices (
-            date DATE PRIMARY KEY,
-            ap_index FLOAT,
-            kp1 FLOAT, kp2 FLOAT, kp3 FLOAT, kp4 FLOAT,
-            kp5 FLOAT, kp6 FLOAT, kp7 FLOAT, kp8 FLOAT
+        CREATE TABLE IF NOT EXISTS geomagnetic_kp_index (
+            time TIMESTAMP PRIMARY KEY,
+            original_date DATE NOT NULL,
+            ap_index FLOAT NOT NULL,
+            kp_value FLOAT NOT NULL,
+            kp_interval INT NOT NULL
         );
     """)
-    
+
+    # ✅ Transform data into unpivoted format (convert each daily record into 8 rows)
+    transformed_data = []
+    for row in data:
+        date, ap_index, kp1, kp2, kp3, kp4, kp5, kp6, kp7, kp8 = row
+        
+        # ✅ Convert each Kp value into a separate row with its correct 3-hour timestamp
+        base_time = datetime.datetime.combine(date, datetime.time(0, 0))  # Start of day
+        kp_values = [kp1, kp2, kp3, kp4, kp5, kp6, kp7, kp8]
+
+        for i, kp in enumerate(kp_values, start=1):
+            if kp is not None:  # ✅ Ensure valid values only
+                time = base_time + datetime.timedelta(hours=(i - 1) * 3)
+                transformed_data.append((time, date, ap_index, kp, i))
+
+    # ✅ Insert the transformed data
     execute_values(cursor, """
-        INSERT INTO geomagnetic_indices 
-        (date, ap_index, kp1, kp2, kp3, kp4, kp5, kp6, kp7, kp8)
+        INSERT INTO geomagnetic_kp_index (time, original_date, ap_index, kp_value, kp_interval)
         VALUES %s
-        ON CONFLICT (date) DO UPDATE SET
-        ap_index = EXCLUDED.ap_index,
-        kp1 = EXCLUDED.kp1, kp2 = EXCLUDED.kp2, kp3 = EXCLUDED.kp3, kp4 = EXCLUDED.kp4,
-        kp5 = EXCLUDED.kp5, kp6 = EXCLUDED.kp6, kp7 = EXCLUDED.kp7, kp8 = EXCLUDED.kp8;
-    """, data)
-    
+        ON CONFLICT (time) DO UPDATE SET
+            ap_index = EXCLUDED.ap_index,
+            kp_value = EXCLUDED.kp_value,
+            kp_interval = EXCLUDED.kp_interval;
+    """, transformed_data)
+
     conn.commit()
     cursor.close()
     conn.close()
-    print(f"✅ Inserted {len(data)} Geomagnetic records into DB")
+    print(f"✅ Inserted {len(transformed_data)} geomagnetic records into DB")
+
+
 
 
 
@@ -289,50 +304,316 @@ def insert_dst(data):
 
 
 
-def insert_solar_wind(data):
-    """Insert solar wind data into PostgreSQL while preventing duplicate conflicts."""
-    if not data:
-        print("⚠️ No valid solar wind data to insert.")
-        return
+def insert_solar_wind(solar_wind_data):
+    """Insert Solar Wind and IMF data into PostgreSQL, ensuring timestamps are sequential."""
+
+    # ✅ Fetch IMF Data
+    url = "https://services.swpc.noaa.gov/json/ace/mag/ace_mag_1h.json"
+
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        imf_data = response.json()
+
+        # ✅ Ensure `imf_data` is a list and has values
+        if not isinstance(imf_data, list) or len(imf_data) == 0:
+            print("⚠️ IMF API returned an empty list or invalid format.")
+            imf_data = []
+
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error fetching IMF data: {e}")
+        imf_data = []  # Proceed with only Solar Wind data
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
-        # Ensure the table exists
+        # ✅ Ensure the necessary tables exist
         cursor.execute("""
+            CREATE TABLE IF NOT EXISTS time_series (
+                time TIMESTAMP PRIMARY KEY
+            );
             CREATE TABLE IF NOT EXISTS solar_wind (
                 time TIMESTAMP PRIMARY KEY,
                 density FLOAT,
                 speed FLOAT,
-                temperature FLOAT
+                temperature FLOAT,
+                sw_flag INT,
+                gse_bx FLOAT,
+                gse_by FLOAT,
+                gse_bz FLOAT,
+                gse_lat FLOAT,
+                gse_lon FLOAT,
+                gsm_bx FLOAT,
+                gsm_by FLOAT,
+                gsm_bz FLOAT,
+                gsm_lat FLOAT,
+                gsm_lon FLOAT,
+                bt FLOAT,
+                imf_flag INT,
+                numpts INT
             );
         """)
 
-        # Remove duplicate timestamps before inserting
-        unique_data = {time: (density, speed, temperature) for time, density, speed, temperature in data}
-        cleaned_data = [(time, density, speed, temperature) for time, (density, speed, temperature) in unique_data.items()]
+        # ✅ Generate a time-series table to ensure timestamps exist for ALL data
+        cursor.execute("""
+            INSERT INTO time_series (time)
+            SELECT generate_series(
+                (SELECT MIN(time) FROM solar_wind),  -- ✅ Start from the earliest timestamp
+                (SELECT MAX(time) FROM solar_wind),  -- ✅ Cover up to the most recent timestamp
+                '1 hour'::interval
+            )
+            ON CONFLICT DO NOTHING;
+        """)
 
-        # Insert values safely
-        execute_values(cursor, """
-            INSERT INTO solar_wind (time, density, speed, temperature)
-            VALUES %s
-            ON CONFLICT (time) DO UPDATE SET
-                density = EXCLUDED.density,
-                speed = EXCLUDED.speed,
-                temperature = EXCLUDED.temperature;
-        """, cleaned_data)
+        # ✅ Prepare batch insert for Solar Wind
+        solar_wind_insert = [(time, density, speed, temperature, sw_flag, None, None, None, None, None, None, None, None, None, None, None, None, None) 
+                             for time, density, speed, temperature, sw_flag in solar_wind_data]
 
-        conn.commit()  # Commit only after successful execution
+        # ✅ Prepare batch insert for IMF (ALL FIELDS including `numpts`)
+        imf_insert = [(entry["time_tag"], entry.get("gse_bx"), entry.get("gse_by"), entry.get("gse_bz"), 
+                       entry.get("gse_lat"), entry.get("gse_lon"), entry.get("gsm_bx"), entry.get("gsm_by"), 
+                       entry.get("gsm_bz"), entry.get("gsm_lat"), entry.get("gsm_lon"), entry.get("bt"), 
+                       entry.get("dsflag"), entry.get("numpts"))  # ✅ New field
+                      for entry in imf_data if "time_tag" in entry]
+
+        # ✅ Merge both datasets (ensuring all timestamps exist)
+        merged_data = {t[0]: list(t[1:]) for t in solar_wind_insert}  # Convert Solar Wind list to dict
+        for t, gse_bx, gse_by, gse_bz, gse_lat, gse_lon, gsm_bx, gsm_by, gsm_bz, gsm_lat, gsm_lon, bt, imf_flag, numpts in imf_insert:
+            if t in merged_data:
+                merged_data[t][4] = gse_bx   # gse_bx
+                merged_data[t][5] = gse_by   # gse_by
+                merged_data[t][6] = gse_bz   # gse_bz
+                merged_data[t][7] = gse_lat  # gse_lat
+                merged_data[t][8] = gse_lon  # gse_lon
+                merged_data[t][9] = gsm_bx   # gsm_bx
+                merged_data[t][10] = gsm_by  # gsm_by
+                merged_data[t][11] = gsm_bz  # gsm_bz
+                merged_data[t][12] = gsm_lat # gsm_lat
+                merged_data[t][13] = gsm_lon # gsm_lon
+                merged_data[t][14] = bt      # bt
+                merged_data[t][15] = imf_flag  # imf_flag
+                merged_data[t][16] = numpts  # ✅ numpts
+            else:
+                merged_data[t] = [None, None, None, None, gse_bx, gse_by, gse_bz, gse_lat, gse_lon, gsm_bx, gsm_by, gsm_bz, gsm_lat, gsm_lon, bt, imf_flag, numpts]  # Fill missing Solar Wind data
+
+        # ✅ Convert merged data back to list for batch insert
+        final_insert_data = [(t, *vals) for t, vals in merged_data.items()]
+
+        if final_insert_data:
+            execute_values(cursor, """
+                INSERT INTO solar_wind (time, density, speed, temperature, sw_flag, 
+                                       gse_bx, gse_by, gse_bz, gse_lat, gse_lon, 
+                                       gsm_bx, gsm_by, gsm_bz, gsm_lat, gsm_lon, 
+                                       bt, imf_flag, numpts)
+                VALUES %s
+                ON CONFLICT (time) DO UPDATE SET
+                    density = COALESCE(EXCLUDED.density, solar_wind.density),
+                    speed = COALESCE(EXCLUDED.speed, solar_wind.speed),
+                    temperature = COALESCE(EXCLUDED.temperature, solar_wind.temperature),
+                    sw_flag = COALESCE(EXCLUDED.sw_flag, solar_wind.sw_flag),
+                    gse_bx = COALESCE(EXCLUDED.gse_bx, solar_wind.gse_bx),
+                    gse_by = COALESCE(EXCLUDED.gse_by, solar_wind.gse_by),
+                    gse_bz = COALESCE(EXCLUDED.gse_bz, solar_wind.gse_bz),
+                    gse_lat = COALESCE(EXCLUDED.gse_lat, solar_wind.gse_lat),
+                    gse_lon = COALESCE(EXCLUDED.gse_lon, solar_wind.gse_lon),
+                    gsm_bx = COALESCE(EXCLUDED.gsm_bx, solar_wind.gsm_bx),
+                    gsm_by = COALESCE(EXCLUDED.gsm_by, solar_wind.gsm_by),
+                    gsm_bz = COALESCE(EXCLUDED.gsm_bz, solar_wind.gsm_bz),
+                    gsm_lat = COALESCE(EXCLUDED.gsm_lat, solar_wind.gsm_lat),
+                    gsm_lon = COALESCE(EXCLUDED.gsm_lon, solar_wind.gsm_lon),
+                    bt = COALESCE(EXCLUDED.bt, solar_wind.bt),
+                    imf_flag = COALESCE(EXCLUDED.imf_flag, solar_wind.imf_flag),
+                    numpts = COALESCE(EXCLUDED.numpts, solar_wind.numpts);
+            """, final_insert_data)
+
+        conn.commit()
+        print(f"✅ Inserted/Updated {len(final_insert_data)} Solar Wind & IMF records into DB.")
 
     except psycopg2.Error as e:
         print(f"❌ Database Error: {e}")
-        conn.rollback()  # Rollback on failure
+        conn.rollback()
     finally:
-        cursor.close()  # Ensure cursor is closed properly
-        conn.close()  # Ensure connection is closed properly
+        cursor.close()
+        conn.close()
 
-    print(f"✅ Inserted {len(cleaned_data)} Solar Wind records into DB")
+
+
+
+def merge_and_store_unified_table():
+    """
+    Merge f107_flux, geomagnetic_kp_index, dst_index, and solar_wind into a single unified table.
+    Ensures data alignment on the minimum available timestamp granularity (1-minute).
+    Uses an UPSERT strategy to update records while preserving existing values if new data is missing.
+    """
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # ✅ Ensure the table exists with the correct schema
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS unified_space_weather (
+            epoch TIMESTAMP PRIMARY KEY,
+            dst FLOAT,
+            density FLOAT,
+            speed FLOAT,
+            temperature FLOAT,
+            ap_index FLOAT,
+            kp_value FLOAT,
+            kp_interval INT,
+            f107 FLOAT,
+            sunspot_number INT,
+            sw_flag INT,  
+            gsm_bz FLOAT,  
+            bt FLOAT,  
+            imf_flag INT,
+            gse_bx FLOAT,
+            gse_by FLOAT,
+            gse_bz FLOAT,
+            gsm_bx FLOAT,
+            gsm_by FLOAT,
+            gse_lat FLOAT,
+            gse_lon FLOAT,
+            gsm_lat FLOAT,
+            gsm_lon FLOAT,
+            numpts INT  
+        );
+    """)
+
+    # ✅ Perform the merge operation with an UPSERT
+    merge_query = """
+        WITH time_series AS (
+            -- Ensure `epoch` timestamps are unique
+            SELECT DISTINCT time AS epoch FROM dst_index
+        ),
+        interpolated_solar_wind AS (
+            -- Get only the most recent valid solar wind data per `epoch`
+            SELECT DISTINCT ON (ts.epoch) 
+                ts.epoch, 
+                sw.density, 
+                sw.speed, 
+                sw.temperature, 
+                sw.sw_flag  
+            FROM time_series ts
+            LEFT JOIN solar_wind sw 
+                ON ts.epoch BETWEEN sw.time - INTERVAL '30 minutes' AND sw.time + INTERVAL '30 minutes'
+            ORDER BY ts.epoch, sw.time DESC
+        ),
+        interpolated_geomagnetic AS (
+            -- Get only the most recent valid geomagnetic data per `epoch`
+            SELECT DISTINCT ON (ts.epoch)
+                ts.epoch, 
+                gkp.ap_index, 
+                gkp.kp_value, 
+                gkp.kp_interval
+            FROM time_series ts
+            LEFT JOIN geomagnetic_kp_index gkp 
+                ON ts.epoch BETWEEN gkp.time - INTERVAL '1 hour' AND gkp.time + INTERVAL '1 hour'
+            ORDER BY ts.epoch, gkp.time DESC
+        ),
+        interpolated_f107 AS (
+            -- Get the most recent F10.7 data
+            SELECT DISTINCT ON (ts.epoch)
+                ts.epoch, 
+                f.f107, 
+                f.sunspot_number
+            FROM time_series ts
+            LEFT JOIN f107_flux f 
+                ON ts.epoch::date = f.date
+            ORDER BY ts.epoch, f.date DESC
+        ),
+        interpolated_imf AS (
+            -- Get the most recent valid IMF data
+            SELECT DISTINCT ON (ts.epoch)
+                ts.epoch, 
+                imf.gsm_bz, 
+                imf.bt, 
+                imf.imf_flag,
+                imf.gse_bx, imf.gse_by, imf.gse_bz, 
+                imf.gsm_bx, imf.gsm_by, 
+                imf.gse_lat, imf.gse_lon,  -- ✅ Added missing GSE latitude & longitude
+                imf.gsm_lat, imf.gsm_lon,  -- ✅ Added missing GSM latitude & longitude
+                imf.numpts  
+            FROM time_series ts
+            LEFT JOIN solar_wind imf 
+                ON ts.epoch BETWEEN imf.time - INTERVAL '30 minutes' AND imf.time + INTERVAL '30 minutes'
+            ORDER BY ts.epoch, imf.time DESC
+        )
+        INSERT INTO unified_space_weather (epoch, dst, density, speed, temperature, ap_index, kp_value, kp_interval, 
+                                           f107, sunspot_number, sw_flag, 
+                                           gsm_bz, bt, imf_flag,
+                                           gse_bx, gse_by, gse_bz,
+                                           gsm_bx, gsm_by,
+                                           gse_lat, gse_lon,
+                                           gsm_lat, gsm_lon,
+                                           numpts)
+        SELECT 
+            ts.epoch, 
+            d.dst, 
+            sw.density, 
+            sw.speed, 
+            sw.temperature, 
+            gkp.ap_index, 
+            gkp.kp_value, 
+            gkp.kp_interval, 
+            f.f107, 
+            f.sunspot_number, 
+            sw.sw_flag,  
+            imf.gsm_bz,  
+            imf.bt,  
+            imf.imf_flag,
+            imf.gse_bx, imf.gse_by, imf.gse_bz,
+            imf.gsm_bx, imf.gsm_by,
+            imf.gse_lat, imf.gse_lon,
+            imf.gsm_lat, imf.gsm_lon,
+            imf.numpts
+        FROM time_series ts
+        LEFT JOIN dst_index d ON ts.epoch = d.time
+        LEFT JOIN interpolated_solar_wind sw ON ts.epoch = sw.epoch
+        LEFT JOIN interpolated_geomagnetic gkp ON ts.epoch = gkp.epoch
+        LEFT JOIN interpolated_f107 f ON ts.epoch = f.epoch
+        LEFT JOIN interpolated_imf imf ON ts.epoch = imf.epoch
+        ON CONFLICT (epoch) 
+        DO UPDATE SET
+            dst = COALESCE(EXCLUDED.dst, unified_space_weather.dst),
+            density = COALESCE(EXCLUDED.density, unified_space_weather.density),
+            speed = COALESCE(EXCLUDED.speed, unified_space_weather.speed),
+            temperature = COALESCE(EXCLUDED.temperature, unified_space_weather.temperature),
+            ap_index = COALESCE(EXCLUDED.ap_index, unified_space_weather.ap_index),
+            kp_value = COALESCE(EXCLUDED.kp_value, unified_space_weather.kp_value),
+            kp_interval = COALESCE(EXCLUDED.kp_interval, unified_space_weather.kp_interval),
+            f107 = COALESCE(EXCLUDED.f107, unified_space_weather.f107),
+            sunspot_number = COALESCE(EXCLUDED.sunspot_number, unified_space_weather.sunspot_number),
+            sw_flag = COALESCE(EXCLUDED.sw_flag, unified_space_weather.sw_flag),
+            gsm_bz = COALESCE(EXCLUDED.gsm_bz, unified_space_weather.gsm_bz),
+            bt = COALESCE(EXCLUDED.bt, unified_space_weather.bt),
+            imf_flag = COALESCE(EXCLUDED.imf_flag, unified_space_weather.imf_flag),
+            gse_bx = COALESCE(EXCLUDED.gse_bx, unified_space_weather.gse_bx),
+            gse_by = COALESCE(EXCLUDED.gse_by, unified_space_weather.gse_by),
+            gse_bz = COALESCE(EXCLUDED.gse_bz, unified_space_weather.gse_bz),
+            gsm_bx = COALESCE(EXCLUDED.gsm_bx, unified_space_weather.gsm_bx),
+            gsm_by = COALESCE(EXCLUDED.gsm_by, unified_space_weather.gsm_by),
+            gse_lat = COALESCE(EXCLUDED.gse_lat, unified_space_weather.gse_lat),
+            gse_lon = COALESCE(EXCLUDED.gse_lon, unified_space_weather.gse_lon),
+            gsm_lat = COALESCE(EXCLUDED.gsm_lat, unified_space_weather.gsm_lat),
+            gsm_lon = COALESCE(EXCLUDED.gsm_lon, unified_space_weather.gsm_lon),
+            numpts = COALESCE(EXCLUDED.numpts, unified_space_weather.numpts);
+    """
+
+    try:
+        cursor.execute(merge_query)
+        conn.commit()
+        print("✅ Successfully merged and updated data in unified_space_weather.")
+
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ Merge operation failed: {e}")
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
 
 
 # -------------------------------
@@ -358,11 +639,13 @@ def fetch_all():
     }
 
 def insert_all(data_files):
-    """Insert all datasets into DB."""
+    """Insert all datasets into DB and then update the unified table."""
     insert_f107(parse_f107(data_files["f107"]))
     insert_geomagnetic(parse_geomagnetic_data(data_files["geomagnetic"]))
     insert_dst(parse_dst(data_files["dst"]))
     insert_solar_wind(parse_solar_wind(data_files["solar_wind"]))
+    # ✅ Merge into unified table after inserting all datasets
+    merge_and_store_unified_table()
 
 def main():
     """Main function to fetch, parse, and insert space weather data in one step."""

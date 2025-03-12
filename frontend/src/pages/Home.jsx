@@ -1442,32 +1442,87 @@ const categories = {
 };
 
 
-
-
-
-
-
 return (
-  <div className="flex flex-col min-h-screen w-screen overflow-hidden border-gray-950">
-    {/* 📌 Navbar */}
+  <div className="flex flex-col w-screen min-h-screen overflow-hidden border-gray-950">
+    
+    {/* 📌 Navbar (Stays at the Very Top) */}
     <Navbar />
 
-    {/* 🌍 Main Layout: Sidebar + 3D UI */}
-<div className="relative flex flex-1 max-h-[95vh] ">
-  
-  {/* 🌍 Left Section (3/4) - Contains 3D UI & Sidebar */}
-<div className="relative mt-20 flex w-1/2 max-h-[90vh] 
-  bg-gray-900/80 backdrop-blur-lg border border-gray-700 rounded-xl shadow-xl overflow-hidden scale-y-[0.95]">
+    {/* 📌 Full-Screen Hero Section - Absolutely No Gaps */}
+    <div className="w-screen h-screen min-h-screen flex flex-col items-center justify-center bg-black/50 border-b border-gray-800 shadow-lg overflow-hidden">
+      
+      {/* 🌍 Fully Contained Box */}
+      <motion.div
+        className="w-full max-w-[90%] sm:max-w-[85%] md:max-w-[80%] lg:max-w-[75%] 
+                   p-3 sm:p-4 border border-gray-700 shadow-lg 
+                   space-y-3 flex flex-col items-center text-center"
+        initial={{ opacity: 0, y: 5 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 1.2, delay: 0.5 }}
+      >
+        {/* 🛰️ Title */}
+        <motion.h1
+          className="text-sm sm:text-lg md:text-2xl font-bold text-white tracking-wide glow-text"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1 }}
+        >
+          <TypeAnimation
+            sequence={["Welcome to Sat-Track", 2500]}
+            wrapper="span"
+            speed={50}
+            repeat={Infinity}
+          />
+        </motion.h1>
 
+        {/* 🌍 Description */}
+        <p className="text-[clamp(0.6rem, 1vw, 1rem)] text-gray-300 leading-tight tracking-wide">
+          Explore the world of <strong>real-time satellite tracking</strong> with Sat-Track.  
+          Monitor <span className="font-semibold text-teal-300">active satellites</span>,  
+          <span className="font-semibold text-teal-300">space debris</span>, and  
+          <span className="font-semibold text-teal-300">orbital pathways</span> with precision.
 
-{/* 🌍 3D UI Scene (Now Adaptive for Mobile with Spinning Globe) */}
-<div
-  className={`relative flex-1  ${window.innerWidth < 768 ? "h-[75vh]" : "h-[99vh]"} cursor-pointer`}
-  onClick={() => setIs3DEnabled(true)}
->
-<div className="relative flex-1 h-[90vh] cursor-pointer">
-  <div ref={mountRef} className="absolute top-0 left-0 w-full h-full" />
-</div>
+          Gain insights into <span className="font-semibold text-teal-300">LEO, GEO, and beyond</span>,  
+          tracking their role in <span className="font-semibold text-teal-300">communications</span>,  
+          <span className="font-semibold text-teal-300">military</span>, and  
+          <span className="font-semibold text-teal-300">science</span>.
+
+          Analyze <strong>orbital decay</strong>,  
+          <strong>collision risks</strong>, and  
+          <strong>satellite decommissioning</strong>.  
+          Stay informed on <span className="font-semibold text-teal-300">mega-constellation expansions</span>.
+        </p>
+
+        {/* 🚀 Counter */}
+        <motion.div
+          className="text-xl sm:text-2xl md:text-3xl font-bold text-teal-300 tracking-wider animate-pulse glow-text"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1.2, delay: 1 }}
+        >
+          <span className="drop-shadow-lg">
+            <CountUp start={0} end={27535} duration={3} separator="," />
+          </span> 
+          <span className="text-xs sm:text-sm md:text-lg font-medium text-gray-300">
+            objects currently tracked
+          </span>
+        </motion.div>
+      </motion.div>
+    </div>
+
+    {/* 🌍 Main Layout (No Space Below the Hero Section) */}
+    <div className="relative flex flex-1 max-h-screen">
+      
+      {/* 🌍 Left Section (3D UI & Sidebar) */}
+      <div className="relative flex w-3/4 max-h-screen bg-gray-900/80 backdrop-blur-lg 
+                      border border-gray-700  shadow-xl overflow-hidden ">
+        
+        {/* 🌍 3D UI Scene */}
+        <div className={`relative flex-1 ${window.innerWidth < 768 ? "h-screen" : "h-screen"} cursor-pointer`}
+             onClick={() => setIs3DEnabled(true)}>
+          <div className="relative flex-1 h-screen cursor-pointer">
+            <div ref={mountRef} className="absolute top-0 left-0 w-full h-full" />
+          </div>
 
 
   {/* 🔄 Cool Loading Screen (Appears During Fetching) */}
@@ -1640,82 +1695,18 @@ return (
 
 
 
-{/* 📌 Right-Aligned Container Taking Up 1/2 of Layout */}
-<div className="absolute top-24 right-3 w-1/2 max-w-[48%] sm:max-w-[400px] md:max-w-[480px] lg:max-w-[720px] 
-             h-[250px] flex flex-col items-end self-start transition-none"
-     style={{ left: "auto", right: "3px" }}> {/* ✅ Ensures the left side stays locked */}
-  
-  {/* 🌍 Fully Contained Box (Fixed Placement & No Movement) */}
-  <motion.div
-    className="bg-black/50 p-3 sm:p-4 rounded-lg border border-gray-700 shadow-lg w-full 
-               overflow-hidden space-y-3 flex flex-col items-center text-center transition-none"
-    initial={{ opacity: 0, y: 5 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 1.2, delay: 0.5 }}
-  >
-    {/* 🛰️ Title Inside the Box (No Scaling Issues) */}
-    <motion.h1
-      className="text-sm sm:text-lg md:text-2xl font-bold text-white tracking-wide glow-text"
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 1 }}
-    >
-      <TypeAnimation
-        sequence={["Welcome to Sat-Track", 2500]}
-        wrapper="span"
-        speed={50}
-        repeat={Infinity}
-      />
-    </motion.h1>
+{/* 🌍 Right Side: Stacked Satellite List & Filters */}
+<div className="absolute right-0 top-0 h-screen w-1/4 flex flex-col gap-3 px-4 bg-gray-900/90 border-l border-gray-700 shadow-xl">
 
-    {/* 🌍 Description (Fixed Text, No Shifting) */}
-    <p className="text-[clamp(0.6rem, 1vw, 1rem)] text-gray-300 leading-tight tracking-wide overflow-hidden text-ellipsis">
-      Explore the world of <strong>real-time satellite tracking</strong> with Sat-Track.  
-      Monitor <span className="font-semibold text-teal-300">active satellites</span>,  
-      <span className="font-semibold text-teal-300">space debris</span>, and  
-      <span className="font-semibold text-teal-300">orbital pathways</span> with precision.
-
-      Gain insights into <span className="font-semibold text-teal-300">LEO, GEO, and beyond</span>,  
-      tracking their role in <span className="font-semibold text-teal-300">communications</span>,  
-      <span className="font-semibold text-teal-300">military</span>, and  
-      <span className="font-semibold text-teal-300">science</span>.
-
-      Analyze <strong>orbital decay</strong>,  
-      <strong>collision risks</strong>, and  
-      <strong>satellite decommissioning</strong>.  
-      Stay informed on <span className="font-semibold text-teal-300">mega-constellation expansions</span>.
-    </p>
-
-    {/* 🚀 Counter (Fixed & No Movement) */}
-    <motion.div
-      className="text-xl sm:text-2xl md:text-3xl font-bold text-teal-300 tracking-wider animate-pulse glow-text"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 1.2, delay: 1 }}
-    >
-      <span className="drop-shadow-lg">
-        <CountUp start={0} end={27535} duration={3} separator="," />
-      </span> 
-      <span className="text-xs sm:text-sm md:text-lg font-medium text-gray-300"> objects currently tracked</span>
-    </motion.div>
-  </motion.div>
-</div>
-
-
-
-
-{/* 🌍 Right Side: Filters & Lists (1/2 Width, Pushed Down & Responsive) */}
-<div className="flex w-1/2 h-[54vh] gap-3 px-4 mt-48">
-
-  {/* 🛰️ Satellite List (Left Side) */}
-  <div className="w-1/2 bg-gray-900/80 h-[56vh] mt-36 backdrop-blur-lg border border-gray-700 rounded-xl shadow-xl p-4 flex flex-col space-y-3">
+  {/* 🛰️ Satellite List (Top Section) */}
+  <div className="h-1/2 bg-gray-900/80 backdrop-blur-lg border border-gray-700 rounded-xl shadow-xl p-4 flex flex-col space-y-3">
 
     {/* 🚀 Satellite List Header */}
     <h3 className="text-lg font-semibold text-white text-center tracking-wide border-b border-gray-700 pb-2">
       Active Satellites
     </h3>
 
-    {/* 🔍 Search Input (Refined) */}
+    {/* 🔍 Search Input */}
     <div className="relative">
       <input
         type="text"
@@ -1729,11 +1720,8 @@ return (
       </span>
     </div>
 
-    {/* 🚀 Scrollable Satellite List (Refined & Interactive) */}
-    <div
-      className="overflow-y-auto h-[480px] scroll-smooth scrollbar-hide flex items-center justify-center bg-gray-800/50 rounded-lg p-3"
-      style={{ touchAction: "none", overscrollBehavior: "contain" }}
-    >
+    {/* 🚀 Scrollable Satellite List */}
+    <div className="overflow-y-auto flex-grow scrollbar-hide p-3 bg-gray-800/50 rounded-lg">
       {loading ? (
         <div className="flex flex-col items-center justify-center text-teal-300 text-lg font-semibold animate-pulse">
           <div className="w-12 h-12 border-4 border-gray-600 border-t-teal-400 rounded-full animate-spin"></div>
@@ -1772,169 +1760,147 @@ return (
       )}
     </div>
 
-
-
-
-
-
-
-
-    
-{/* 🌍 Pagination Controls (Always Visible & Confined) */}
-<div className="flex flex-col items-center mt-4 border-t border-gray-700 pt-2 w-full min-w-0">
-  <span className="text-xs text-gray-300 mb-1">
-    Page {page} of {Math.max(1, Math.ceil(total / limit))}
-  </span>
-  
-  <div className="flex flex-wrap justify-center w-full space-x-2 mt-1 overscroll-none">
-    <button
-      onClick={() => changePage(1)}
-      disabled={page === 1 || loading}
-      className={`px-3 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-        page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
-      }`}
-    >
-      ⏮ First
-    </button>
-
-    <button
-      onClick={() => changePage(page - 1)}
-      disabled={page === 1 || loading}
-      className={`px-3 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-        page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
-      }`}
-    >
-      ← Prev
-    </button>
-
-    <button
-      onClick={() => changePage(page + 1)}
-      disabled={loading || page * limit >= total}
-      className={`px-3 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-        loading || page * limit >= total ? "opacity-50 cursor-not-allowed" : ""
-      }`}
-    >
-      Next →
-    </button>
-
-    <button
-      onClick={() => changePage(Math.ceil(total / limit))}
-      disabled={page === Math.ceil(total / limit) || loading}
-      className={`px-3 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-        page === Math.ceil(total / limit) || loading ? "opacity-50 cursor-not-allowed" : ""
-      }`}
-    >
-      Last ⏭
-    </button>
-  </div>
-</div>
-</div>
-
-
-
-{/* 🚀 Filters Section (Right Side) */}
-<div className="w-1/2 h-[56vh] min-h-[56vh] max-h-[56vh] bg-gray-900/80 
-            backdrop-blur-lg border border-gray-700 rounded-xl shadow-xl p-4 
-            flex-none space-y-3 mt-36 overflow-hidden">
-
-  {/* 🛰️ Title */}
-  <h3 className="text-[13px] font-semibold text-white text-center tracking-wide border-b border-gray-700 pb-2">
-    Satellite Filters
-  </h3>
-
-  {/* 🌍 Single Scrollable Filter Box (Fixed Height & Independent Scrolling) */}
-  <div className="h-[250px] overflow-y-auto border border-gray-700 rounded-lg p-3 bg-gray-800/50 flex-none" 
-       style={{ touchAction: "none", overscrollBehavior: "contain" }}> {/* ✅ Prevents page scroll */}
-    <h4 className="text-[12px] font-semibold text-teal-300 mb-2 text-center">
-      Select Filters
-    </h4>
-    <div className="grid grid-cols-1 gap-2"> {/* ✅ Single column */}
-
-      {/* 🌍 Combined Filter Buttons */}
-      {[
-        // 🔹 Satellite Types
-        ...Object.entries(categories).flatMap(([category, filters]) => 
-          filters.map((filter) => ({ name: filter.name, label: filter.label }))
-        ),
-        
-      ].map((filter) => (
-        <Button
-          key={filter.name}
-          onClick={() => toggleFilter(filter.name)}
-          className="w-full px-3 py-2 text-[12px] font-medium text-white bg-gray-800 
-                     border border-gray-600 hover:bg-teal-500 transition-all duration-200 rounded-md"
+    {/* 🌍 Pagination Controls */}
+    <div className="flex flex-col items-center mt-4 border-t border-gray-700 pt-2 w-full min-w-0">
+      <span className="text-xs text-gray-300 mb-1">
+        Page {page} of {Math.max(1, Math.ceil(total / limit))}
+      </span>
+      <div className="flex flex-wrap justify-center w-full space-x-2 mt-1">
+        <button
+          onClick={() => changePage(1)}
+          disabled={page === 1 || loading}
+          className={`px-3 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
+            page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
+          }`}
         >
-          {filter.label}
-        </Button>
-      ))}
+          ⏮ First
+        </button>
+
+        <button
+          onClick={() => changePage(page - 1)}
+          disabled={page === 1 || loading}
+          className={`px-3 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
+            page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+        >
+          ← Prev
+        </button>
+
+        <button
+          onClick={() => changePage(page + 1)}
+          disabled={loading || page * limit >= total}
+          className={`px-3 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
+            loading || page * limit >= total ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+        >
+          Next →
+        </button>
+
+        <button
+          onClick={() => changePage(Math.ceil(total / limit))}
+          disabled={page === Math.ceil(total / limit) || loading}
+          className={`px-3 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
+            page === Math.ceil(total / limit) || loading ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+        >
+          Last ⏭
+        </button>
+      </div>
     </div>
   </div>
+{/* 🚀 Filters Section (Bottom Section) */}
+<div className="h-1/2 bg-gray-900/80 backdrop-blur-lg border border-gray-700 rounded-xl shadow-xl p-4 space-y-3 overflow-hidden flex flex-col">
+    
+    {/* 🛰️ Title */}
+    <h3 className="text-sm font-semibold text-white text-center tracking-wide border-b border-gray-700 pb-2">
+      Satellite Filters
+    </h3>
 
-
-
-
-  {/* 🌍 Scrollable Lists (Bottom, Fixed in Container) */}
-  <div className="w-full grid grid-cols-2 gap-3 mt-auto flex-none">
-
-    {/* 📅 Launch Year */}
-    <div className="flex flex-col">
-      <h4 className="text-[12px] font-semibold text-teal-300 mb-2 text-center">
-        Launch Year
+    {/* 🌍 Filter Selection (Scroll Contained) */}
+    <div className="h-[200px] overflow-y-auto border border-gray-700 rounded-lg p-3 bg-gray-800/50 scrollbar-hide"
+         style={{ touchAction: "none", overscrollBehavior: "contain" }}>
+      <h4 className="text-xs font-semibold text-teal-300 mb-2 text-center">
+        Select Filters
       </h4>
-      <div className="h-[180px] overflow-y-auto bg-gray-800/50 border border-gray-700 rounded-lg p-2 flex-none">
-        {Array.from({ length: 30 }, (_, i) => 2025 - i).map((year) => (  
-          <Button
-            key={year}
-            onClick={() => toggleFilter(`Launch Year:${year}`)}
-            className="w-full text-[11px] font-medium text-white bg-gray-800 
-                       hover:bg-teal-500 transition-all duration-200 rounded-md py-1 mb-1"
-          >
-            {year}
-          </Button>
-        ))}
+      <div className="grid grid-cols-1 gap-2">
+        {Object.entries(categories).flatMap(([category, filters]) =>
+          filters.map((filter) => (
+            <Button
+              key={filter.name}
+              onClick={() => toggleFilter(filter.name)}
+              className="w-full px-3 py-2 text-xs font-medium text-white bg-gray-800 
+                         border border-gray-600 hover:bg-teal-500 transition-all rounded-md"
+            >
+              {filter.label}
+            </Button>
+          ))
+        )}
       </div>
     </div>
 
-    {/* 🌍 Country */}
-    <div className="flex flex-col">
-      <h4 className="text-[12px] font-semibold text-teal-300 mb-2 text-center">
-        Country of Origin
-      </h4>
-      <div className="h-[180px] overflow-y-auto bg-gray-800/50 border border-gray-700 rounded-lg p-2 flex-none">
-        {Object.entries(countryMapping).slice(0, 20).map(([code, { name, flag }]) => (  
-          <Button
-            key={code}
-            onClick={() => toggleFilter(`Country:${code}`)}
-            className="w-full text-[11px] font-medium text-white bg-gray-800 
-                       hover:bg-teal-500 transition-all duration-200 rounded-md py-1 mb-1 flex items-center space-x-2"
-          >
-            <span className="text-lg">{flag}</span>
-            <span>{name}</span>
-          </Button>
-        ))}
+    {/* 🌍 Scrollable Lists (Fixed Inside Box) */}
+    <div className="flex-grow grid grid-cols-2 gap-3 mt-3">
+
+      {/* 📅 Launch Year (Contained Scroll) */}
+      <div className="flex flex-col">
+        <h4 className="text-xs font-semibold text-teal-300 mb-2 text-center">
+          Launch Year
+        </h4>
+        <div className="h-[160px] overflow-y-auto bg-gray-800/50 border border-gray-700 rounded-lg p-2 scrollbar-hide"
+             style={{ touchAction: "none", overscrollBehavior: "contain" }}>
+          {Array.from({ length: 30 }, (_, i) => 2025 - i).map((year) => (  
+            <Button
+              key={year}
+              onClick={() => toggleFilter(`Launch Year:${year}`)}
+              className="w-full text-[11px] font-medium text-white bg-gray-800 
+                         hover:bg-teal-500 transition-all rounded-md py-1 mb-1"
+            >
+              {year}
+            </Button>
+          ))}
+        </div>
       </div>
+
+      {/* 🌍 Country (Contained Scroll) */}
+      <div className="flex flex-col">
+        <h4 className="text-xs font-semibold text-teal-300 mb-2 text-center">
+          Country of Origin
+        </h4>
+        <div className="h-[160px] overflow-y-auto bg-gray-800/50 border border-gray-700 rounded-lg p-2 scrollbar-hide"
+             style={{ touchAction: "none", overscrollBehavior: "contain" }}>
+          {Object.entries(countryMapping).slice(0, 20).map(([code, { name, flag }]) => (  
+            <Button
+              key={code}
+              onClick={() => toggleFilter(`Country:${code}`)}
+              className="w-full text-[11px] font-medium text-white bg-gray-800 
+                         hover:bg-teal-500 transition-all rounded-md py-1 mb-1 flex items-center space-x-2"
+            >
+              <span className="text-lg">{flag}</span>
+              <span>{name}</span>
+            </Button>
+          ))}
+        </div>
+      </div>
+
     </div>
 
-  </div>
+    {/* 🔄 Reset Button (Fixed at Bottom) */}
+    <div className="mt-2 text-center">
+      <Button
+        onClick={resetFilters}
+        className="px-4 py-2 text-xs font-semibold text-black bg-teal-300 
+                   hover:bg-teal-400 rounded-md shadow-md transition-all"
+      >
+        Reset Filters
+      </Button>
+    </div>
 
-  {/* 🔄 Reset Button */}
-  <div className="mt-2 text-center flex-none">
-    <Button
-      onClick={resetFilters}
-      className="px-4 py-2 text-xs font-semibold text-black bg-teal-300 
-                 hover:bg-teal-400 rounded-md shadow-md transition-all duration-300"
-    >
-      Reset Filters
-    </Button>
-  </div>
-
-</div>
+    </div>
+    </div>
+    </div>
 
 
-
-  </div>
-  </div>
-
+ 
 
 
 
@@ -1950,32 +1916,30 @@ return (
     </div>
 
 
-
-
 {/* 🌌 Full Page Container */}
-<div className="min-h-screen bg-gradient-to-b from-black via-blue-950 to-gray-900 text-white px-6 sm:px-10 lg:px-16 py-14 z-60 font-[Space Grotesk]">
+<div className="min-h-screen bg-gradient-to-b from-black via-blue-950 to-gray-900 text-white px-4 sm:px-6 lg:px-10 py-10 z-60 font-[Space Grotesk]">
 
-  {/* 📦 Section Container (Responsive Layout) */}
-  <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-40">
+  {/* 📦 Section Container (Grid Layout with More Separation) */}
+  <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 pb-20 w-full">
 
     {/* 🚀 About the Satellite Tracker */}
-    <div className="p-8 bg-gray-900 bg-opacity-95 rounded-xl shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 w-full lg:col-span-2">
-      <h2 className="text-4xl font-medium text-teal-300 tracking-wide animate-fade-in">The Future of Satellite Tracking</h2>
+    <div className="p-8 bg-gray-900 bg-opacity-95 rounded-xl shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 w-full mx-3 lg:col-span-2">
+      <h2 className="text-4xl font-medium text-teal-300 tracking-wide">The Future of Satellite Tracking</h2>
       <p className="mt-5 text-lg leading-relaxed text-gray-300">
-        Experience a cutting-edge <span className="text-yellow-300 font-medium uppercase tracking-wide">real-time 3D visualization</span> of Earth's satellites with unparalleled accuracy. Built on <span className="text-green-400 font-medium tracking-wide">advanced Keplerian physics</span>, this system dynamically maps orbital mechanics for a hyper-realistic space experience.
+        Experience a <span className="text-yellow-300 font-medium uppercase tracking-wide">real-time 3D visualization</span> of Earth's satellites with unparalleled accuracy. Built on <span className="text-green-400 font-medium tracking-wide">advanced Keplerian physics</span>, this system dynamically maps orbital mechanics for a hyper-realistic space experience.
       </p>
     </div>
 
     {/* ⚙️ How It Works */}
-    <div className="p-7 bg-gray-800 bg-opacity-90 rounded-lg shadow-md border border-gray-700 hover:scale-105 transition-transform duration-300">
+    <div className="p-7 bg-gray-800 bg-opacity-90 rounded-lg shadow-md border border-gray-700 hover:scale-105 transition-transform duration-300 w-full mx-3">
       <h2 className="text-3xl font-medium text-green-400 tracking-wide">The Technology Behind It</h2>
       <p className="mt-4 text-lg leading-relaxed text-gray-300">
-        Using Two-Line Element (TLE) data, this system calculates precise orbits through a high-fidelity <span className="text-lime-400 font-medium tracking-wide">orbital mechanics engine</span>. The real-time 3D interface is powered by <span className="text-cyan-400 font-medium tracking-wide">GPU-accelerated rendering</span>, ensuring seamless interactivity.
+        Using Two-Line Element (TLE) data, this system calculates precise orbits through a <span className="text-lime-400 font-medium tracking-wide">high-fidelity orbital mechanics engine</span>. The real-time 3D interface is powered by <span className="text-cyan-400 font-medium tracking-wide">GPU-accelerated rendering</span>, ensuring seamless interactivity.
       </p>
     </div>
 
     {/* 🌍 Real-World Applications */}
-    <div className="p-9 bg-gray-900 bg-opacity-95 rounded-xl shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 lg:col-span-2">
+    <div className="p-9 bg-gray-900 bg-opacity-95 rounded-xl shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 w-full mx-3 lg:col-span-2">
       <h2 className="text-4xl font-medium text-yellow-300 tracking-wide">Real-World Impact</h2>
       <ul className="mt-5 list-disc pl-6 space-y-3 text-lg text-gray-300">
         <li><span className="text-cyan-400 font-medium">Orbital Debris Management</span> — Prevent catastrophic collisions in low-Earth orbit.</li>
@@ -1985,7 +1949,7 @@ return (
     </div>
 
     {/* 📡 Technical Features */}
-    <div className="p-8 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300">
+    <div className="p-8 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 w-full mx-3">
       <h2 className="text-3xl font-medium text-teal-300 tracking-wide">Advanced Features</h2>
       <ul className="mt-4 list-disc pl-6 space-y-3 text-lg text-gray-300">
         <li><span className="text-yellow-300 font-medium">Continuous Data Refresh</span> — Fetches & updates satellite positions every few seconds.</li>
@@ -1995,7 +1959,7 @@ return (
     </div>
 
     {/* 🚀 Future Enhancements */}
-    <div className="p-7 bg-gray-900 bg-opacity-95 rounded-xl shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 lg:col-span-2">
+    <div className="p-7 bg-gray-900 bg-opacity-95 rounded-xl shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 w-full mx-3 lg:col-span-2">
       <h2 className="text-4xl font-medium text-lime-400 tracking-wide">What’s Coming Next</h2>
       <ul className="mt-5 list-disc pl-6 space-y-3 text-lg text-gray-300">
         <li><span className="text-teal-300 font-medium">AI-Based Anomaly Detection</span> — Identifies irregular orbital shifts in real time.</li>
@@ -2005,7 +1969,7 @@ return (
     </div>
 
     {/* 🌌 Space Exploration & New Missions */}
-    <div className="p-10 bg-gray-800 bg-opacity-90 rounded-lg shadow-md border border-gray-700 hover:scale-105 transition-transform duration-300">
+    <div className="p-10 bg-gray-800 bg-opacity-90 rounded-lg shadow-md border border-gray-700 hover:scale-105 transition-transform duration-300 w-full mx-3">
       <h2 className="text-3xl font-medium text-teal-300 tracking-wide">The Next Space Frontier</h2>
       <p className="mt-4 text-lg leading-relaxed text-gray-300">
         As humanity ventures beyond Earth, satellite tracking is expanding into <span className="text-yellow-300 font-medium tracking-wide">deep-space missions</span>. Future enhancements will include real-time monitoring of <span className="text-green-400 font-medium tracking-wide">lunar bases</span> and <span className="text-cyan-400 font-medium tracking-wide">Mars exploration vehicles</span>.
@@ -2013,7 +1977,7 @@ return (
     </div>
 
     {/* 📜 Additional Resources */}
-    <div className="p-7 bg-gray-900 bg-opacity-95 rounded-xl shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 lg:col-span-2">
+    <div className="p-7 bg-gray-900 bg-opacity-95 rounded-xl shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 w-full mx-3 lg:col-span-2">
       <h2 className="text-4xl font-medium text-cyan-400 tracking-wide">Resources & Learning</h2>
       <ul className="mt-5 list-disc pl-6 space-y-3 text-lg text-gray-300">
         <li><a href="https://www.spacestrak.com/" className="text-teal-300 hover:underline hover:text-teal-200" target="_blank">SpaceTrak — TLE Data & Orbital Elements</a></li>

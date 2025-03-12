@@ -112,25 +112,35 @@ def fetch_tle_data(session, existing_norads):
         
     
     # ✅ Compute orbital parameters for each satellite
+    # ✅ Compute orbital parameters for each satellite
     for sat in satellites:
-
         now = datetime.now().astimezone(timezone.utc)
-        
-        
+
         decay_date = parse_datetime(sat.get("DECAY_DATE"))
         if decay_date is not None and decay_date.tzinfo is None:
             decay_date = decay_date.replace(tzinfo=timezone.utc)
-        if ((decay_date is not None and decay_date < now - timedelta(days=7))):
+
+        # 🚀 **Skip decayed satellites (older than 7 days)**
+        if decay_date is not None and decay_date < now - timedelta(days=7):
             continue
 
+        epoch = parse_datetime(sat.get("EPOCH"))
+        if epoch is not None and epoch.tzinfo is None:
+            epoch = epoch.replace(tzinfo=timezone.utc)
 
+        # 🚀 **NEW: Skip computation if EPOCH is in the future**
+        if epoch is not None and epoch > now:
+            print(f"⚠️ Skipping {sat.get('OBJECT_NAME', 'Unknown')} (NORAD: {sat.get('NORAD_CAT_ID')}) - Future EPOCH: {epoch}")
+            sat["computed_params"] = None  # ✅ Mark it explicitly as None
+            continue  # 🚀 Skip computing parameters
 
-
+        # ✅ Compute only if epoch is valid
         sat["computed_params"] = compute_orbital_params(
             sat.get("OBJECT_NAME", "Unknown"),
             sat.get("TLE_LINE1", ""),
             sat.get("TLE_LINE2", "")
         )
+
 
     # ✅ Always rewrite the file, even if using cached data
     with open(TLE_FILE_PATH, "w") as file:
@@ -138,6 +148,9 @@ def fetch_tle_data(session, existing_norads):
 
     print(f"✅ Processed TLE data for {len(satellites)} satellites.")
     return filter_satellites(satellites, existing_norads)
+
+
+
 
 
 
@@ -190,6 +203,7 @@ def classify_satellite_activity(orbit_type, epoch, perigee):
             return "Active"
 
     return "Active"  # ✅ Default to Active if none of the conditions apply
+
 
 
 

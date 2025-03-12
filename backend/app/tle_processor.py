@@ -19,11 +19,6 @@ import math
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from astropy.utils.iers import conf
-conf.iers_auto_url = "https://datacenter.iers.org/data/latest/finals2000A.all"
-conf.auto_download = True  # Ensure automatic updates
-eph = load('de421.bsp')
-earth = eph['earth']  
 EARTH_RADIUS_KM = 6371 
 
 
@@ -92,6 +87,7 @@ def clean_old_norads():
 
             -- ❌ **Invalid altitude handling & old TLE check**
             OR (altitude_km IS NULL OR altitude_km < 80)
+            
 
         ON CONFLICT (norad_number) DO NOTHING;  -- Avoid duplicate errors
     """
