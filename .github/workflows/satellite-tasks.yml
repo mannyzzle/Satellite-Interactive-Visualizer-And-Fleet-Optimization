@@ -19,7 +19,7 @@ env:
 jobs:
   tle_processor:
     runs-on: ubuntu-latest
-    if: github.event.schedule == '15 */6 * * *'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -50,7 +50,7 @@ jobs:
 
   cdm:
     runs-on: ubuntu-latest
-    if: github.event.schedule == '45 */8 * * *'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -81,7 +81,7 @@ jobs:
 
   fetch_all:
     runs-on: ubuntu-latest
-    if: github.event.schedule == '0 * * * *'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
