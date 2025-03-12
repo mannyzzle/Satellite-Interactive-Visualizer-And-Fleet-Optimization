@@ -582,7 +582,24 @@ def merge_and_store_unified_table():
             geo_kp_value = COALESCE(EXCLUDED.geo_kp_value, unified_space_weather.geo_kp_value),
             geo_kp_interval = COALESCE(EXCLUDED.geo_kp_interval, unified_space_weather.geo_kp_interval),
             imf_flag = COALESCE(EXCLUDED.imf_flag, unified_space_weather.imf_flag),
-            sw_flag = COALESCE(EXCLUDED.sw_flag, unified_space_weather.sw_flag);
+            imf_gsm_bz = COALESCE(EXCLUDED.imf_gsm_bz, unified_space_weather.imf_gsm_bz),
+            imf_bt = COALESCE(EXCLUDED.imf_bt, unified_space_weather.imf_bt),
+            imf_gse_bx = COALESCE(EXCLUDED.imf_gse_bx, unified_space_weather.imf_gse_bx),
+            imf_gse_by = COALESCE(EXCLUDED.imf_gse_by, unified_space_weather.imf_gse_by),
+            imf_gse_bz = COALESCE(EXCLUDED.imf_gse_bz, unified_space_weather.imf_gse_bz),
+            imf_gsm_bx = COALESCE(EXCLUDED.imf_gsm_bx, unified_space_weather.imf_gsm_bx),
+            imf_gsm_by = COALESCE(EXCLUDED.imf_gsm_by, unified_space_weather.imf_gsm_by),
+            imf_gse_lat = COALESCE(EXCLUDED.imf_gse_lat, unified_space_weather.imf_gse_lat),
+            imf_gse_lon = COALESCE(EXCLUDED.imf_gse_lon, unified_space_weather.imf_gse_lon),
+            imf_gsm_lat = COALESCE(EXCLUDED.imf_gsm_lat, unified_space_weather.imf_gsm_lat),
+            imf_gsm_lon = COALESCE(EXCLUDED.imf_gsm_lon, unified_space_weather.imf_gsm_lon),
+            imf_numpts = COALESCE(EXCLUDED.imf_numpts, unified_space_weather.imf_numpts),
+            sw_flag = COALESCE(EXCLUDED.sw_flag, unified_space_weather.sw_flag),
+            sw_density = COALESCE(EXCLUDED.sw_density, unified_space_weather.sw_density),
+            sw_speed = COALESCE(EXCLUDED.sw_speed, unified_space_weather.sw_speed),
+            sw_temperature = COALESCE(EXCLUDED.sw_temperature, unified_space_weather.sw_temperature),
+            solar_f107 = COALESCE(EXCLUDED.solar_f107, unified_space_weather.solar_f107),
+            solar_sunspot_number = COALESCE(EXCLUDED.solar_sunspot_number, unified_space_weather.solar_sunspot_number);
     """
 
     try:
