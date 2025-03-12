@@ -15,7 +15,6 @@ env:
   DB_NAME: ${{ secrets.DB_NAME }}
   SPACETRACK_USER: ${{ secrets.SPACETRACK_USER }}
   SPACETRACK_PASS: ${{ secrets.SPACETRACK_PASS }}
-  
 
 jobs:
   tle_processor:
@@ -25,18 +24,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.12.7
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.12.7'
+          cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -r backend/app/requirements.txt
+        run: |
+          pip install --upgrade pip
+          pip install -r backend/requirements.txt
 
       - name: Run TLE Processor
         run: |
-          echo "$(date '+[%Y-%m-%d %H:%M:%S]') Running tle_processor" >> backend/app/logs/tle_log.txt
-          python3 backend/app/tle_processor.py >> backend/app/logs/tle_log.txt 2>&1
+          set -e
+          LOG_FILE="backend/app/logs/tle_log.txt"
+          echo "$(date '+[%Y-%m-%d %H:%M:%S]') Running tle_processor" >> "$LOG_FILE"
+          python3 backend/app/tle_processor.py >> "$LOG_FILE" 2>&1
 
       - name: Upload Logs
         uses: actions/upload-artifact@v4
@@ -51,18 +55,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.12.7
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.12.7'
+          cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -r backend/app/requirements.txt
+        run: |
+          pip install --upgrade pip
+          pip install -r backend/requirements.txt
 
       - name: Run CDM
         run: |
-          echo "$(date '+[%Y-%m-%d %H:%M:%S]') Running cdm" >> backend/app/logs/cdm_log.txt
-          python3 backend/app/cdm.py >> backend/app/logs/cdm_log.txt 2>&1
+          set -e
+          LOG_FILE="backend/app/logs/cdm_log.txt"
+          echo "$(date '+[%Y-%m-%d %H:%M:%S]') Running cdm" >> "$LOG_FILE"
+          python3 backend/app/cdm.py >> "$LOG_FILE" 2>&1
 
       - name: Upload Logs
         uses: actions/upload-artifact@v4
@@ -77,18 +86,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.12.7
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.12.7'
+          cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -r backend/app/requirements.txt
+        run: |
+          pip install --upgrade pip
+          pip install -r backend/requirements.txt
 
       - name: Run Fetch All
         run: |
-          echo "$(date '+[%Y-%m-%d %H:%M:%S]') Running fetch_all" >> backend/app/logs/fetch_all_log.txt
-          python3 backend/app/omni_low.py fetch_all >> backend/app/logs/fetch_all_log.txt 2>&1
+          set -e
+          LOG_FILE="backend/app/logs/fetch_all_log.txt"
+          echo "$(date '+[%Y-%m-%d %H:%M:%S]') Running fetch_all" >> "$LOG_FILE"
+          python3 backend/app/omni_low.py fetch_all >> "$LOG_FILE" 2>&1
 
       - name: Upload Logs
         uses: actions/upload-artifact@v4

@@ -454,29 +454,29 @@ def merge_and_store_unified_table():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS unified_space_weather (
             epoch TIMESTAMP PRIMARY KEY,
-            dst FLOAT,
-            density FLOAT,
-            speed FLOAT,
-            temperature FLOAT,
-            ap_index FLOAT,
-            kp_value FLOAT,
-            kp_interval INT,
-            f107 FLOAT,
-            sunspot_number INT,
-            sw_flag INT,  
-            gsm_bz FLOAT,  
-            bt FLOAT,  
+            geo_dst FLOAT,
+            geo_ap_index FLOAT,
+            geo_kp_value FLOAT,
+            geo_kp_interval INT,
             imf_flag INT,
-            gse_bx FLOAT,
-            gse_by FLOAT,
-            gse_bz FLOAT,
-            gsm_bx FLOAT,
-            gsm_by FLOAT,
-            gse_lat FLOAT,
-            gse_lon FLOAT,
-            gsm_lat FLOAT,
-            gsm_lon FLOAT,
-            numpts INT  
+            imf_gsm_bz FLOAT,
+            imf_bt FLOAT,
+            imf_gse_bx FLOAT,
+            imf_gse_by FLOAT,
+            imf_gse_bz FLOAT,
+            imf_gsm_bx FLOAT,
+            imf_gsm_by FLOAT,
+            imf_gse_lat FLOAT,
+            imf_gse_lon FLOAT,
+            imf_gsm_lat FLOAT,
+            imf_gsm_lon FLOAT,
+            imf_numpts INT,
+            sw_flag INT,  
+            sw_density FLOAT,  
+            sw_speed FLOAT,  
+            sw_temperature FLOAT,  
+            solar_f107 FLOAT,
+            solar_sunspot_number INT  
         );
     """)
 
@@ -490,9 +490,9 @@ def merge_and_store_unified_table():
             -- Get only the most recent valid solar wind data per `epoch`
             SELECT DISTINCT ON (ts.epoch) 
                 ts.epoch, 
-                sw.density, 
-                sw.speed, 
-                sw.temperature, 
+                sw.density AS sw_density, 
+                sw.speed AS sw_speed, 
+                sw.temperature AS sw_temperature, 
                 sw.sw_flag  
             FROM time_series ts
             LEFT JOIN solar_wind sw 
@@ -503,9 +503,9 @@ def merge_and_store_unified_table():
             -- Get only the most recent valid geomagnetic data per `epoch`
             SELECT DISTINCT ON (ts.epoch)
                 ts.epoch, 
-                gkp.ap_index, 
-                gkp.kp_value, 
-                gkp.kp_interval
+                gkp.ap_index AS geo_ap_index, 
+                gkp.kp_value AS geo_kp_value, 
+                gkp.kp_interval AS geo_kp_interval
             FROM time_series ts
             LEFT JOIN geomagnetic_kp_index gkp 
                 ON ts.epoch BETWEEN gkp.time - INTERVAL '1 hour' AND gkp.time + INTERVAL '1 hour'
@@ -515,8 +515,8 @@ def merge_and_store_unified_table():
             -- Get the most recent F10.7 data
             SELECT DISTINCT ON (ts.epoch)
                 ts.epoch, 
-                f.f107, 
-                f.sunspot_number
+                f.f107 AS solar_f107, 
+                f.sunspot_number AS solar_sunspot_number
             FROM time_series ts
             LEFT JOIN f107_flux f 
                 ON ts.epoch::date = f.date
@@ -526,47 +526,49 @@ def merge_and_store_unified_table():
             -- Get the most recent valid IMF data
             SELECT DISTINCT ON (ts.epoch)
                 ts.epoch, 
-                imf.gsm_bz, 
-                imf.bt, 
+                imf.gsm_bz AS imf_gsm_bz, 
+                imf.bt AS imf_bt, 
                 imf.imf_flag,
-                imf.gse_bx, imf.gse_by, imf.gse_bz, 
-                imf.gsm_bx, imf.gsm_by, 
-                imf.gse_lat, imf.gse_lon,  -- ✅ Added missing GSE latitude & longitude
-                imf.gsm_lat, imf.gsm_lon,  -- ✅ Added missing GSM latitude & longitude
-                imf.numpts  
+                imf.gse_bx AS imf_gse_bx, 
+                imf.gse_by AS imf_gse_by, 
+                imf.gse_bz AS imf_gse_bz, 
+                imf.gsm_bx AS imf_gsm_bx, 
+                imf.gsm_by AS imf_gsm_by, 
+                imf.gse_lat AS imf_gse_lat, 
+                imf.gse_lon AS imf_gse_lon,  
+                imf.gsm_lat AS imf_gsm_lat,  
+                imf.gsm_lon AS imf_gsm_lon,  
+                imf.numpts AS imf_numpts  
             FROM time_series ts
             LEFT JOIN solar_wind imf 
                 ON ts.epoch BETWEEN imf.time - INTERVAL '30 minutes' AND imf.time + INTERVAL '30 minutes'
             ORDER BY ts.epoch, imf.time DESC
         )
-        INSERT INTO unified_space_weather (epoch, dst, density, speed, temperature, ap_index, kp_value, kp_interval, 
-                                           f107, sunspot_number, sw_flag, 
-                                           gsm_bz, bt, imf_flag,
-                                           gse_bx, gse_by, gse_bz,
-                                           gsm_bx, gsm_by,
-                                           gse_lat, gse_lon,
-                                           gsm_lat, gsm_lon,
-                                           numpts)
+        INSERT INTO unified_space_weather (epoch, geo_dst, geo_ap_index, geo_kp_value, geo_kp_interval, 
+                                           imf_flag, imf_gsm_bz, imf_bt,
+                                           imf_gse_bx, imf_gse_by, imf_gse_bz,
+                                           imf_gsm_bx, imf_gsm_by,
+                                           imf_gse_lat, imf_gse_lon,
+                                           imf_gsm_lat, imf_gsm_lon,
+                                           imf_numpts, sw_flag, 
+                                           sw_density, sw_speed, sw_temperature, 
+                                           solar_f107, solar_sunspot_number)
         SELECT 
             ts.epoch, 
-            d.dst, 
-            sw.density, 
-            sw.speed, 
-            sw.temperature, 
-            gkp.ap_index, 
-            gkp.kp_value, 
-            gkp.kp_interval, 
-            f.f107, 
-            f.sunspot_number, 
-            sw.sw_flag,  
-            imf.gsm_bz,  
-            imf.bt,  
-            imf.imf_flag,
-            imf.gse_bx, imf.gse_by, imf.gse_bz,
-            imf.gsm_bx, imf.gsm_by,
-            imf.gse_lat, imf.gse_lon,
-            imf.gsm_lat, imf.gsm_lon,
-            imf.numpts
+            d.dst AS geo_dst, 
+            gkp.geo_ap_index, 
+            gkp.geo_kp_value, 
+            gkp.geo_kp_interval, 
+            imf.imf_flag, 
+            imf.imf_gsm_bz, 
+            imf.imf_bt, 
+            imf.imf_gse_bx, imf.imf_gse_by, imf.imf_gse_bz,
+            imf.imf_gsm_bx, imf.imf_gsm_by,
+            imf.imf_gse_lat, imf.imf_gse_lon,
+            imf.imf_gsm_lat, imf.imf_gsm_lon,
+            imf.imf_numpts, sw.sw_flag,  
+            sw.sw_density, sw.sw_speed, sw.sw_temperature, 
+            f.solar_f107, f.solar_sunspot_number
         FROM time_series ts
         LEFT JOIN dst_index d ON ts.epoch = d.time
         LEFT JOIN interpolated_solar_wind sw ON ts.epoch = sw.epoch
@@ -575,29 +577,12 @@ def merge_and_store_unified_table():
         LEFT JOIN interpolated_imf imf ON ts.epoch = imf.epoch
         ON CONFLICT (epoch) 
         DO UPDATE SET
-            dst = COALESCE(EXCLUDED.dst, unified_space_weather.dst),
-            density = COALESCE(EXCLUDED.density, unified_space_weather.density),
-            speed = COALESCE(EXCLUDED.speed, unified_space_weather.speed),
-            temperature = COALESCE(EXCLUDED.temperature, unified_space_weather.temperature),
-            ap_index = COALESCE(EXCLUDED.ap_index, unified_space_weather.ap_index),
-            kp_value = COALESCE(EXCLUDED.kp_value, unified_space_weather.kp_value),
-            kp_interval = COALESCE(EXCLUDED.kp_interval, unified_space_weather.kp_interval),
-            f107 = COALESCE(EXCLUDED.f107, unified_space_weather.f107),
-            sunspot_number = COALESCE(EXCLUDED.sunspot_number, unified_space_weather.sunspot_number),
-            sw_flag = COALESCE(EXCLUDED.sw_flag, unified_space_weather.sw_flag),
-            gsm_bz = COALESCE(EXCLUDED.gsm_bz, unified_space_weather.gsm_bz),
-            bt = COALESCE(EXCLUDED.bt, unified_space_weather.bt),
+            geo_dst = COALESCE(EXCLUDED.geo_dst, unified_space_weather.geo_dst),
+            geo_ap_index = COALESCE(EXCLUDED.geo_ap_index, unified_space_weather.geo_ap_index),
+            geo_kp_value = COALESCE(EXCLUDED.geo_kp_value, unified_space_weather.geo_kp_value),
+            geo_kp_interval = COALESCE(EXCLUDED.geo_kp_interval, unified_space_weather.geo_kp_interval),
             imf_flag = COALESCE(EXCLUDED.imf_flag, unified_space_weather.imf_flag),
-            gse_bx = COALESCE(EXCLUDED.gse_bx, unified_space_weather.gse_bx),
-            gse_by = COALESCE(EXCLUDED.gse_by, unified_space_weather.gse_by),
-            gse_bz = COALESCE(EXCLUDED.gse_bz, unified_space_weather.gse_bz),
-            gsm_bx = COALESCE(EXCLUDED.gsm_bx, unified_space_weather.gsm_bx),
-            gsm_by = COALESCE(EXCLUDED.gsm_by, unified_space_weather.gsm_by),
-            gse_lat = COALESCE(EXCLUDED.gse_lat, unified_space_weather.gse_lat),
-            gse_lon = COALESCE(EXCLUDED.gse_lon, unified_space_weather.gse_lon),
-            gsm_lat = COALESCE(EXCLUDED.gsm_lat, unified_space_weather.gsm_lat),
-            gsm_lon = COALESCE(EXCLUDED.gsm_lon, unified_space_weather.gsm_lon),
-            numpts = COALESCE(EXCLUDED.numpts, unified_space_weather.numpts);
+            sw_flag = COALESCE(EXCLUDED.sw_flag, unified_space_weather.sw_flag);
     """
 
     try:
@@ -612,7 +597,6 @@ def merge_and_store_unified_table():
     finally:
         cursor.close()
         conn.close()
-
 
 
 
