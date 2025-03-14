@@ -3,14 +3,8 @@
 import axios from "axios";
 
 const API_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/satellites/";
-const INFOGRAPHICS_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/infographics/";
 const CDM_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/cdm/";
 const OLD_TLES_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/old_tles/";
-
-
-
-
-
 
 
 
@@ -45,6 +39,11 @@ export async function fetchSatellites(page = 1, limit = 500, filter = null) {
     return { satellites: [] };
   }
 }
+
+
+
+
+
 
 
 
@@ -128,47 +127,3 @@ export async function fetchCDMEvents() {
 
 
 
-export async function fetchInfographics(filters) {
-  try {
-    if (!filters || (Array.isArray(filters) && filters.length === 0)) {
-      console.warn("⚠️ No filters applied. Returning empty infographics.");
-      return [];
-    }
-    if (!Array.isArray(filters)) {
-      filters = [filters]; // ✅ Convert single filter string to array
-    }
-
-    const graphTypes = [
-      "orbit_distribution",
-      "velocity_distribution",
-      "perigee_apogee",
-      "purpose_breakdown",
-      "country_distribution",
-      "cumulative_launch_trend",
-      "orbital_period_vs_mean_motion",
-      "inclination_mean_motion",
-      "bstar_altitude",
-      "launch_sites"
-    ];
-
-    // ✅ Ensure properly formatted names
-    const infographicUrls = filters.map((filter) => {
-      const formattedFilter = decodeURIComponent(filter) // ✅ Fix double encoding
-        .trim()
-        .replace(/ /g, "_")
-        .replace(/:/g, "")
-        .replace(/\(|\)/g, "");
-
-      return graphTypes.map((graph) => ({
-        url: `${INFOGRAPHICS_BASE_URL}${formattedFilter}/${graph}.png`,
-        name: `${formattedFilter.replace(/_/g, " ")} - ${graph.replace(/_/g, " ")}`, // ✅ Fix display names
-      }));
-    }).flat(); // ✅ Flatten after mapping
-
-    console.log(`📡 Fetching infographics for filters: ${filters.join(", ")}`);
-    return infographicUrls;
-  } catch (error) {
-    console.error("❌ Error fetching infographics:", error);
-    return [];
-  }
-}

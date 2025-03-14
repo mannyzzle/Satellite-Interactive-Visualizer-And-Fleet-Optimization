@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import Navbar from "../components/Navbar";  // ✅ Ensure correct path
+import SatelliteCounter from "../components/SatelliteCounter";  // ✅ Import Satellite Counter
 import { useCallback } from "react";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { fetchSatellites } from "../api/satelliteService";
@@ -12,8 +13,6 @@ import { Button } from "../components/button";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "../components/select";
 import { motion } from "framer-motion";
 import { TypeAnimation } from "react-type-animation";
-import CountUp from "react-countup";
-
 const basePath = import.meta.env.BASE_URL;  // ✅ Dynamically fetch the base URL
 const dayTexture = `${basePath}earth_day.jpg`;
 const nightTexture = `${basePath}earth_night.jpg`;
@@ -1493,20 +1492,9 @@ return (
           Stay informed on <span className="font-semibold text-teal-300">mega-constellation expansions</span>.
         </p>
 
-        {/* 🚀 Counter */}
-        <motion.div
-          className="text-xl sm:text-2xl md:text-3xl font-bold text-teal-300 tracking-wider animate-pulse glow-text"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1.2, delay: 1 }}
-        >
-          <span className="drop-shadow-lg">
-            <CountUp start={0} end={27535} duration={3} separator="," />
-          </span> 
-          <span className="text-xs sm:text-sm md:text-lg font-medium text-gray-300">
-            objects currently tracked
-          </span>
-        </motion.div>
+        {/* 🚀 Dynamic Counter */}
+        <SatelliteCounter />  {/* ✅ This dynamically fetches satellite count */}
+
       </motion.div>
     </div>
 
@@ -1515,7 +1503,7 @@ return (
       
       {/* 🌍 Left Section (3D UI & Sidebar) */}
       <div className="relative flex w-3/4 max-h-screen bg-gray-900/80 backdrop-blur-lg 
-                      border border-gray-700  shadow-xl overflow-hidden ">
+                      border border-gray-700 shadow-xl overflow-hidden">
         
         {/* 🌍 3D UI Scene */}
         <div className={`relative flex-1 ${window.innerWidth < 768 ? "h-screen" : "h-screen"} cursor-pointer`}
