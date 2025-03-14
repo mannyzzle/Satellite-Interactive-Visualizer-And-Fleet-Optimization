@@ -118,6 +118,9 @@ def get_all_satellites(
 
 
 
+
+
+
 def get_filter_condition(filter):
     """Generate SQL filter conditions based on the selected filter."""
     filter_conditions = {
@@ -261,3 +264,13 @@ def get_satellite_by_name(satellite_name: str):
         "country": satellite["country"],
         "active_status": satellite["active_status"]
     }
+
+
+
+
+
+@router.get("/count")
+async def get_satellite_count():
+    db = get_db_connection()
+    result = db.execute("SELECT COUNT(*) FROM satellites;").fetchone()
+    return {"total": result[0]}
