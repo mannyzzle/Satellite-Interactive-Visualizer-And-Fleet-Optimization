@@ -1079,7 +1079,7 @@ animateStars();
     
     requestAnimationFrame(animate);
 
-    if (globeRef.current) globeRef.current.rotation.y += 0.00000727;
+    if (globeRef.current) globeRef.current.rotation.y += 0.0000727;
 
     const time = Date.now() / 1000;
     const timeFactor = 1;
