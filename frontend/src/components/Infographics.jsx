@@ -16,7 +16,7 @@ const Infographics = () => {
   useEffect(() => {
     const fetchLaunches = async () => {
       try {
-        API_URL = "https://satellite-tracker-production.up.railway.app/api/launches/previous"
+        
 
         //TESTING
         //API_URL = "http://localhost:8000/api/launches/previous"
