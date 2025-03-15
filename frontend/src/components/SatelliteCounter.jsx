@@ -6,7 +6,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { Typewriter } from "react-simple-typewriter";
 
 const API_URL = "https://satellite-tracker-production.up.railway.app/api/satellites/count";
-const OBJECT_TYPE_API = "https://satellite-tracker-production.up.railway.app/object_types";
+const OBJECT_TYPE_API = "https://satellite-tracker-production.up.railway.app/api/satellites/object_types";
 
 //TESTING✅ FastAPI Backend Endpoints
 //const API_URL = "http://127.0.0.1:8000/api/satellites/count";
