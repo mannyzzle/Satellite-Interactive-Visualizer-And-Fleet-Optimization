@@ -1,5 +1,16 @@
 from fastapi import APIRouter, Depends, BackgroundTasks
-from database import get_db_connection
+
+import sys
+import os
+
+# Ensure backend root directory is in sys.path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    from database import get_db_connection  # Absolute import for Docker
+except ImportError:
+    from app.database import get_db_connection  # Relative import for local execution
+
 
 router = APIRouter()
 

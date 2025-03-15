@@ -1,7 +1,17 @@
 from fastapi import FastAPI
+import sys
 from fastapi.middleware.cors import CORSMiddleware
-from api import satellites, cdm, old_tles, launches
 import os
+
+# Ensure the backend root directory is in sys.path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    from api import satellites, cdm, old_tles, launches  # Absolute import for Docker
+except ImportError:
+    from .api import satellites, cdm, old_tles, launches  # Relative import for local
+
+   
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
 
