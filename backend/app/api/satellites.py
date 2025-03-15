@@ -1,8 +1,8 @@
 #api/satellites.py
 
-
+import psycopg2
 from fastapi import APIRouter, HTTPException, Query
-from app.database import get_db_connection
+from database import get_db_connection
 import math
 
 router = APIRouter()
@@ -18,8 +18,7 @@ def sanitize_value(value):
 def get_all_satellites(
     page: int = Query(1, ge=1),
     limit: int = Query(500, ge=1, le=32000),
-    filter: str = Query(None),
-    sort_by: str = Query("altitude", regex="^(altitude|collision)$")  # ✅ Allow sorting option
+    filter: str = Query(None)
 ):
     offset = (page - 1) * limit
     conn = get_db_connection()
@@ -27,7 +26,7 @@ def get_all_satellites(
 
     try:
         print("🔍 Fetching total satellite count...")
-        
+
         if filter:
             cursor.execute(f"SELECT COUNT(*) AS count FROM satellites WHERE {get_filter_condition(filter)}")
         else:
@@ -36,7 +35,7 @@ def get_all_satellites(
         result = cursor.fetchone()
         if not result or "count" not in result:
             raise HTTPException(status_code=500, detail="Failed to fetch satellite count")
-        
+
         total_count = result["count"]
         print(f"✅ Total satellites found: {total_count}")
 
@@ -55,12 +54,8 @@ def get_all_satellites(
         if filter:
             query += f" WHERE {get_filter_condition(filter)}"
 
-        # ✅ Sorting Logic: Default `altitude`, Optional `collision`
-        if sort_by == "collision":
-            print("⚠️ Sorting by **collision risk** instead of altitude...")
-            query += " ORDER BY velocity DESC, eccentricity DESC, bstar DESC, perigee ASC"
-        else:
-            query += " ORDER BY perigee ASC, apogee ASC, launch_date DESC"
+        # ✅ Sorting Logic: Most recent launch first, NULLs last
+        query += " ORDER BY launch_date DESC NULLS LAST"
 
         query += " LIMIT %s OFFSET %s"
         cursor.execute(query, (limit, offset))
@@ -117,7 +112,70 @@ def get_all_satellites(
         conn.close()
 
 
+@router.get("/count")
+async def get_satellite_count():
+    """
+    Fetches the total satellite count from the database.
+    """
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) FROM satellites;")
+            result = cursor.fetchone()
 
+            if not result:
+                raise HTTPException(status_code=500, detail="Database returned no result for count")
+
+            total_count = result['count']  # ✅ Correctly extract count
+
+            return {"total": total_count}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+    finally:
+        conn.close()
+
+
+
+@router.get("/object_types")
+async def get_object_types():
+    """
+    Retrieve the count of satellites grouped by object_type.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        print("📡 Fetching object type distribution...", flush=True)
+
+        # ✅ Run SQL Query
+        cursor.execute("SELECT object_type, COUNT(*) AS count FROM satellites GROUP BY object_type;")
+
+        # ✅ Fetch Data as a list of dictionaries
+        rows = cursor.fetchall()
+
+        # ✅ Debugging: Print what the database returned
+        print("🔍 Raw Query Result:", rows, flush=True)
+
+        # ✅ Ensure data exists
+        if not rows:
+            print("⚠️ No data found for object types.", flush=True)
+            raise HTTPException(status_code=404, detail="No satellite object types found.")
+
+        # ✅ Correct way to map results when using RealDictRow
+        object_types = [{"object_type": row["object_type"], "count": row["count"]} for row in rows]
+
+        print(f"✅ Successfully fetched {len(object_types)} object types: {object_types}", flush=True)
+        return {"types": object_types}
+
+    except psycopg2.Error as e:
+        print(f"❌ Database Query Failed: {e}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+    finally:
+        cursor.close()
+        conn.close()
 
 
 
@@ -202,6 +260,10 @@ def get_filter_condition(filter):
 
 
 
+
+
+
+
 @router.get("/{satellite_name}")
 def get_satellite_by_name(satellite_name: str):
     """
@@ -268,9 +330,3 @@ def get_satellite_by_name(satellite_name: str):
 
 
 
-
-@router.get("/count")
-async def get_satellite_count():
-    db = get_db_connection()
-    result = db.execute("SELECT COUNT(*) FROM satellites;").fetchone()
-    return {"total": result[0]}

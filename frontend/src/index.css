@@ -336,10 +336,10 @@ nav {
 /* 🚀 Satellite Rotation Animation */
 @keyframes rotateSatellite {
   from {
-    transform: rotateY(0deg) rotateX(10deg) rotateZ(45deg);
+    transform: rotateY(0deg) rotateX(10deg) rotateZ(30deg);
   }
   to {
-    transform: rotateY(360deg) rotateX(10deg) rotateZ(45deg);
+    transform: rotateY(360deg) rotateX(10deg) rotateZ(30deg);
   }
 }
 
@@ -354,7 +354,7 @@ nav {
   align-items: center;
   justify-content: start;
   padding-top: 15rem;
-  background: radial-gradient(circle at center, rgba(15, 15, 15, 0.7) 10%, rgba(0, 0, 0, 1) 90%);
+  background: radial-gradient(circle at center, rgba(0, 34, 38, 0.4) 5%, rgb(9, 0, 22) 90%);
   color: white;
   font-size: 1.25rem;
   font-weight: bold;
@@ -413,3 +413,5 @@ nav {
     box-shadow: 0 0 15px rgba(0, 255, 255, 1), 0 0 25px rgba(0, 255, 255, 0.8);
   }
 }
+
+

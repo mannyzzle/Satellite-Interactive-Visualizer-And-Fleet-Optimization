@@ -924,6 +924,8 @@ useEffect(() => {
 
   const scene = new THREE.Scene();
   sceneRef.current = scene;
+  scene.background = new THREE.Color("rgba(5, 0, 18, 0.85)"); // Example Mako-Themed Deep Blue
+
 
   // ✅ Ensure DOM is fully loaded before setting sizes
   setTimeout(() => {
@@ -984,22 +986,6 @@ scene.add(light);
   scene.add(globe);
 
 
-  const cloudMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(6110, 106, 106),  // Keep a slightly larger radius
-    new THREE.MeshStandardMaterial({
-      map: clouds,
-      transparent: true,
-      opacity: 0.75,  // Slightly reduce opacity
-      depthWrite: false, // Prevents flickering by allowing transparency sorting
-      depthTest: true, // Keeps proper depth order
-      side: THREE.DoubleSide, 
-      blending: THREE.NormalBlending, // Prevent harsh edges
-    })
-  );
-  
-  cloudRef.current = cloudMesh;
-  scene.add(cloudMesh);
-
 
 
 
@@ -1033,34 +1019,31 @@ scene.add(light);
 
 
 
-
-
-
-  
-
-
-  // 🌌 **Create Larger Star Field**
+// 🌌 **Create Twinkling Star Field**
 const starGeometry = new THREE.BufferGeometry();
 const starVertices = [];
+const starTwinkleSpeeds = []; // ✨ Store random twinkle speeds
 
-// ✅ Increase star count and expand volume
-const starCount = 20000;  // More stars
-const starFieldSize = 3000000; // Increase field size
+// ✅ Increase randomness & spread
+const starCount = 750;  // Keep stars sparse
+const starFieldSize = 2500000; // Wide distribution
 
 for (let i = 0; i < starCount; i++) {
   starVertices.push(
-    (Math.random() - 0.5) * starFieldSize,  // Spread over larger area
+    (Math.random() - 0.5) * starFieldSize, 
     (Math.random() - 0.5) * starFieldSize,
     (Math.random() - 0.5) * starFieldSize
   );
+
+  // ✅ Assign each star a random twinkle speed
+  starTwinkleSpeeds.push(Math.random() * 0.03 + 0.01); // 0.01 - 0.04 range
 }
 
 starGeometry.setAttribute("position", new THREE.Float32BufferAttribute(starVertices, 3));
 
-// ✅ Adjust Material to Improve Appearance
 const starMaterial = new THREE.PointsMaterial({
   color: 0xffffff,
-  size: 0.03,  // Slightly larger stars
+  size: 50,  // 🔥 Brighter, more visible stars
   transparent: true,
   opacity: 0.8,
   depthWrite: false
@@ -1069,19 +1052,26 @@ const starMaterial = new THREE.PointsMaterial({
 const stars = new THREE.Points(starGeometry, starMaterial);
 scene.add(stars);
 
+// 🔄 **Twinkling Animation Loop**
+const animateStars = () => {
+  requestAnimationFrame(animateStars);
+
+  const time = Date.now() * 0.001; // Convert time to seconds
+
+  // 🌟 Randomize twinkle effect per star
+  const positions = starGeometry.attributes.position.array;
+  for (let i = 0; i < starCount; i++) {
+    const speed = starTwinkleSpeeds[i];
+    positions[i * 3 + 1] += Math.sin(time * speed) * 0.5; // Y-axis twinkle
+  }
+
+  starGeometry.attributes.position.needsUpdate = true; // Update positions
+};
+
+// ✅ Start Twinkling
+animateStars();
 
 
-
-
-
-
-
-  
-  // ✅ ADD THE MOON HERE
-  //createMoon(scene, globe); 
-
-  // ✅ Start Moon Orbit Animation
-  //animateMoon();
 
 
   // 🔄 **Animation Loop**
@@ -1090,7 +1080,6 @@ scene.add(stars);
     requestAnimationFrame(animate);
 
     if (globeRef.current) globeRef.current.rotation.y += 0.00000727;
-    if (cloudRef.current) cloudRef.current.rotation.y += 0.000009;
 
     const time = Date.now() / 1000;
     const timeFactor = 1;
@@ -1441,70 +1430,63 @@ const categories = {
 };
 
 
+
+const generateStars = (numStars) => {
+  return Array.from({ length: numStars }).map((_, i) => {
+    const size = Math.random() * 3 + 1; // Random size between 1px and 4px
+    const duration = Math.random() * 5 + 3; // Random twinkle duration between 3s and 8s
+    const positionX = Math.random() * 100; // Random X position (0-100%)
+    const positionY = Math.random() * 100; // Random Y position (0-100%)
+
+    return (
+      <motion.div
+        key={i}
+        className="absolute bg-white rounded-full"
+        style={{
+          width: `${size}px`,
+          height: `${size}px`,
+          left: `${positionX}%`,
+          top: `${positionY}%`,
+          opacity: Math.random() * 0.5 + 0.3, // Random opacity (30% - 80%)
+          filter: "drop-shadow(0px 0px 5px rgba(255, 255, 255, 0.8))", // Soft glow
+        }}
+        animate={{ opacity: [0.2, 1, 0.2] }} // Twinkle Effect
+        transition={{
+          duration: duration, // Randomized twinkle duration
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+    );
+  });
+};
+
+
+
+
+
+
 return (
   <div className="flex flex-col w-screen min-h-screen overflow-hidden border-gray-950">
     
-    {/* 📌 Navbar (Stays at the Very Top) */}
-    <Navbar />
+          {/* 📌 Navbar (Stays at the Very Top) */}
+          <Navbar />
 
-    {/* 📌 Full-Screen Hero Section - Absolutely No Gaps */}
-    <div className="w-screen h-screen min-h-screen flex flex-col items-center justify-center bg-black/50 border-b border-gray-800 shadow-lg overflow-hidden">
-      
-      {/* 🌍 Fully Contained Box */}
-      <motion.div
-        className="w-full max-w-[90%] sm:max-w-[85%] md:max-w-[80%] lg:max-w-[75%] 
-                   p-3 sm:p-4 border border-gray-700 shadow-lg 
-                   space-y-3 flex flex-col items-center text-center"
-        initial={{ opacity: 0, y: 5 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 1.2, delay: 0.5 }}
-      >
-        {/* 🛰️ Title */}
-        <motion.h1
-          className="text-sm sm:text-lg md:text-2xl font-bold text-white tracking-wide glow-text"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1 }}
-        >
-          <TypeAnimation
-            sequence={["Welcome to Sat-Track", 2500]}
-            wrapper="span"
-            speed={50}
-            repeat={Infinity}
-          />
-        </motion.h1>
 
-        {/* 🌍 Description */}
-        <p className="text-[clamp(0.6rem, 1vw, 1rem)] text-gray-300 leading-tight tracking-wide">
-          Explore the world of <strong>real-time satellite tracking</strong> with Sat-Track.  
-          Monitor <span className="font-semibold text-teal-300">active satellites</span>,  
-          <span className="font-semibold text-teal-300">space debris</span>, and  
-          <span className="font-semibold text-teal-300">orbital pathways</span> with precision.
+  {/* 🌍 Fully Contained Box - Now Includes SatelliteCounter (Text + Chart) */}
+  <SatelliteCounter />
 
-          Gain insights into <span className="font-semibold text-teal-300">LEO, GEO, and beyond</span>,  
-          tracking their role in <span className="font-semibold text-teal-300">communications</span>,  
-          <span className="font-semibold text-teal-300">military</span>, and  
-          <span className="font-semibold text-teal-300">science</span>.
-
-          Analyze <strong>orbital decay</strong>,  
-          <strong>collision risks</strong>, and  
-          <strong>satellite decommissioning</strong>.  
-          Stay informed on <span className="font-semibold text-teal-300">mega-constellation expansions</span>.
-        </p>
-
-        {/* 🚀 Dynamic Counter */}
-        <SatelliteCounter />  {/* ✅ This dynamically fetches satellite count */}
-
-      </motion.div>
-    </div>
 
     {/* 🌍 Main Layout (No Space Below the Hero Section) */}
     <div className="relative flex flex-1 max-h-screen">
       
       {/* 🌍 Left Section (3D UI & Sidebar) */}
       <div className="relative flex w-3/4 max-h-screen bg-gray-900/80 backdrop-blur-lg 
-                      border border-gray-700 shadow-xl overflow-hidden">
-        
+                       shadow-xl overflow-hidden">
+          <div className="absolute w-full h-full overflow-hidden pointer-events-none">
+    {generateStars(150)} {/* Adjust number of stars here */}
+  </div>
+
         {/* 🌍 3D UI Scene */}
         <div className={`relative flex-1 ${window.innerWidth < 768 ? "h-screen" : "h-screen"} cursor-pointer`}
              onClick={() => setIs3DEnabled(true)}>
@@ -1638,7 +1620,7 @@ return (
 {is3DEnabled && (
   <div
     className="fixed bottom-4 left-1/2 transform -translate-x-1/2 w-96 bg-gray-900 bg-opacity-90 text-teal-300 p-4 shadow-lg text-xs border-t-4 border-teal-300 rounded-xl z-[50] transition-all duration-300 ease-in-out"
-    style={{ maxHeight: "150px", overflowY: "auto" }} // Keeps it small, scrollable if needed
+    style={{ maxHeight: "180px", overflowY: "auto" }} // Increased height slightly
   >
     {!selectedSatellite ? (
       <div className="flex flex-col items-center justify-center h-full text-teal-300 font-semibold text-center p-3">
@@ -1670,11 +1652,20 @@ return (
             <span className="text-teal-300 text-[10px] uppercase">Position</span>
             <span>{realTimeData.latitude}°, {realTimeData.longitude}°</span>
           </div>
+          <div className="flex justify-between">
+            <span className="text-teal-300 text-[10px] uppercase">Purpose</span>
+            <span className="truncate">{selectedSatellite.purpose || "Unknown"}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-teal-300 text-[10px] uppercase">Object Type</span>
+            <span className="truncate">{selectedSatellite.object_type || "Unknown"}</span>
+          </div>
         </div>
       </>
     )}
   </div>
 )}
+
 
  </div>
 
@@ -1684,7 +1675,7 @@ return (
 
 
 {/* 🌍 Right Side: Stacked Satellite List & Filters */}
-<div className="absolute right-0 top-0 h-screen w-1/4 flex flex-col gap-3 px-4 bg-gray-900/90 border-l border-gray-700 shadow-xl">
+<div className="absolute right-0 top-0 h-screen w-1/4 flex flex-col gap-3 px-4 bg-rgb(9, 0, 22) shadow-xl">
 
   {/* 🛰️ Satellite List (Top Section) */}
   <div className="h-1/2 bg-gray-900/80 backdrop-blur-lg border border-gray-700 rounded-xl shadow-xl p-4 flex flex-col space-y-3">
@@ -1722,29 +1713,42 @@ return (
         </div>
       ) : (
         <ul className="grid grid-cols-1 gap-3 w-full">
-          {displayedSatellites.map((sat) => (
-            <li
-              key={sat.norad_number}
-              className={`cursor-pointer p-4 rounded-lg text-center border border-gray-700 shadow-md transition-all duration-300 text-lg font-semibold flex items-center justify-between
-                ${
-                  selectedSatellite?.norad_number === sat.norad_number
-                    ? "bg-teal-500 text-white border-teal-500 shadow-lg scale-105"
-                    : "bg-gray-800 hover:bg-gray-700 active:bg-teal-600"
-                }`}
-              onClick={() => {
-                console.log(`Selecting satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
-                focusOnSatellite(sat);
-                enableInteraction();
-              }}
-            >
-              <span className="flex items-center space-x-3">
-                <span className="text-3xl">{getCountryFlag(sat.country)}</span>
-                <span className="text-lg">{sat.name}</span>
-              </span>
-              <span className="text-sm text-gray-400">NORAD: {sat.norad_number}</span>
-            </li>
-          ))}
-        </ul>
+  {displayedSatellites.map((sat) => (
+    <li
+      key={sat.norad_number}
+      className={`cursor-pointer p-4 rounded-lg text-center border border-gray-700 shadow-md transition-all duration-300 text-lg font-semibold flex flex-col items-center justify-between
+        ${
+          selectedSatellite?.norad_number === sat.norad_number
+            ? "bg-teal-500 text-white border-teal-500 shadow-lg scale-105"
+            : "bg-gray-800 hover:bg-gray-700 active:bg-teal-600"
+        }`}
+      onClick={() => {
+        console.log(`Selecting satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
+        focusOnSatellite(sat);
+        enableInteraction();
+      }}
+    >
+      {/* ✅ Satellite Name & Flag */}
+      <div className="flex items-center space-x-3">
+        <span className="text-3xl">{getCountryFlag(sat.country)}</span>
+        <span className="text-lg">{sat.name}</span>
+      </div>
+
+      {/* ✅ NORAD ID */}
+      <span className="text-sm text-gray-400">NORAD: {sat.norad_number}</span>
+
+      {/* ✅ Launch Date */}
+      {sat.launch_date ? (
+        <span className="text-xs text-gray-300 mt-1">
+           Launched: {new Date(sat.launch_date).toLocaleDateString()}
+        </span>
+      ) : (
+        <span className="text-xs text-gray-500 mt-1">🚀 Launch Date: Unknown</span>
+      )}
+    </li>
+  ))}
+</ul>
+
       )}
     </div>
 
@@ -1903,78 +1907,80 @@ return (
         error={chartError}/>
     </div>
 
+{/* 🌌 Full-Screen Mako Experience */}
+<div className="min-h-screen bg-gradient-to-b from-[#050716] via-[#1B1E3D] to-[#2E4867] text-white px-6 sm:px-8 lg:px-12 py-12 z-60 font-[Space Grotesk]">
+<div className="absolute w-full h-full overflow-hidden pointer-events-none">
+    {generateStars(150)} {/* Adjust number of stars here */}
+  </div>
+  {/* 📦 Grid Layout for Sections */}
+  <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12 pb-24 w-full">
 
-{/* 🌌 Full Page Container */}
-<div className="min-h-screen bg-gradient-to-b from-black via-blue-950 to-gray-900 text-white px-4 sm:px-6 lg:px-10 py-10 z-60 font-[Space Grotesk]">
-
-  {/* 📦 Section Container (Grid Layout with More Separation) */}
-  <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 pb-20 w-full">
-
-    {/* 🚀 About the Satellite Tracker */}
-    <div className="p-8 bg-gray-900 bg-opacity-95 rounded-xl shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 w-full mx-3 lg:col-span-2">
-      <h2 className="text-4xl font-medium text-teal-300 tracking-wide">The Future of Satellite Tracking</h2>
-      <p className="mt-5 text-lg leading-relaxed text-gray-300">
-        Experience a <span className="text-yellow-300 font-medium uppercase tracking-wide">real-time 3D visualization</span> of Earth's satellites with unparalleled accuracy. Built on <span className="text-green-400 font-medium tracking-wide">advanced Keplerian physics</span>, this system dynamically maps orbital mechanics for a hyper-realistic space experience.
+    {/* 🚀 The Future of Orbital Tracking */}
+    <div className="p-10 bg-[#1E233F] bg-opacity-95 rounded-xl shadow-xl border border-[#3E6A89] hover:scale-105 transition-transform duration-300 w-full mx-3 lg:col-span-2">
+      <h2 className="text-4xl font-semibold text-[#86EED8] tracking-wide">Next-Generation Orbital Tracking</h2>
+      <p className="mt-6 text-lg leading-relaxed text-gray-300">
+        Step into the **next era** of <span className="text-[#C8E49C] font-semibold uppercase">real-time orbital intelligence</span>. Powered by **high-fidelity Keplerian models**, this system provides a **seamless visualization** of Earth's satellites, designed for **precision-driven mission planning** and **collision risk mitigation**.
       </p>
     </div>
 
-    {/* ⚙️ How It Works */}
-    <div className="p-7 bg-gray-800 bg-opacity-90 rounded-lg shadow-md border border-gray-700 hover:scale-105 transition-transform duration-300 w-full mx-3">
-      <h2 className="text-3xl font-medium text-green-400 tracking-wide">The Technology Behind It</h2>
-      <p className="mt-4 text-lg leading-relaxed text-gray-300">
-        Using Two-Line Element (TLE) data, this system calculates precise orbits through a <span className="text-lime-400 font-medium tracking-wide">high-fidelity orbital mechanics engine</span>. The real-time 3D interface is powered by <span className="text-cyan-400 font-medium tracking-wide">GPU-accelerated rendering</span>, ensuring seamless interactivity.
+    {/* ⚙️ How the System Works */}
+    <div className="p-8 bg-[#253654] bg-opacity-90 rounded-lg shadow-lg border border-[#5E8A94] hover:scale-105 transition-transform duration-300 w-full mx-3">
+      <h2 className="text-3xl font-medium text-[#6BB8C7] tracking-wide">Deep-Tech Insights</h2>
+      <p className="mt-5 text-lg leading-relaxed text-gray-300">
+        By leveraging **Two-Line Element (TLE) datasets**, we calculate orbital trajectories with an <span className="text-[#C8E49C] font-semibold tracking-wide">adaptive physics engine</span>. Advanced **GPU-accelerated rendering** fuels an **interactive 3D experience**, offering **real-time orbital evolution**.
       </p>
     </div>
 
     {/* 🌍 Real-World Applications */}
-    <div className="p-9 bg-gray-900 bg-opacity-95 rounded-xl shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 w-full mx-3 lg:col-span-2">
-      <h2 className="text-4xl font-medium text-yellow-300 tracking-wide">Real-World Impact</h2>
-      <ul className="mt-5 list-disc pl-6 space-y-3 text-lg text-gray-300">
-        <li><span className="text-cyan-400 font-medium">Orbital Debris Management</span> — Prevent catastrophic collisions in low-Earth orbit.</li>
-        <li><span className="text-green-400 font-medium">Global Positioning Systems</span> — Optimize GPS accuracy through precise tracking.</li>
-        <li><span className="text-lime-400 font-medium">High-Speed Telecommunications</span> — Ensure seamless satellite internet and broadcasting.</li>
+    <div className="p-10 bg-[#1E233F] bg-opacity-95 rounded-xl shadow-lg border border-[#4F89A5] hover:scale-105 transition-transform duration-300 w-full mx-3 lg:col-span-2">
+      <h2 className="text-4xl font-semibold text-[#86EED8] tracking-wide">Impact Across Industries</h2>
+      <ul className="mt-6 list-disc pl-6 space-y-4 text-lg text-gray-300">
+        <li><span className="text-[#C8E49C] font-semibold">Orbital Debris Mitigation</span> — Advanced AI-powered tracking of space junk.</li>
+        <li><span className="text-[#6BB8C7] font-semibold">Navigation Precision</span> — Enhanced GPS and satellite communication systems.</li>
+        <li><span className="text-[#5E8A94] font-semibold">Earth Monitoring</span> — Optimized climate and environmental observation.</li>
       </ul>
     </div>
 
-    {/* 📡 Technical Features */}
-    <div className="p-8 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 w-full mx-3">
-      <h2 className="text-3xl font-medium text-teal-300 tracking-wide">Advanced Features</h2>
-      <ul className="mt-4 list-disc pl-6 space-y-3 text-lg text-gray-300">
-        <li><span className="text-yellow-300 font-medium">Continuous Data Refresh</span> — Fetches & updates satellite positions every few seconds.</li>
-        <li><span className="text-green-400 font-medium">Hyper-Accurate 3D Rendering</span> — Powered by WebGL and Three.js.</li>
-        <li><span className="text-cyan-400 font-medium">Predictive Orbit Analysis</span> — Calculates future movements with high precision.</li>
+    {/* 📡 Advanced Capabilities */}
+    <div className="p-8 bg-[#253654] bg-opacity-90 rounded-lg shadow-lg border border-[#4F89A5] hover:scale-105 transition-transform duration-300 w-full mx-3">
+      <h2 className="text-3xl font-medium text-[#C8E49C] tracking-wide">System Capabilities</h2>
+      <ul className="mt-5 list-disc pl-6 space-y-3 text-lg text-gray-300">
+        <li><span className="text-[#86EED8] font-semibold">Live Data Refresh</span> — Constant updates for orbital integrity.</li>
+        <li><span className="text-[#4F89A5] font-semibold">3D Orbital Mapping</span> — Built with **Three.js** and **WebGL**.</li>
+        <li><span className="text-[#5E8A94] font-semibold">Predictive Analytics</span> — Advanced forecasting for trajectory shifts.</li>
       </ul>
     </div>
 
     {/* 🚀 Future Enhancements */}
-    <div className="p-7 bg-gray-900 bg-opacity-95 rounded-xl shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 w-full mx-3 lg:col-span-2">
-      <h2 className="text-4xl font-medium text-lime-400 tracking-wide">What’s Coming Next</h2>
-      <ul className="mt-5 list-disc pl-6 space-y-3 text-lg text-gray-300">
-        <li><span className="text-teal-300 font-medium">AI-Based Anomaly Detection</span> — Identifies irregular orbital shifts in real time.</li>
-        <li><span className="text-yellow-300 font-medium">Space Weather Integration</span> — Displays real-time solar activity and radiation threats.</li>
-        <li><span className="text-green-400 font-medium">Historical Orbit Playback</span> — Rewind and analyze past satellite movements.</li>
+    <div className="p-10 bg-[#1E233F] bg-opacity-95 rounded-xl shadow-lg border border-[#3E6A89] hover:scale-105 transition-transform duration-300 w-full mx-3 lg:col-span-2">
+      <h2 className="text-4xl font-semibold text-[#C8E49C] tracking-wide">Upcoming Innovations</h2>
+      <ul className="mt-6 list-disc pl-6 space-y-4 text-lg text-gray-300">
+        <li><span className="text-[#6BB8C7] font-semibold">AI-Based Threat Detection</span> — Identifies anomalies in satellite orbits.</li>
+        <li><span className="text-[#86EED8] font-semibold">Solar Weather Integration</span> — Real-time space weather monitoring.</li>
+        <li><span className="text-[#5E8A94] font-semibold">Historical Orbit Playback</span> — Rewind & analyze satellite movements.</li>
       </ul>
     </div>
 
-    {/* 🌌 Space Exploration & New Missions */}
-    <div className="p-10 bg-gray-800 bg-opacity-90 rounded-lg shadow-md border border-gray-700 hover:scale-105 transition-transform duration-300 w-full mx-3">
-      <h2 className="text-3xl font-medium text-teal-300 tracking-wide">The Next Space Frontier</h2>
-      <p className="mt-4 text-lg leading-relaxed text-gray-300">
-        As humanity ventures beyond Earth, satellite tracking is expanding into <span className="text-yellow-300 font-medium tracking-wide">deep-space missions</span>. Future enhancements will include real-time monitoring of <span className="text-green-400 font-medium tracking-wide">lunar bases</span> and <span className="text-cyan-400 font-medium tracking-wide">Mars exploration vehicles</span>.
+    {/* 🌌 Expanding the Frontier */}
+    <div className="p-9 bg-[#253654] bg-opacity-90 rounded-lg shadow-lg border border-[#4F89A5] hover:scale-105 transition-transform duration-300 w-full mx-3">
+      <h2 className="text-3xl font-medium text-[#6BB8C7] tracking-wide">Beyond Low Earth Orbit</h2>
+      <p className="mt-5 text-lg leading-relaxed text-gray-300">
+        As deep-space missions accelerate, this system will evolve to **track lunar assets**, **Martian surface explorers**, and **interplanetary relay satellites**.
       </p>
     </div>
 
-    {/* 📜 Additional Resources */}
-    <div className="p-7 bg-gray-900 bg-opacity-95 rounded-xl shadow-lg border border-gray-700 hover:scale-105 transition-transform duration-300 w-full mx-3 lg:col-span-2">
-      <h2 className="text-4xl font-medium text-cyan-400 tracking-wide">Resources & Learning</h2>
-      <ul className="mt-5 list-disc pl-6 space-y-3 text-lg text-gray-300">
-        <li><a href="https://www.spacestrak.com/" className="text-teal-300 hover:underline hover:text-teal-200" target="_blank">SpaceTrak — TLE Data & Orbital Elements</a></li>
-        <li><a href="https://www.n2yo.com/" className="text-green-400 hover:underline hover:text-green-300" target="_blank">N2YO — Live Satellite Tracking</a></li>
+    {/* 📜 Educational Resources */}
+    <div className="p-8 bg-[#1E233F] bg-opacity-95 rounded-xl shadow-lg border border-[#3E6A89] hover:scale-105 transition-transform duration-300 w-full mx-3 lg:col-span-2">
+      <h2 className="text-4xl font-semibold text-[#86EED8] tracking-wide">Resources & Further Exploration</h2>
+      <ul className="mt-6 list-disc pl-6 space-y-4 text-lg text-gray-300">
+        <li><a href="https://www.spacestrak.com/" className="text-[#C8E49C] hover:underline hover:text-[#C8E49C]/80" target="_blank">SpaceTrak — TLE Data & Orbital Elements</a></li>
+        <li><a href="https://www.n2yo.com/" className="text-[#6BB8C7] hover:underline hover:text-[#6BB8C7]/80" target="_blank">N2YO — Live Satellite Tracking</a></li>
       </ul>
     </div>
 
   </div>
 </div>
+
 
 
 </div>

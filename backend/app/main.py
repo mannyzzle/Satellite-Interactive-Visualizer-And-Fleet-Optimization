@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import satellites, llm, cdm, old_tles
+from api import satellites, cdm, old_tles, launches
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
@@ -23,9 +23,10 @@ app.add_middleware(
 
 # Routers
 app.include_router(satellites.router, prefix="/api/satellites", tags=["Satellites"])
-app.include_router(llm.router, prefix="/api/llm", tags=["LLM"])
+#app.include_router(llm.router, prefix="/api/llm", tags=["LLM"])
 app.include_router(cdm.router, prefix="/api/cdm", tags=["CDM"])
 app.include_router(old_tles.router, prefix="/api/old_tles", tags=["Old TLEs"])
+app.include_router(launches.router, prefix="/api/launches", tags=["Launches"])
 
 @app.get("/")
 def root():
@@ -34,8 +35,11 @@ def root():
 @app.on_event("startup")
 def startup_event():
     print("🚀 Backend is starting...")
-    
-    # Test the database connection during startup
+
+    # ✅ Print registered API routes to check if `/count` exists
+    for route in app.routes:
+        print(f"🔍 Route loaded: {route.path}")
+
     try:
         db_user = os.getenv('DB_USER')
         db_password = os.getenv('DB_PASSWORD')
@@ -45,15 +49,14 @@ def startup_event():
 
         db_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
         engine = create_engine(db_url)
-        
-        # Check the database connection
+
         with engine.connect() as connection:
             print("✅ Successfully connected to the database!")
     except SQLAlchemyError as e:
         print(f"❌ Database connection failed: {str(e)}")
-    
-    # Additional logs for debugging purposes
+
     print("🔍 FastAPI app has started.")
+
 
 @app.on_event("shutdown")
 def shutdown_event():

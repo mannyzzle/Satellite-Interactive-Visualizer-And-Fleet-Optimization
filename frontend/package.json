@@ -27,6 +27,7 @@
     "react-countup": "^6.5.3",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.1.5",
+    "react-simple-typewriter": "^5.0.1",
     "react-type-animation": "^3.2.0",
     "recharts": "^2.15.1",
     "regl": "^2.1.1",

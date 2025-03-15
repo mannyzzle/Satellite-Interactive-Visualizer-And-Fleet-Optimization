@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, BackgroundTasks
-from app.database import get_db_connection
+from database import get_db_connection
 
 router = APIRouter()
 

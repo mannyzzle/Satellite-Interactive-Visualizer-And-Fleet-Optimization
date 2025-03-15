@@ -2,10 +2,14 @@
 
 import axios from "axios";
 
-const API_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/satellites/";
-const CDM_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/cdm/";
-const OLD_TLES_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/old_tles/";
+//const API_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/satellites/";
+//const CDM_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/cdm/";
+//const OLD_TLES_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/old_tles/";
 
+//testing
+const API_BASE_URL = "http://127.0.0.1:8000/api/satellites/";
+const CDM_BASE_URL = "http://127.0.0.1:8000/api/cdm/";
+const OLD_TLES_BASE_URL = "http://127.0.0.1:8000/api/old_tles/";
 
 
 

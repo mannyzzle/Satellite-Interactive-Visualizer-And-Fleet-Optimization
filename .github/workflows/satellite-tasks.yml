@@ -5,6 +5,7 @@ on:
     - cron: '15 */6 * * *'  # Runs TLE Processor every 6 hours at minute 15
     - cron: '45 */8 * * *'  # Runs CDM Processor every 8 hours at minute 45
     - cron: '0 * * * *'  # Runs Fetch All every hour at minute 0
+    - cron: '30 * * * *'  #  Fetches and stores recent launch data every hour at minute 30
   workflow_dispatch:  # Allows manual trigger from GitHub UI
 
 env:
@@ -136,8 +137,38 @@ jobs:
             -e SPACETRACK_PASS=${{ secrets.SPACETRACK_PASS }} \
             satellite_tasks_image python3 app/omni_low.py fetch_all
 
+
       - name: Upload Logs
         uses: actions/upload-artifact@v4
         with:
           name: fetch_all_logs
           path: backend/app/logs/fetch_all_log.txt
+  
+
+
+  fetch_launches:
+    needs: build_image
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '30 * * * *' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Docker Image
+        uses: actions/download-artifact@v4
+        with:
+          name: satellite_tasks_image
+          path: /tmp
+
+      - name: Load Docker Image
+        run: docker load -i /tmp/satellite_tasks_image.tar
+
+      - name: Run Fetch Launches
+        run: |
+          docker run --rm \
+            -e DB_HOST=${{ secrets.DB_HOST }} \
+            -e DB_PORT=5432 \
+            -e DB_USER=${{ secrets.DB_USER }} \
+            -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            -e DB_NAME=${{ secrets.DB_NAME }} \
+            satellite_tasks_image python3 app/fetch_launches.py
