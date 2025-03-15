@@ -10,16 +10,16 @@ export default function Launches() {
   const [error, setError] = useState(null);
   const [countdowns, setCountdowns] = useState({});
 
-  API_URL = "https://satellite-tracker-production.up.railway.app/api/launches/upcoming"
+  fetch_API_URL = "https://satellite-tracker-production.up.railway.app/api/launches/upcoming"
 
 //TESTING
-//API_URL = "http://localhost:8000/api/launches/upcoming"
+//fetch_API_URL = "http://localhost:8000/api/launches/upcoming"
 
 
   useEffect(() => {
     async function fetchLaunches() {
       try {
-        const response = await (fetchAPI_URL);
+        const response = await ("https://satellite-tracker-production.up.railway.app/api/launches/upcoming");
         if (!response.ok) throw new Error("Failed to fetch upcoming launches.");
 
         const data = await response.json();

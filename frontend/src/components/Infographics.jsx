@@ -2,10 +2,6 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 
 
-API_URL = "https://satellite-tracker-production.up.railway.app/api/launches/previous"
-
-//TESTING
-//API_URL = "http://localhost:8000/api/launches/previous"
 
 
 
@@ -14,10 +10,17 @@ const Infographics = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  
+
+
   useEffect(() => {
     const fetchLaunches = async () => {
       try {
-        const response = await fetch(API_URL); // Update API URL if needed
+        API_URL = "https://satellite-tracker-production.up.railway.app/api/launches/previous"
+
+        //TESTING
+        //API_URL = "http://localhost:8000/api/launches/previous"
+        const response = await fetch("https://satellite-tracker-production.up.railway.app/api/launches/previous"); // Update API URL if needed
         if (!response.ok) throw new Error("Failed to fetch launches");
 
         const data = await response.json();
