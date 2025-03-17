@@ -89,7 +89,7 @@ export async function fetchSatelliteByName(name) {
 /**
  * Fetch Old TLEs for a given NORAD number.
  */
-export async function fetchOldTLEs(noradNumber) {
+export async function fetchHistoricalTLEs(noradNumber) {
   try {
     const url = `${OLD_TLES_BASE_URL}fetch/${noradNumber}`;
     console.log(`📡 Fetching old TLEs from: ${url}`);

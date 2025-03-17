@@ -415,3 +415,139 @@ nav {
 }
 
 
+/**********************************************
+ * Neon Mako Theme
+ * Everything "below the pulsating glow ball"
+ * has been renamed from orbit-… → trajectory-… 
+ * .earth → .core-sphere 
+ * .satellite → .probe
+ **********************************************/
+
+/* Container for all orbit/trajectory boxes */
+.trajectory-section {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+  width: 100%;
+}
+
+/* Each box that displays an orbit path */
+.trajectory-box {
+  position: relative;
+  width: 240px;
+  height: 240px;
+  /* A subtle teal overlay background */
+  background: rgba(45, 212, 191, 0.05); /* Tailwind "teal-400" is #2dd4bf */
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Slight neon teal box shadow */
+  box-shadow: 0 0 10px rgba(45, 212, 191, 0.1);
+  overflow: hidden;
+}
+
+/* The central sphere (Earth replacement), 
+   now in a teal-ish gradient. */
+.core-sphere {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  /* Bright teal gradient center → darker teal edge */
+  background: radial-gradient(circle, #2dd4bf 20%, #0f766e);
+  border-radius: 50%;
+  /* Neon teal glow around the sphere */
+  box-shadow: 0 0 15px rgba(20, 184, 166, 0.7);
+  z-index: 10;
+}
+
+/* Generic elliptical/circular orbit path */
+.trajectory-orbit {
+  position: absolute;
+  border-radius: 50%;
+  /* Dashed teal border to visualize orbit path */
+  border: 1px dashed rgba(45, 212, 191, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* LEO, MEO, GEO paths (circular) */
+.trajectory-orbit.leo-path {
+  width: 80px;
+  height: 80px;
+}
+.trajectory-orbit.meo-path {
+  width: 140px;
+  height: 140px;
+}
+.trajectory-orbit.geo-path {
+  width: 190px;
+  height: 190px;
+}
+
+/* HEO path (ellipse) */
+.trajectory-orbit.heo-path {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(30deg);
+  width: 230px;
+  height: 120px;
+  border-radius: 50%;
+}
+
+/* The orbiting probe (satellite replacement).
+   Using bright neon for the dot. */
+.probe {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #2dd4bf; /* neon teal dot */
+  border-radius: 50%;
+}
+
+/* Keyframes renamed for clarity; keep them the same or tweak speeds */
+
+/* Circular orbit: revolve in a perfect circle */
+@keyframes circularPath {
+  0% {
+    transform: rotate(0deg) translateX(var(--radius)) rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg) translateX(var(--radius)) rotate(-360deg);
+  }
+}
+
+/* Elliptical orbit for HEO */
+@keyframes ellipticalPath {
+  0% {
+    transform: rotate(0deg) translateX(115px) scaleY(0.52) rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg) translateX(115px) scaleY(0.52) rotate(-360deg);
+  }
+}
+
+/* LEO, MEO, GEO "units" revolve in a circle */
+.probe.leo-unit {
+  --radius: 40px;
+  animation: circularPath 3s linear infinite;
+}
+.probe.meo-unit {
+  --radius: 70px;
+  animation: circularPath 6s linear infinite;
+}
+.probe.geo-unit {
+  --radius: 95px;
+  animation: circularPath 10s linear infinite;
+}
+
+/* HEO "unit" revolves in an ellipse */
+.probe.heo-unit {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  animation: ellipticalPath 14s linear infinite;
+}

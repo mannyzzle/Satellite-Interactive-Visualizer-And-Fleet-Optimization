@@ -11,6 +11,7 @@ export default function Launches() {
   const [countdowns, setCountdowns] = useState({});
 
   
+//API_URL = "https://satellite-tracker-production.up.railway.app/api/launches/upcoming"
 
 //TESTING
 //API_URL = "http://localhost:8000/api/launches/upcoming"
@@ -90,7 +91,7 @@ export default function Launches() {
   if (!launches.length) return <div className="p-4 text-center text-gray-400">No upcoming launches found.</div>;
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-gray-900 text-white p-6 pt-[120px]">
       {/* 🌟 Title Section */}
       <div className="text-center">
         <h1 className="text-3xl font-bold text-teal-400 mb-6">🚀 Upcoming Launches</h1>

@@ -6,3 +6,4 @@ export default defineConfig({
   plugins: [react()],
   base: '/Satellite-Interactive-Visualizer-And-Fleet-Optimization/' // Replace with your repo name
 });
+

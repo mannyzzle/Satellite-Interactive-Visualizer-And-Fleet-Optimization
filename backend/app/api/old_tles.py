@@ -1,5 +1,4 @@
-from fastapi import APIRouter, Depends, BackgroundTasks
-
+from fastapi import APIRouter, HTTPException
 import sys
 import os
 
@@ -11,32 +10,44 @@ try:
 except ImportError:
     from app.database import get_db_connection  # Relative import for local execution
 
-
 router = APIRouter()
 
 @router.get("/fetch/{norad_number}")
 def fetch_old_tles(norad_number: int):
-    """Fetch historical TLEs for a specific satellite (by NORAD ID)."""
+    """
+    Retrieve historical TLEs for a specific satellite (by NORAD ID).
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT epoch, tle_line1, tle_line2
-        FROM satellite_tle_history
-        WHERE norad_number = %s
-        ORDER BY epoch DESC;
-    """, (norad_number,))
+    try:
+        cursor.execute("""
+            SELECT epoch, tle_line1, tle_line2
+            FROM satellite_tle_history
+            WHERE norad_number = %s
+            ORDER BY epoch ASC;
+        """, (norad_number,))
 
-    tles = cursor.fetchall()
-    
-    cursor.close()
-    conn.close()
+        tles = cursor.fetchall()
 
-    if not tles:
-        return {"message": f"No historical TLEs found for NORAD {norad_number}."}
+        # 🛠️ Debugging: Print raw query result
+        print(f"🔍 Raw Query Result for NORAD {norad_number}: {tles}")
+
+        if not tles:
+            raise HTTPException(status_code=404, detail=f"No historical TLEs found for NORAD {norad_number}")
+
+        # ✅ Properly extract values from `RealDictRow`
+        formatted_tles = [{"epoch": str(row["epoch"]), "tle_line1": row["tle_line1"], "tle_line2": row["tle_line2"]} for row in tles]
+
+    except Exception as e:
+        print(f"❌ Database Query Error: {str(e)}")  # Debugging log
+        raise HTTPException(status_code=500, detail=f"Database query failed: {str(e)}")
+
+    finally:
+        cursor.close()
+        conn.close()
 
     return {
         "norad_number": norad_number,
-        "historical_tles": [{"epoch": t[0], "tle_line1": t[1], "tle_line2": t[2]} for t in tles]
+        "historical_tles": formatted_tles
     }
-
