@@ -17,7 +17,7 @@ const basePath = import.meta.env.BASE_URL;  // ✅ Dynamically fetch the base UR
 const dayTexture = `${basePath}earth_day.jpg`;
 const nightTexture = `${basePath}earth_night.jpg`;
 const cloudTexture = `${basePath}clouds.png`;
- 
+
 export const generateStars = (numStars) => {
   return Array.from({ length: numStars }).map((_, i) => {
     const size = Math.random() * 3 + 1;
@@ -95,6 +95,12 @@ export default function Home() {
 
 
 
+  useEffect(() => {
+    if ("scrollRestoration" in window.history) {
+      window.history.scrollRestoration = "manual";
+    }
+    window.scrollTo(0, 0);
+  }, []);
   
 
   const [isTracking, setIsTracking] = useState(true); // 🚀 Default: Tracking is ON
@@ -1480,7 +1486,7 @@ return (
         {loading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center z-[90]">
             <div className="w-40 h-40 animate-rotatePause">
-              <img src="public/favicon.svg" alt="Site Logo" className="w-full h-full" />
+              <img src= {`${import.meta.env.BASE_URL}favicon.svg`} alt="Site Logo" className="w-full h-full" />
             </div>
             <style>{`
               @keyframes rotatePause {
