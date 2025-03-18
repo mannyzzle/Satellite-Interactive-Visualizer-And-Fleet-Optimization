@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { generateStars } from "./Home";
+import { StarField } from "./Home";
 
 
 
@@ -93,7 +93,7 @@ export default function Launches() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#050716] via-[#1B1E3D] to-[#2E4867] text-white p-6 pt-[120px]">
          <div className="absolute w-full h-full overflow-hidden pointer-events-none">
-                  {generateStars(100)}
+         <StarField numStars={150} />
                 </div>
       {/* 🌟 Title Section */}
       <div className="text-center">

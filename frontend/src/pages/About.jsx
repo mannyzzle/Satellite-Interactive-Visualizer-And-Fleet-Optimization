@@ -1,12 +1,12 @@
 import { TypeAnimation } from "react-type-animation";
-import { generateStars } from "./Home";
+import { StarField } from "./Home";
 
 export default function About() {
   return (
     <div className="relative flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-[#050716] via-[#1B1E3D] to-[#2E4867] text-white p-6 space-y-20 overflow-hidden">
       {/* Background starfield */}
       <div className="absolute w-full h-full pointer-events-none z-0">
-        {generateStars(100)}
+      <StarField numStars={150} />
       </div>
 {/* Animated heading */}
 <div className="text-4xl max-w-screen-4xl w-full sm:text-5xl md:text-6xl font-extrabold text-center tracking-wide mb-4">

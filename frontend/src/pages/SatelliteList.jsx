@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
 import { CircularProgress } from "@mui/material";
-import { generateStars } from "./Home";
+import { StarField } from "./Home";
 
 const API_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/satellites/";
 //const API_BASE_URL = "http://127.0.0.1:8000/api/satellites";
@@ -220,7 +220,7 @@ export default function SatelliteList() {
   return (
     <div className="p-6 bg-gray-900 min-h-screen pt-[120px] bg-gradient-to-b from-[#050716] via-[#1B1E3D] to-[#2E4867] text-white">
    <div className="absolute w-full h-full overflow-hidden pointer-events-none">
-          {generateStars(100)}
+   <StarField numStars={150} />
         </div>
       {/* ========== Title & Intro ========== */}
       <div className="w-full text-center mb-4">
@@ -334,7 +334,7 @@ export default function SatelliteList() {
       {/* ========== 2) OBJECT PURPOSES SECTION ========== */}
       <div className="mt-12">
       <div className="absolute w-full h-full overflow-hidden pointer-events-none">
-          {generateStars(100)}
+      <StarField numStars={150} />
         </div>
         <h2 className="text-2xl font-bold text-teal-300 text-center mb-6">
           Satellite Purposes

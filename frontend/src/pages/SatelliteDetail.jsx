@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { fetchSatelliteByName, fetchHistoricalTLEs } from "../api/satelliteService";
 import * as satellite from "satellite.js";
-import { generateStars } from "./Home";
+import { StarField } from "./Home";
 import {
   LineChart,
   Line,
@@ -100,7 +100,7 @@ export default function SatelliteDetails() {
   return (
     <div className="p-6  min-h-screen bg-gradient-to-b from-[#050716] via-[#1B1E3D] to-[#2E4867] text-white pt-[120px]">
       <div className="absolute w-full h-full overflow-hidden pointer-events-none">
-                  {generateStars(100)}
+      <StarField numStars={150} />
                 </div>
       {/* Back Button */}
       <button

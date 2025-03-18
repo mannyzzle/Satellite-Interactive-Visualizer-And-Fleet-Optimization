@@ -13,40 +13,58 @@ import { Button } from "../components/button";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "../components/select";
 import { motion } from "framer-motion";
 import { TypeAnimation } from "react-type-animation";
+import { useMemo } from "react";
 const basePath = import.meta.env.BASE_URL;  // ✅ Dynamically fetch the base URL
 const dayTexture = `${basePath}earth_day.jpg`;
 const nightTexture = `${basePath}earth_night.jpg`;
 const cloudTexture = `${basePath}clouds.png`;
 
-export const generateStars = (numStars) => {
-  return Array.from({ length: numStars }).map((_, i) => {
-    const size = Math.random() * 3 + 1;
-    const duration = Math.random() * 5 + 3;
-    const positionX = Math.random() * 100;
-    const positionY = Math.random() * 100;
 
-    return (
-      <motion.div
-        key={i}
-        className="absolute bg-white rounded-full"
-        style={{
-          width: `${size}px`,
-          height: `${size}px`,
-          left: `${positionX}%`,
-          top: `${positionY}%`,
-          opacity: Math.random() * 0.5 + 0.3,
-          filter: "drop-shadow(0px 0px 5px rgba(255, 255, 255, 0.8))",
-        }}
-        animate={{ opacity: [0.2, 1, 0.2] }}
-        transition={{
-          duration: duration,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-      />
-    );
-  });
-};
+
+
+
+// ✅ Generate stars **once** and persist them
+export function StarField({ numStars = 150 }) {
+  const starsRef = useRef(null);
+
+  // ✅ Ensure stars are only generated **once** (not on re-renders)
+  if (!starsRef.current) {
+    starsRef.current = Array.from({ length: numStars }).map((_, i) => {
+      const size = Math.random() * 3 + 1;
+      const duration = Math.random() * 5 + 3;
+      const positionX = Math.random() * 100;
+      const positionY = Math.random() * 100;
+
+      return (
+        <motion.div
+          key={i}
+          className="absolute bg-white rounded-full"
+          style={{
+            width: `${size}px`,
+            height: `${size}px`,
+            left: `${positionX}%`,
+            top: `${positionY}%`,
+            opacity: Math.random() * 0.5 + 0.3,
+            filter: "drop-shadow(0 0 5px rgba(255, 255, 255, 0.8))",
+          }}
+          animate={{ opacity: [0.2, 1, 0.2] }}
+          transition={{
+            duration,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+      );
+    });
+  }
+
+  return (
+    <div className="absolute w-full h-full overflow-hidden pointer-events-none z-0">
+      {starsRef.current}
+    </div>
+  );
+}
+
 
 export default function Home() {
   const globeRef = useRef(null);
@@ -1462,7 +1480,7 @@ return (
   <div className="relative flex flex-col w-screen min-h-screen overflow-hidden border-gray-950 bg-gradient-to-b from-[#050716] via-[#1B1E3D] to-[#2E4867] text-white font-[Space Grotesk]">
     {/* Background stars + Navbar */}
     <div className="absolute w-full h-full overflow-hidden pointer-events-none z-0">
-      {generateStars(150)}
+    <StarField numStars={150} />
     </div>
     <Navbar />
 
@@ -1474,7 +1492,7 @@ return (
       <div className="relative flex w-3/4 max-h-screen overflow-hidden">
         {/* Optional starfield specifically inside 3D */}
         <div className="absolute w-full h-full overflow-hidden pointer-events-none">
-          {generateStars(100)}
+        <StarField numStars={150} />
         </div>
 
         {/* 3D Scene */}
