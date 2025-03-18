@@ -1,15 +1,17 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
-  base: process.env.NODE_ENV === 'production' 
-    ? '/Satellite-Interactive-Visualizer-And-Fleet-Optimization/'  // ✅ GitHub Pages base path
-    : '/',  // ✅ Local dev path
+  base: "/Satellite-Interactive-Visualizer-And-Fleet-Optimization/", // ✅ Ensure correct GitHub Pages path
   build: {
-    outDir: 'dist',
+    rollupOptions: {
+      output: {
+        manualChunks: undefined, // ✅ Prevent unnecessary chunking issues
+      },
+    },
   },
   server: {
-    historyApiFallback: true, // ✅ Fixes deep linking for local dev
+    historyApiFallback: true, // ✅ Fallback to `index.html` for local dev
   },
 });

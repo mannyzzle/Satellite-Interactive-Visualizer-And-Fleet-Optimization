@@ -553,3 +553,8 @@ Traceback (most recent call last):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
   File "<frozen os>", line 225, in makedirs
 OSError: [Errno 30] Read-only file system: 'space_weather_data'
+Traceback (most recent call last):
+  File "/Users/mannyzzle/Satellite-Interactive-Visualizer-And-Fleet-Optimization/backend/app/omni_low.py", line 15, in <module>
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+  File "<frozen os>", line 225, in makedirs
+OSError: [Errno 30] Read-only file system: 'space_weather_data'
