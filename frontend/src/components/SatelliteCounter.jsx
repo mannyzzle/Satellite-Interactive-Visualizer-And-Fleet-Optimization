@@ -70,7 +70,7 @@ const SatelliteCounter = () => {
   }, []);
 
   return (
-    <div className="relative w-screen h-screen flex items-center justify-center bg-[rgba(3, 0, 8, 0.85)] shadow-lg overflow-hidden">
+    <div className="relative w-screen h-screen flex items-center justify-center bg-[rgba(3, 0, 8, 0.85)]  overflow-hidden">
         {/* 🌌 Starfield (Randomly Placed Stars) */}
   <div className="absolute w-full h-full overflow-hidden pointer-events-none">
     {generateStars(150)} {/* Adjust number of stars here */}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-
+import { generateStars } from "./Home";
 
 
 
@@ -11,7 +11,7 @@ export default function Launches() {
   const [countdowns, setCountdowns] = useState({});
 
   
-//API_URL = "https://satellite-tracker-production.up.railway.app/api/launches/upcoming"
+//API_URL = "https://satellite-tracker-production.uprailway.app/api/launches/upcoming"
 
 //TESTING
 //API_URL = "http://localhost:8000/api/launches/upcoming"
@@ -20,7 +20,7 @@ export default function Launches() {
   useEffect(() => {
     async function fetchLaunches() {
       try {
-        const response = await fetch("https://satellite-tracker-production.up.railway.app/api/launches/upcoming");
+        const response = await fetch("https://satellite-tracker-production.uprailway.app/api/launches/upcoming");
         if (!response.ok) throw new Error("Failed to fetch upcoming launches.");
 
         const data = await response.json();
@@ -91,7 +91,10 @@ export default function Launches() {
   if (!launches.length) return <div className="p-4 text-center text-gray-400">No upcoming launches found.</div>;
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6 pt-[120px]">
+    <div className="min-h-screen bg-gradient-to-b from-[#050716] via-[#1B1E3D] to-[#2E4867] text-white p-6 pt-[120px]">
+         <div className="absolute w-full h-full overflow-hidden pointer-events-none">
+                  {generateStars(100)}
+                </div>
       {/* 🌟 Title Section */}
       <div className="text-center">
         <h1 className="text-3xl font-bold text-teal-400 mb-6">🚀 Upcoming Launches</h1>

@@ -1,13 +1,13 @@
 #api/satellites.py
-
+import logging
 import psycopg2
 from fastapi import APIRouter, HTTPException, Query
 import math
-
-
+from psycopg2.extras import DictCursor
+from typing import List
 import sys
 import os
-
+import logging
 # Ensure backend root directory is in sys.path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -280,34 +280,114 @@ def get_filter_condition(filter):
 
 
 
-@router.get("/{satellite_name}")
-def get_satellite_by_name(satellite_name: str):
+
+
+
+
+
+
+
+
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+
+
+@router.get("/suggest")
+def suggest_satellites(query: str = Query("", min_length=1)):
+    logging.debug("Received query: %s", query)
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=DictCursor)
+    
+    sql = """
+        SELECT norad_number, name
+        FROM satellites
+        WHERE name ILIKE %s OR CAST(norad_number AS TEXT) LIKE %s
+        ORDER BY name ASC
+        LIMIT 10
     """
-    Retrieve a specific satellite by its name.
+    params = (f"%{query}%", f"%{query}%")
+    logging.debug("Executing SQL: %s", sql)
+    logging.debug("With parameters: %s", params)
+    
+    try:
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        logging.debug("Raw DB results: %s", rows)
+    except Exception as e:
+        logging.error("Exception during SQL execution: %s", str(e))
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+        logging.debug("Database connection closed.")
+    
+    suggestions = [{"norad_number": row["norad_number"], "name": row["name"]} for row in rows]
+    logging.debug("Returning suggestions: %s", suggestions)
+    return {"suggestions": suggestions}
+
+
+
+
+
+
+
+
+@router.get("/{query}")
+def get_satellite(query: str):
+    """
+    Retrieve a specific satellite by its name or NORAD number.
+    
+    - If the query is numeric, it is interpreted as a NORAD number.
+    - Otherwise, it is treated as a satellite name (case-insensitive).
     """
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=DictCursor)
 
-    # ✅ Normalize input to handle spaces & case sensitivity
-    formatted_name = satellite_name.replace("%20", " ").strip().lower()
-
-    cursor.execute("""
-        SELECT id, name, norad_number, orbit_type, inclination, velocity, 
-               latitude, longitude, bstar, rev_num, ephemeris_type, 
-               eccentricity, period, perigee, apogee, epoch, raan, 
-               arg_perigee, mean_motion, semi_major_axis, tle_line1, 
-               tle_line2, intl_designator, object_type, 
-               launch_date, launch_site, decay_date, rcs, purpose, country, active_status
-        FROM satellites WHERE LOWER(name) = %s
-    """, (formatted_name,))  # ✅ Case-insensitive lookup
-
-    satellite = cursor.fetchone()
+    if query.isdigit():
+        # Lookup by NORAD number
+        try:
+            norad_number_int = int(query)
+        except ValueError:
+            cursor.close()
+            conn.close()
+            raise HTTPException(status_code=400, detail=f"Invalid NORAD number: {query}")
+        
+        cursor.execute("""
+            SELECT id, name, norad_number, orbit_type, inclination, velocity, 
+                   latitude, longitude, bstar, rev_num, ephemeris_type, 
+                   eccentricity, period, perigee, apogee, epoch, raan, 
+                   arg_perigee, mean_motion, semi_major_axis, tle_line1, 
+                   tle_line2, intl_designator, object_type, 
+                   launch_date, launch_site, decay_date, rcs, purpose, country, active_status
+            FROM satellites WHERE norad_number = %s
+        """, (norad_number_int,))
+        satellite = cursor.fetchone()
+        if not satellite:
+            cursor.close()
+            conn.close()
+            raise HTTPException(status_code=404, detail=f"Satellite with NORAD number '{query}' not found")
+    else:
+        # Lookup by satellite name (case-insensitive)
+        formatted_name = query.replace("%20", " ").strip().lower()
+        cursor.execute("""
+            SELECT id, name, norad_number, orbit_type, inclination, velocity, 
+                   latitude, longitude, bstar, rev_num, ephemeris_type, 
+                   eccentricity, period, perigee, apogee, epoch, raan, 
+                   arg_perigee, mean_motion, semi_major_axis, tle_line1, 
+                   tle_line2, intl_designator, object_type, 
+                   launch_date, launch_site, decay_date, rcs, purpose, country, active_status
+            FROM satellites WHERE LOWER(name) = %s
+        """, (formatted_name,))
+        satellite = cursor.fetchone()
+        if not satellite:
+            cursor.close()
+            conn.close()
+            raise HTTPException(status_code=404, detail=f"Satellite '{query}' not found")
 
     cursor.close()
     conn.close()
-
-    if not satellite:
-        raise HTTPException(status_code=404, detail=f"Satellite '{satellite_name}' not found")
 
     return {
         "id": satellite["id"],
@@ -342,7 +422,6 @@ def get_satellite_by_name(satellite_name: str):
         "country": satellite["country"],
         "active_status": satellite["active_status"]
     }
-
 
 
 

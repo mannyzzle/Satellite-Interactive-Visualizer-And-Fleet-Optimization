@@ -50,7 +50,7 @@ const Infographics = () => {
   if (!launches.length) return <div className="p-4 text-center text-gray-400">No recent launches available.</div>;
 
   return (
-    <div className="w-full bg-[rgba(3, 0, 8, 0.85)] rounded-lg shadow-lg py-10 relative">
+    <div className="w-full bg-[rgba(3, 0, 8, 0.85)] rounded-lg py-10 relative">
       
       {/* 🌌 Starry Background */}
       <div className="absolute w-full h-full overflow-hidden pointer-events-none">

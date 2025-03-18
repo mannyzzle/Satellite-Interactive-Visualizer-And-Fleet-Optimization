@@ -18,6 +18,35 @@ const dayTexture = `${basePath}earth_day.jpg`;
 const nightTexture = `${basePath}earth_night.jpg`;
 const cloudTexture = `${basePath}clouds.png`;
  
+export const generateStars = (numStars) => {
+  return Array.from({ length: numStars }).map((_, i) => {
+    const size = Math.random() * 3 + 1;
+    const duration = Math.random() * 5 + 3;
+    const positionX = Math.random() * 100;
+    const positionY = Math.random() * 100;
+
+    return (
+      <motion.div
+        key={i}
+        className="absolute bg-white rounded-full"
+        style={{
+          width: `${size}px`,
+          height: `${size}px`,
+          left: `${positionX}%`,
+          top: `${positionY}%`,
+          opacity: Math.random() * 0.5 + 0.3,
+          filter: "drop-shadow(0px 0px 5px rgba(255, 255, 255, 0.8))",
+        }}
+        animate={{ opacity: [0.2, 1, 0.2] }}
+        transition={{
+          duration: duration,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+    );
+  });
+};
 
 export default function Home() {
   const globeRef = useRef(null);
@@ -25,8 +54,13 @@ export default function Home() {
   const atmosphereRef = useRef(null);
   const sunRef = useRef(null);
   const moonRef = useRef(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Toggle function
+  const toggleExpanded = () => setIsExpanded((prev) => !prev);
   let isFetching = false;  // Prevent duplicate fetch calls
   const [is3DEnabled, setIs3DEnabled] = useState(false);
+  const threeDRef = useRef(null);
 
   const [satellitesForCharts, setSatellitesForCharts] = useState([]);
   const [chartLoading, setChartLoading] = useState(false);
@@ -80,6 +114,42 @@ export default function Home() {
   
   
   const [total, setTotal] = useState(0);
+
+
+
+
+  useEffect(() => {
+    // Create an IntersectionObserver to trigger once
+    // our threeDRef enters the viewport
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          console.log("🎉 Container is now visible - enabling 3D!");
+          setIs3DEnabled(true);
+
+          // If you only want to enable once and not disable again,
+          // you can unobserve after the first intersection
+          observer.unobserve(entry.target);
+        }
+      },
+      {
+        root: null,         // browser viewport
+        rootMargin: "0px",  // no margin
+        threshold: 0.3      // fire when 30% of container is visible
+      }
+    );
+
+    if (threeDRef.current) {
+      observer.observe(threeDRef.current);
+    }
+
+    // Cleanup
+    return () => {
+      if (threeDRef.current) {
+        observer.unobserve(threeDRef.current);
+      }
+    };
+  }, []);
 
 
   
@@ -431,7 +501,7 @@ const toggleFilter = async (filterType) => {
 
   setActiveFilters([filterType]); // ✅ Only one active filter at a time
   setPage(1); // ✅ Reset pagination
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  
 
   setLoading(true); // ✅ Show loading screen
 
@@ -916,7 +986,7 @@ useEffect(() => {
 
 
 // ✅ Scene & Animation Setup (Runs Once)
-
+// ✅ Scene & Animation Setup (Runs Once)
 useEffect(() => {
   if (!is3DEnabled || !mountRef.current) return; // ✅ Only run if 3D is enabled
 
@@ -924,8 +994,12 @@ useEffect(() => {
 
   const scene = new THREE.Scene();
   sceneRef.current = scene;
-  scene.background = new THREE.Color("rgba(5, 0, 18, 0.85)"); // Example Mako-Themed Deep Blue
 
+  // ❌ Remove any scene background color:
+  // scene.background = new THREE.Color("rgba(11, 0, 27, 0.85)");
+
+  // ✅ Make it transparent
+  scene.background = null;
 
   // ✅ Ensure DOM is fully loaded before setting sizes
   setTimeout(() => {
@@ -934,224 +1008,158 @@ useEffect(() => {
     const width = mountRef.current.clientWidth || window.innerWidth;
     const height = mountRef.current.clientHeight || window.innerHeight;
 
-    // ✅ Adjust the Initial Camera Position Dynamically
     const initialAltitude = 50000; // LEO default
     const camera = new THREE.PerspectiveCamera(70, width / height, 0.5, 900000);
     camera.position.set(0, 5, initialAltitude);
-    camera.updateProjectionMatrix(); // 🚀 Ensures projection matrix is updated
+    camera.updateProjectionMatrix();
     cameraRef.current = camera;
 
-    // ✅ Optimize Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true, precision: "highp" });
+    // ✅ Notice 'alpha: true' to allow a transparent background
+    const renderer = new THREE.WebGLRenderer({
+      alpha: true,
+      antialias: true,
+      precision: "highp",
+    });
     renderer.setSize(width, height);
     renderer.setPixelRatio(window.devicePixelRatio);
+    // ✅ Make sure the background is clear
+    renderer.setClearAlpha(0);
+
     mountRef.current.appendChild(renderer.domElement);
 
-    // ✅ Optimize Controls
+    // ✅ OrbitControls
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableZoom = true;
     controls.enablePan = false;
     controls.enableDamping = true;
     controls.dampingFactor = 0.1;
     controls.rotateSpeed = 0.5;
-
-    controls.minDistance = 6230; // 🔥 Prevents too-close zoom
-    controls.maxDistance = 500000; // 🚀 Allows zooming for deep-space objects
-
+    controls.minDistance = 6230;
+    controls.maxDistance = 500000;
     controlsRef.current = controls;
 
+    // ✅ Add Light Source
+    const light = new THREE.DirectionalLight(0xffffff, 4.5);
+    light.position.set(200, 50, 0);
+    scene.add(light);
 
-// ✅ Add Light Source
-const light = new THREE.DirectionalLight(0xffffff, 4.5);
-light.position.set(200, 50, 0);
-scene.add(light);
+    // 🌍 Create Earth
+    const globe = new THREE.Mesh(
+      new THREE.SphereGeometry(6000, 64, 64),
+      new THREE.MeshStandardMaterial({
+        map: dayMap,
+        emissiveMap: nightMap,
+        emissiveIntensity: 0.1,
+        emissive: new THREE.Color(0xffffff),
+        bumpScale: 0.5,
+        roughness: 1.5,
+        metalness: 0.7,
+      })
+    );
+    globeRef.current = globe;
+    scene.add(globe);
 
+    // 🔄 Handle Window Resize
+    const resizeRenderer = () => {
+      if (!mountRef.current) return;
+      const width = mountRef.current.clientWidth;
+      const height = mountRef.current.clientHeight;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    };
+    window.addEventListener("resize", resizeRenderer);
 
+    // 🌫 Atmosphere Glow
+    const atmosphere = new THREE.Mesh(
+      new THREE.SphereGeometry(6100.5, 64, 64),
+      new THREE.MeshBasicMaterial({
+        color: 0x3399ff,
+        transparent: true,
+        opacity: 0.5,
+        side: THREE.BackSide,
+      })
+    );
+    atmosphereRef.current = atmosphere;
+    scene.add(atmosphere);
 
-  
-  // 🌍 **Create Earth**
-  const globe = new THREE.Mesh(
-    new THREE.SphereGeometry(6000, 64, 64),
-    new THREE.MeshStandardMaterial({
-      map: dayMap,
-      emissiveMap: nightMap,
-      emissiveIntensity: 0.1,
-      emissive: new THREE.Color(0xffffff), // White glow for night areas
-      bumpScale: 0.5,
-      roughness: 1.5,
-      metalness: 0.7,
-    })
-  );
-  globeRef.current = globe;
-  scene.add(globe);
+    // ❌ (Optional) Remove the “3D starfield” code here, so only your main page starfield is visible
+    // If you have code to add star backgrounds in the scene, just comment or remove it:
+    // scene.add(stars)...
 
+    // 🔄 Animation Loop
+    const animate = () => {
+      requestAnimationFrame(animate);
 
+      if (globeRef.current) globeRef.current.rotation.y += 0.000727; // Earth's rotation
 
+      const time = Date.now() / 1000;
+      const timeFactor = 1;
 
+      // 🛰️ Update satellites’ positions
+      Object.values(satelliteObjectsRef.current).forEach((satelliteModel) => {
+        if (satelliteModel.userData) {
+          const newPos = computeSatellitePosition(satelliteModel.userData, time * timeFactor);
+          if (newPos) {
+            satelliteModel.position.lerp(newPos, 0.1);
+          }
+        }
+      });
 
-  // 🔄 **Handle Window Resize**
-  const resizeRenderer = () => {
-    if (!mountRef.current) return;
-
-    const width = mountRef.current.clientWidth;
-    const height = mountRef.current.clientHeight;
-
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
-    renderer.setSize(width, height);
-  };
-
-  window.addEventListener("resize", resizeRenderer);
-
-  // 🌫 **Atmosphere Glow**
-  const atmosphere = new THREE.Mesh(
-    new THREE.SphereGeometry(6100.5, 64, 64),
-    new THREE.MeshBasicMaterial({
-      color: 0x3399ff,
-      transparent: true,
-      opacity: 0.5,
-      side: THREE.BackSide,
-    })
-  );
-  atmosphereRef.current = atmosphere;
-  scene.add(atmosphere);
-
-
-
-
-// 🌌 **Create Twinkling Star Field**
-const starGeometry = new THREE.BufferGeometry();
-const starVertices = [];
-const starTwinkleSpeeds = []; // ✨ Store random twinkle speeds
-
-// ✅ Increase randomness & spread
-const starCount = 750;  // Keep stars sparse
-const starFieldSize = 2500000; // Wide distribution
-
-for (let i = 0; i < starCount; i++) {
-  starVertices.push(
-    (Math.random() - 0.5) * starFieldSize, 
-    (Math.random() - 0.5) * starFieldSize,
-    (Math.random() - 0.5) * starFieldSize
-  );
-
-  // ✅ Assign each star a random twinkle speed
-  starTwinkleSpeeds.push(Math.random() * 0.03 + 0.01); // 0.01 - 0.04 range
-}
-
-starGeometry.setAttribute("position", new THREE.Float32BufferAttribute(starVertices, 3));
-
-const starMaterial = new THREE.PointsMaterial({
-  color: 0xffffff,
-  size: 50,  // 🔥 Brighter, more visible stars
-  transparent: true,
-  opacity: 0.8,
-  depthWrite: false
-});
-
-const stars = new THREE.Points(starGeometry, starMaterial);
-scene.add(stars);
-
-// 🔄 **Twinkling Animation Loop**
-const animateStars = () => {
-  requestAnimationFrame(animateStars);
-
-  const time = Date.now() * 0.001; // Convert time to seconds
-
-  // 🌟 Randomize twinkle effect per star
-  const positions = starGeometry.attributes.position.array;
-  for (let i = 0; i < starCount; i++) {
-    const speed = starTwinkleSpeeds[i];
-    positions[i * 3 + 1] += Math.sin(time * speed) * 0.5; // Y-axis twinkle
-  }
-
-  starGeometry.attributes.position.needsUpdate = true; // Update positions
-};
-
-// ✅ Start Twinkling
-animateStars();
-
-
-
-
-  // 🔄 **Animation Loop**
-  const animate = () => {
-    
-    requestAnimationFrame(animate);
-
-    if (globeRef.current) globeRef.current.rotation.y += 0.0000727;
-
-    const time = Date.now() / 1000;
-    const timeFactor = 1;
-
-    // 🛰️ Force all satellites to recalculate position
-  Object.values(satelliteObjectsRef.current).forEach((satelliteModel) => {
-    if (satelliteModel.userData) {
-      const newPos = computeSatellitePosition(satelliteModel.userData, time * timeFactor);
-      if (newPos) {
-        satelliteModel.position.lerp(newPos, 0.1); // 🔄 Smooth movement
-      } else {
-        console.warn(`⚠️ Satellite ${satelliteModel.userData.norad_number} has no new position!`);
-      }
-    }
-  });
-
-  
-
-    if (selectedPointerRef.current && selectedPointerRef.current.userData.followingSatellite) {
-      const followedSat = satelliteObjectsRef.current[selectedPointerRef.current.userData.followingSatellite];
-      if (followedSat) {
-        selectedPointerRef.current.position.copy(followedSat.position);
-        selectedPointerRef.current.lookAt(new THREE.Vector3(0, 0, 0));
-      }
-    }
-
-    controls.update();
-    renderer.render(scene, camera);
-  };
-
-  animate();
-
-; // ⏳ Small delay to ensure layout is ready
-return () => {
-  console.log("🗑 Cleaning up Three.js scene...");
-
-  // 🚀 Remove event listeners
-  window.removeEventListener("resize", resizeRenderer);
-
-  // 🚀 Dispose Renderer
-  if (rendererRef.current) {
-    rendererRef.current.dispose();
-    rendererRef.current.forceContextLoss();
-    if (mountRef.current?.contains(rendererRef.current.domElement)) {
-      mountRef.current.removeChild(rendererRef.current.domElement);
-    }
-    rendererRef.current = null;
-  }
-
-  // 🚀 Dispose Scene Objects
-  if (sceneRef.current) {
-    sceneRef.current.traverse((object) => {
-      if (object.isMesh) {
-        object.geometry.dispose();
-        if (Array.isArray(object.material)) {
-          object.material.forEach((material) => material.dispose());
-        } else {
-          object.material.dispose();
+      if (
+        selectedPointerRef.current &&
+        selectedPointerRef.current.userData.followingSatellite
+      ) {
+        const followedSat =
+          satelliteObjectsRef.current[
+            selectedPointerRef.current.userData.followingSatellite
+          ];
+        if (followedSat) {
+          selectedPointerRef.current.position.copy(followedSat.position);
+          selectedPointerRef.current.lookAt(new THREE.Vector3(0, 0, 0));
         }
       }
-    });
-    sceneRef.current = null;
-  }
 
-  // 🚀 Clear References
-  globeRef.current = null;
-  cloudRef.current = null;
-  cameraRef.current = null;
-  controlsRef.current = null;
-};
-}, 100);
+      controls.update();
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    // ✅ Cleanup
+    return () => {
+      console.log("🗑 Cleaning up Three.js scene...");
+      window.removeEventListener("resize", resizeRenderer);
+
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+        rendererRef.current.forceContextLoss();
+        if (mountRef.current?.contains(rendererRef.current.domElement)) {
+          mountRef.current.removeChild(rendererRef.current.domElement);
+        }
+        rendererRef.current = null;
+      }
+      if (sceneRef.current) {
+        sceneRef.current.traverse((object) => {
+          if (object.isMesh) {
+            object.geometry.dispose();
+            if (Array.isArray(object.material)) {
+              object.material.forEach((m) => m.dispose());
+            } else {
+              object.material.dispose();
+            }
+          }
+        });
+        sceneRef.current = null;
+      }
+
+      globeRef.current = null;
+      cloudRef.current = null;
+      cameraRef.current = null;
+      controlsRef.current = null;
+    };
+  }, 100);
 }, [is3DEnabled]);
+
 
 
 
@@ -1431,560 +1439,666 @@ const categories = {
 
 
 
-const generateStars = (numStars) => {
-  return Array.from({ length: numStars }).map((_, i) => {
-    const size = Math.random() * 3 + 1; // Random size between 1px and 4px
-    const duration = Math.random() * 5 + 3; // Random twinkle duration between 3s and 8s
-    const positionX = Math.random() * 100; // Random X position (0-100%)
-    const positionY = Math.random() * 100; // Random Y position (0-100%)
-
-    return (
-      <motion.div
-        key={i}
-        className="absolute bg-white rounded-full"
-        style={{
-          width: `${size}px`,
-          height: `${size}px`,
-          left: `${positionX}%`,
-          top: `${positionY}%`,
-          opacity: Math.random() * 0.5 + 0.3, // Random opacity (30% - 80%)
-          filter: "drop-shadow(0px 0px 5px rgba(255, 255, 255, 0.8))", // Soft glow
-        }}
-        animate={{ opacity: [0.2, 1, 0.2] }} // Twinkle Effect
-        transition={{
-          duration: duration, // Randomized twinkle duration
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-      />
-    );
-  });
-};
 
 
 
+// Automatically enable 3D after 1 second
+useEffect(() => {
+  const timer = setTimeout(() => {
+    setIs3DEnabled(true);
+  }, 1);
+  return () => clearTimeout(timer);
+}, []);
 
 
 
 return (
-  <div className="flex flex-col w-screen min-h-screen overflow-hidden border-gray-950">
-    
-          {/* 📌 Navbar (Stays at the Very Top) */}
-          <Navbar />
-
-
-  {/* 🌍 Fully Contained Box - Now Includes SatelliteCounter (Text + Chart) */}
-  <SatelliteCounter />
-
-
-    {/* 🌍 Main Layout (No Space Below the Hero Section) */}
-    <div className="relative flex flex-1 max-h-screen">
-      
-      {/* 🌍 Left Section (3D UI & Sidebar) */}
-      <div className="relative flex w-3/4 max-h-screen bg-gray-900/80 backdrop-blur-lg 
-                       shadow-xl overflow-hidden">
-          <div className="absolute w-full h-full overflow-hidden pointer-events-none">
-    {generateStars(150)} {/* Adjust number of stars here */}
-  </div>
-
-        {/* 🌍 3D UI Scene */}
-        <div className={`relative flex-1 ${window.innerWidth < 768 ? "h-screen" : "h-screen"} cursor-pointer`}
-             onClick={() => setIs3DEnabled(true)}>
-          <div className="relative flex-1 h-screen cursor-pointer">
-            <div ref={mountRef} className="absolute top-0 left-0 w-full h-full" />
-          </div>
-
-
-  {/* 🔄 Cool Loading Screen (Appears During Fetching) */}
-  {loading && (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-80 text-white z-[90]">
-      <div className="flex flex-col items-center">
-        {/* 🔄 Spinning Loader */}
-        <div className="w-12 h-12 border-t-4 border-b-4 border-teal-400 rounded-full animate-spin"></div>
-
-        {/* 🛰️ Animated Loading Text */}
-        <div className="mt-4 text-lg font-bold animate-pulse">Loading Data...</div>
-      </div>
+  <div className="relative flex flex-col w-screen min-h-screen overflow-hidden border-gray-950 bg-gradient-to-b from-[#050716] via-[#1B1E3D] to-[#2E4867] text-white font-[Space Grotesk]">
+    {/* Background stars + Navbar */}
+    <div className="absolute w-full h-full overflow-hidden pointer-events-none z-0">
+      {generateStars(150)}
     </div>
-  )}
+    <Navbar />
 
+    <SatelliteCounter />
 
-
-
-{/* 🌌 Welcome Screen with Enhanced Background */}
-{!is3DEnabled && !loading && (
- <div className="welcome-screen flex flex-col items-center justify-center h-screen w-full relative">
-
-{/* 🛰️ Welcome Text at the VERY TOP */}
-<div className="absolute top-8 text-4xl font-bold glow-text text-center">
-      <TypeAnimation
-        sequence={[
-          "Open UI to Observe All Objects",
-          2000,
-          "",
-          500,
-          "Explore the Skies...",
-          2000,
-          "",
-          500,
-          "Tracking Satellites in Real-Time",
-          2500,
-        ]}
-        wrapper="span"
-        speed={50}
-        repeat={Infinity}
-      />
-    </div>
-
-
-{/* 🛰️ 3D Wireframe Satellite Model */}
-<div className="satellite-container absolute left-[55%] top-[45%] transform translate-x-10 scale-[3.5] sm:scale-[3.5] md:scale-[3.5]">
-  <div className="satellite">
-    {/* 📡 Radio Dish & Antenna */}
-    <div className="radio-dish"></div>
-    <div className="antenna"></div>
-<div className="antenna-ball"></div> {/* 🔵 Glowing ball added here */}
-    {/* 🌍 Central Satellite Body */}
-    <div className="satellite-body"></div>
-    
-    {/* ☀️ Solar Panels */}
-    <div className="solar-panel left"></div>
-    <div className="solar-panel right"></div>
-  </div>
-</div>
-
-
-{/* 🚀 "Press Enter" Button at the Bottom (Flexbox Magic) */}
-<div className="mt-auto flex justify-center w-full pb-40">
-      <button
-        className="px-6 py-1 text-lg font-bold text-white border-2 border-teal-300 
-                   rounded-lg tracking-wide relative overflow-hidden shadow-lg
-                   hover:shadow-teal-400 hover:bg-teal-600 transition-all duration-500
-                   animate-glow"
-        onClick={() => setIs3DEnabled(true)} // ✅ Direct function
-      >
-        <span className="absolute inset-0 bg-teal-500 opacity-20 rounded-lg blur-md"></span>
-        <span className="relative z-10">Press Enter</span>
-      </button>
-    </div>
-
-    {/* 🔄 Custom Animation for Glow Effect */}
-    <style>
-      {`
-      @keyframes glow {
-        0% { box-shadow: 0 0 10px rgba(0, 255, 255, 0.5); }
-        50% { box-shadow: 0 0 20px rgba(0, 255, 255, 0.8); }
-        100% { box-shadow: 0 0 10px rgba(0, 255, 255, 0.5); }
-      }
-      .animate-glow {
-        animation: glow 1.5s infinite alternate ease-in-out;
-      }
-      `}
-    </style>
-
-  </div>
-)}
-
-
-</div>
-
-
-{/* 📌 Active Filters UI */}
-{is3DEnabled && (
-        <div className="absolute top-20 right-6 bg-gray-900 text-white p-3 rounded-md shadow-lg text-xs z-50">
-          <h3 className="text-sm font-semibold text-gray-300">Active Filters:</h3>
-          {activeFilters.length > 0 ? (
-            <ul className="mt-1 space-y-1">
-              {activeFilters.map((filter, index) => (
-                <li key={index} className="text-teal-300 flex items-center">
-                  • {filter}
-                  <button
-                    className="ml-2 text-red-500 hover:text-red-700"
-                    onClick={() => toggleFilter(filter)}
-                  >
-                    ✖
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-gray-400">None</p>
-          )}
-        </div>
-      )}
-      
-
-      
-
-{/* 📌 Compact Info Box (Centered & Floating at Bottom) */}
-{is3DEnabled && (
-  <div
-    className="fixed bottom-4 left-1/2 transform -translate-x-1/2 w-96 bg-gray-900 bg-opacity-90 text-teal-300 p-4 shadow-lg text-xs border-t-4 border-teal-300 rounded-xl z-[50] transition-all duration-300 ease-in-out"
-    style={{ maxHeight: "180px", overflowY: "auto" }} // Increased height slightly
-  >
-    {!selectedSatellite ? (
-      <div className="flex flex-col items-center justify-center h-full text-teal-300 font-semibold text-center p-3">
-        <span className="text-xl">📡</span>
-        <p className="mt-1">Select a satellite</p>
-      </div>
-    ) : (
-      <>
-        {/* ✅ Satellite Header */}
-        <div className="w-full text-center border-b border-teal-300 pb-2">
-          <div className="text-sm font-bold text-teal-300 truncate">{selectedSatellite.name}</div>
-          <div className="text-xs flex items-center justify-center mt-1 space-x-1">
-            <span className="text-lg">{getCountryFlag(selectedSatellite.country)}</span>
-            <span>{getCountryName(selectedSatellite.country)}</span>
-          </div>
+    {/* Main Layout: Left (3D) + Right (Sidebar) */}
+    <div className="relative flex flex-1 max-h-screen z-10">
+      {/* LEFT 3D SECTION */}
+      <div className="relative flex w-3/4 max-h-screen overflow-hidden">
+        {/* Optional starfield specifically inside 3D */}
+        <div className="absolute w-full h-full overflow-hidden pointer-events-none">
+          {generateStars(100)}
         </div>
 
-        {/* ✅ Real-Time Data */}
-        <div className="w-full py-2 space-y-1">
-          <div className="flex justify-between">
-            <span className="text-teal-300 text-[10px] uppercase">Velocity</span>
-            <span>{realTimeData.velocity} km/s</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-teal-300 text-[10px] uppercase">Altitude</span>
-            <span>{realTimeData.altitude} km</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-teal-300 text-[10px] uppercase">Position</span>
-            <span>{realTimeData.latitude}°, {realTimeData.longitude}°</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-teal-300 text-[10px] uppercase">Purpose</span>
-            <span className="truncate">{selectedSatellite.purpose || "Unknown"}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-teal-300 text-[10px] uppercase">Object Type</span>
-            <span className="truncate">{selectedSatellite.object_type || "Unknown"}</span>
-          </div>
+        {/* 3D Scene */}
+        <div className="relative flex-1 h-screen cursor-pointer">
+          <div ref={mountRef} className="absolute top-0 left-0 w-full h-full" />
         </div>
-      </>
-    )}
-  </div>
-)}
 
+        {/* Loading Overlay */}
+        {loading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center z-[90]">
+            <div className="w-40 h-40 animate-rotatePause">
+              <img src="public/favicon.svg" alt="Site Logo" className="w-full h-full" />
+            </div>
+            <style>{`
+              @keyframes rotatePause {
+                0% { transform: rotate(0deg); }
+                20% { transform: rotate(120deg); }
+                25% { transform: rotate(120deg); } 
+                45% { transform: rotate(240deg); }
+                50% { transform: rotate(240deg); } 
+                70% { transform: rotate(360deg); }
+                75% { transform: rotate(360deg); } 
+                100% { transform: rotate(360deg); }
+              }
+              .animate-rotatePause {
+                animation: rotatePause 2.5s infinite ease-in-out;
+                transform-origin: center center;
+              }
+            `}</style>
+          </div>
+        )}
 
- </div>
+        {/* Compact Info Box - anchored at bottom-left of LEFT container */}
+        {is3DEnabled && (
+          <div
+            className="absolute bottom-4 left-4 w-80  /* or w-96 if you prefer */
+                       bg-gray-900 bg-opacity-90 text-teal-300 p-4 shadow-lg text-xs 
+                       border-t-4 border-teal-300 rounded-xl z-[50] 
+                       transition-all duration-300 ease-in-out"
+            style={{ maxHeight: "180px", overflowY: "auto" }}
+          >
+            {!selectedSatellite ? (
+              <div className="flex flex-col items-center justify-center h-full text-teal-300 font-semibold text-center p-3">
+                <span className="text-xl">📡</span>
+                <p className="mt-1">Select a satellite</p>
+              </div>
+            ) : (
+              <>
+                <div className="w-full text-center border-b border-teal-300 pb-2">
+                  <div className="text-sm font-bold text-teal-300 truncate">
+                    {selectedSatellite.name}
+                  </div>
+                  <div className="text-xs flex items-center justify-center mt-1 space-x-1">
+                    <span className="text-lg">{getCountryFlag(selectedSatellite.country)}</span>
+                    <span>{getCountryName(selectedSatellite.country)}</span>
+                  </div>
+                </div>
 
+                <div className="w-full py-2 space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-teal-300 text-[10px] uppercase">Velocity</span>
+                    <span>{realTimeData.velocity} km/s</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-teal-300 text-[10px] uppercase">Altitude</span>
+                    <span>{realTimeData.altitude} km</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-teal-300 text-[10px] uppercase">Position</span>
+                    <span>
+                      {realTimeData.latitude}°, {realTimeData.longitude}°
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-teal-300 text-[10px] uppercase">Purpose</span>
+                    <span className="truncate">{selectedSatellite.purpose || "Unknown"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-teal-300 text-[10px] uppercase">Object Type</span>
+                    <span className="truncate">{selectedSatellite.object_type || "Unknown"}</span>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
-
-
-
-
-{/* 🌍 Right Side: Stacked Satellite List & Filters */}
-<div className="absolute right-0 top-0 h-screen w-1/4 flex flex-col gap-3 px-4 bg-rgb(9, 0, 22) shadow-xl">
-
-  {/* 🛰️ Satellite List (Top Section) */}
-  <div className="h-1/2 bg-gray-900/80 backdrop-blur-lg border border-gray-700 rounded-xl shadow-xl p-4 flex flex-col space-y-3">
-
-    {/* 🚀 Satellite List Header */}
-    <h3 className="text-lg font-semibold text-white text-center tracking-wide border-b border-gray-700 pb-2">
-      Active Satellites
-    </h3>
-
-    {/* 🔍 Search Input */}
-    <div className="relative">
-      <input
-        type="text"
-        placeholder="Search satellites..."
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        className="w-full p-2 pl-10 text-white bg-gray-800 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-400 border border-gray-600 shadow-sm text-sm"
-      />
-      <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">
-        🔍
-      </span>
-    </div>
-
-    {/* 🚀 Scrollable Satellite List */}
-    <div className="overflow-y-auto flex-grow scrollbar-hide p-3 bg-gray-800/50 rounded-lg">
-      {loading ? (
-        <div className="flex flex-col items-center justify-center text-teal-300 text-lg font-semibold animate-pulse">
-          <div className="w-12 h-12 border-4 border-gray-600 border-t-teal-400 rounded-full animate-spin"></div>
-          <p className="mt-4 tracking-wide text-gray-300">Fetching satellite data...</p>
-        </div>
-      ) : displayedSatellites.length === 0 ? (
-        <div className="flex flex-col items-center justify-center text-center text-lg font-semibold text-gray-300">
-          <p className="text-2xl text-white tracking-wide">Open UI to select satellites</p>
-          <p className="text-gray-500 text-sm mt-2">Your selected satellites will appear here.</p>
-        </div>
-      ) : (
-        <ul className="grid grid-cols-1 gap-3 w-full">
-  {displayedSatellites.map((sat) => (
-    <li
-      key={sat.norad_number}
-      className={`cursor-pointer p-4 rounded-lg text-center border border-gray-700 shadow-md transition-all duration-300 text-lg font-semibold flex flex-col items-center justify-between
-        ${
-          selectedSatellite?.norad_number === sat.norad_number
-            ? "bg-teal-500 text-white border-teal-500 shadow-lg scale-105"
-            : "bg-gray-800 hover:bg-gray-700 active:bg-teal-600"
-        }`}
-      onClick={() => {
-        console.log(`Selecting satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
-        focusOnSatellite(sat);
-        enableInteraction();
-      }}
-    >
-      {/* ✅ Satellite Name & Flag */}
-      <div className="flex items-center space-x-3">
-        <span className="text-3xl">{getCountryFlag(sat.country)}</span>
-        <span className="text-lg">{sat.name}</span>
-      </div>
-
-      {/* ✅ NORAD ID */}
-      <span className="text-sm text-gray-400">NORAD: {sat.norad_number}</span>
-
-      {/* ✅ Launch Date */}
-      {sat.launch_date ? (
-        <span className="text-xs text-gray-300 mt-1">
-           Launched: {new Date(sat.launch_date).toLocaleDateString()}
-        </span>
-      ) : (
-        <span className="text-xs text-gray-500 mt-1">🚀 Launch Date: Unknown</span>
-      )}
-    </li>
-  ))}
-</ul>
-
-      )}
-    </div>
-
-    {/* 🌍 Pagination Controls */}
-    <div className="flex flex-col items-center mt-4 border-t border-gray-700 pt-2 w-full min-w-0">
-      <span className="text-xs text-gray-300 mb-1">
-        Page {page} of {Math.max(1, Math.ceil(total / limit))}
-      </span>
-      <div className="flex flex-wrap justify-center w-full space-x-2 mt-1">
-        <button
-          onClick={() => changePage(1)}
-          disabled={page === 1 || loading}
-          className={`px-3 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-            page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
-          }`}
-        >
-          ⏮ First
-        </button>
-
-        <button
-          onClick={() => changePage(page - 1)}
-          disabled={page === 1 || loading}
-          className={`px-3 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-            page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
-          }`}
-        >
-          ← Prev
-        </button>
-
-        <button
-          onClick={() => changePage(page + 1)}
-          disabled={loading || page * limit >= total}
-          className={`px-3 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-            loading || page * limit >= total ? "opacity-50 cursor-not-allowed" : ""
-          }`}
-        >
-          Next →
-        </button>
-
-        <button
-          onClick={() => changePage(Math.ceil(total / limit))}
-          disabled={page === Math.ceil(total / limit) || loading}
-          className={`px-3 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600 transition-all ${
-            page === Math.ceil(total / limit) || loading ? "opacity-50 cursor-not-allowed" : ""
-          }`}
-        >
-          Last ⏭
-        </button>
-      </div>
-    </div>
-  </div>
-{/* 🚀 Filters Section (Bottom Section) */}
-<div className="h-1/2 bg-gray-900/80 backdrop-blur-lg border border-gray-700 rounded-xl shadow-xl p-4 space-y-3 overflow-hidden flex flex-col">
-    
-    {/* 🛰️ Title */}
-    <h3 className="text-sm font-semibold text-white text-center tracking-wide border-b border-gray-700 pb-2">
-      Satellite Filters
-    </h3>
-
-    {/* 🌍 Filter Selection (Scroll Contained) */}
-    <div className="h-[200px] overflow-y-auto border border-gray-700 rounded-lg p-3 bg-gray-800/50 scrollbar-hide"
-         style={{ touchAction: "none", overscrollBehavior: "contain" }}>
-      <h4 className="text-xs font-semibold text-teal-300 mb-2 text-center">
-        Select Filters
-      </h4>
-      <div className="grid grid-cols-1 gap-2">
-        {Object.entries(categories).flatMap(([category, filters]) =>
-          filters.map((filter) => (
-            <Button
-              key={filter.name}
-              onClick={() => toggleFilter(filter.name)}
-              className="w-full px-3 py-2 text-xs font-medium text-white bg-gray-800 
-                         border border-gray-600 hover:bg-teal-500 transition-all rounded-md"
-            >
-              {filter.label}
-            </Button>
-          ))
+        {/* Active Filters UI - anchored at top-left of LEFT container */}
+        {is3DEnabled && (
+          <div
+            className="absolute top-20 left-4  /* or top-4 right-4, your call */
+                       bg-gray-900 text-white p-3 rounded-md shadow-lg text-xs 
+                       z-50 w-44 /* adjust width as needed */"
+          >
+            <h3 className="text-sm font-semibold text-gray-300">Active Filters:</h3>
+            {activeFilters.length > 0 ? (
+              <ul className="mt-1 space-y-1">
+                {activeFilters.map((filter, index) => (
+                  <li key={index} className="text-teal-300 flex items-center">
+                    • {filter}
+                    <button
+                      className="ml-2 text-red-500 hover:text-red-700"
+                      onClick={() => toggleFilter(filter)}
+                    >
+                      ✖
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-400">None</p>
+            )}
+          </div>
         )}
       </div>
-    </div>
 
-    {/* 🌍 Scrollable Lists (Fixed Inside Box) */}
-    <div className="flex-grow grid grid-cols-2 gap-3 mt-3">
-
-      {/* 📅 Launch Year (Contained Scroll) */}
-      <div className="flex flex-col">
-        <h4 className="text-xs font-semibold text-teal-300 mb-2 text-center">
-          Launch Year
-        </h4>
-        <div className="h-[160px] overflow-y-auto bg-gray-800/50 border border-gray-700 rounded-lg p-2 scrollbar-hide"
-             style={{ touchAction: "none", overscrollBehavior: "contain" }}>
-          {Array.from({ length: 30 }, (_, i) => 2025 - i).map((year) => (  
-            <Button
-              key={year}
-              onClick={() => toggleFilter(`Launch Year:${year}`)}
-              className="w-full text-[11px] font-medium text-white bg-gray-800 
-                         hover:bg-teal-500 transition-all rounded-md py-1 mb-1"
-            >
-              {year}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {/* 🌍 Country (Contained Scroll) */}
-      <div className="flex flex-col">
-        <h4 className="text-xs font-semibold text-teal-300 mb-2 text-center">
-          Country of Origin
-        </h4>
-        <div className="h-[160px] overflow-y-auto bg-gray-800/50 border border-gray-700 rounded-lg p-2 scrollbar-hide"
-             style={{ touchAction: "none", overscrollBehavior: "contain" }}>
-          {Object.entries(countryMapping).slice(0, 20).map(([code, { name, flag }]) => (  
-            <Button
-              key={code}
-              onClick={() => toggleFilter(`Country:${code}`)}
-              className="w-full text-[11px] font-medium text-white bg-gray-800 
-                         hover:bg-teal-500 transition-all rounded-md py-1 mb-1 flex items-center space-x-2"
-            >
-              <span className="text-lg">{flag}</span>
-              <span>{name}</span>
-            </Button>
-          ))}
-        </div>
-      </div>
-
-    </div>
-
-    {/* 🔄 Reset Button (Fixed at Bottom) */}
-    <div className="mt-2 text-center">
-      <Button
-        onClick={resetFilters}
-        className="px-4 py-2 text-xs font-semibold text-black bg-teal-300 
-                   hover:bg-teal-400 rounded-md shadow-md transition-all"
+      {/* RIGHT-SIDE PANEL (Expandable or fixed) */}
+      <div
+        className={`
+          flex flex-col gap-3 px-4 z-[99]
+          bg-gray-900/90 backdrop-blur-lg border border-gray-700
+          shadow-xl rounded-xl
+          transition-all duration-300
+          ${
+            isExpanded
+              ? "absolute top-0 right-0 w-full h-screen z-[99]" // Full screen overlay
+              : "absolute top-0 right-0 h-screen w-1/4 z-[99]"  // Narrow sidebar
+          }
+        `}
       >
-        Reset Filters
-      </Button>
+        {/* Expand/Collapse */}
+        <div className="flex justify-end mt-2 mr-2">
+          <button
+            onClick={toggleExpanded}
+            className="px-4 py-2 text-sm font-medium bg-gray-800 text-white rounded-md 
+                       hover:bg-gray-700 transition-colors"
+          >
+            {isExpanded ? "Close Panel" : "Expand"}
+          </button>
+        </div>
+        {/* Satellite List - top half */}
+        <div className="h-1/2 p-4 flex flex-col space-y-3">
+          <h3 className="text-lg font-semibold text-white text-center tracking-wide border-b border-gray-700 pb-2">
+            Active Satellites
+          </h3>
+
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search satellites..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full p-2 pl-10 text-white bg-gray-800 rounded-md 
+                         focus:outline-none focus:ring-2 focus:ring-teal-400
+                         border border-gray-600 shadow-sm text-sm"
+            />
+            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">
+              🔍
+            </span>
+          </div>
+
+          <div className="overflow-y-auto flex-grow scrollbar-hide p-3 bg-gray-800/50 rounded-lg">
+            {loading ? (
+              <div className="flex flex-col items-center justify-center text-teal-300 text-lg font-semibold animate-pulse">
+                <div className="w-12 h-12 border-4 border-gray-600 border-t-teal-400 rounded-full animate-spin"></div>
+                <p className="mt-4 tracking-wide text-gray-300">Fetching satellite data...</p>
+              </div>
+            ) : displayedSatellites.length === 0 ? (
+              <div className="flex flex-col items-center justify-center text-center text-lg font-semibold text-gray-300">
+                <p className="text-2xl text-white tracking-wide">Open UI to select satellites</p>
+                <p className="text-gray-500 text-sm mt-2">
+                  Your selected satellites will appear here.
+                </p>
+              </div>
+            ) : (
+              <ul className="grid grid-cols-1 gap-3 w-full">
+                {displayedSatellites.map((sat) => (
+                  <li
+                    key={sat.norad_number}
+                    className={`cursor-pointer p-4 rounded-lg text-center border border-gray-700 shadow-md transition-all duration-300 text-lg font-semibold flex flex-col items-center justify-between
+                      ${
+                        selectedSatellite?.norad_number === sat.norad_number
+                          ? "bg-teal-500 text-white border-teal-500 shadow-lg scale-105"
+                          : "bg-gray-800 hover:bg-gray-700 active:bg-teal-600"
+                      }`}
+                    onClick={() => {
+                      console.log(`Selecting satellite: ${sat.name} (NORAD: ${sat.norad_number})`);
+                      focusOnSatellite(sat);
+                      enableInteraction();
+                    }}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <span className="text-3xl">{getCountryFlag(sat.country)}</span>
+                      <span className="text-lg">{sat.name}</span>
+                    </div>
+                    <span className="text-sm text-gray-400">NORAD: {sat.norad_number}</span>
+                    {sat.launch_date ? (
+                      <span className="text-xs text-gray-300 mt-1">
+                        Launched: {new Date(sat.launch_date).toLocaleDateString()}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-500 mt-1">
+                        🚀 Launch Date: Unknown
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Pagination Controls */}
+          <div className="flex flex-col items-center mt-4 border-t border-gray-700 pt-2 w-full min-w-0">
+            <span className="text-xs text-gray-300 mb-1">
+              Page {page} of {Math.max(1, Math.ceil(total / limit))}
+            </span>
+            <div className="flex flex-wrap justify-center w-full space-x-2 mt-1">
+              <button
+                onClick={() => changePage(1)}
+                disabled={page === 1 || loading}
+                className={`px-3 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md 
+                            hover:bg-gray-600 transition-all ${
+                              page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
+                            }`}
+              >
+                ⏮ First
+              </button>
+              <button
+                onClick={() => changePage(page - 1)}
+                disabled={page === 1 || loading}
+                className={`px-3 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md 
+                            hover:bg-gray-600 transition-all ${
+                              page === 1 || loading ? "opacity-50 cursor-not-allowed" : ""
+                            }`}
+              >
+                ← Prev
+              </button>
+              <button
+                onClick={() => changePage(page + 1)}
+                disabled={loading || page * limit >= total}
+                className={`px-3 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md 
+                            hover:bg-gray-600 transition-all ${
+                              loading || page * limit >= total
+                                ? "opacity-50 cursor-not-allowed"
+                                : ""
+                            }`}
+              >
+                Next →
+              </button>
+              <button
+                onClick={() => changePage(Math.ceil(total / limit))}
+                disabled={page === Math.ceil(total / limit) || loading}
+                className={`px-3 py-1 text-xs bg-gray-700 text-white rounded-md shadow-md 
+                            hover:bg-gray-600 transition-all ${
+                              page === Math.ceil(total / limit) || loading
+                                ? "opacity-50 cursor-not-allowed"
+                                : ""
+                            }`}
+              >
+                Last ⏭
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Filters - bottom half */}
+        <div className="h-1/2 p-4 space-y-1 overflow-hidden flex flex-col">
+          <h3 className="text-sm font-semibold text-white text-center tracking-wide border-b border-gray-700 pb-2">
+            Satellite Filters
+          </h3>
+
+          <div
+            className="h-[200px] overflow-y-auto border border-gray-700 rounded-lg p-10 bg-gray-800/50 scrollbar-hide"
+            style={{ touchAction: "none", overscrollBehavior: "contain" }}
+          >
+            <h4 className="text-xs font-semibold text-teal-300 mb-2 text-center">
+              Select Filters
+            </h4>
+            <div className="grid grid-cols-1 gap-2">
+              {Object.entries(categories).flatMap(([category, filters]) =>
+                filters.map((filter) => (
+                  <Button
+                    key={filter.name}
+                    onClick={() => toggleFilter(filter.name)}
+                    className="w-full px-10 py-2 text-xs font-medium text-white bg-gray-800 
+                               border border-gray-600 hover:bg-teal-500 transition-all rounded-md"
+                  >
+                    {filter.label}
+                  </Button>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="flex-grow grid grid-cols-2 gap-3 mt-3">
+            {/* Launch Year */}
+            <div className="flex flex-col">
+              <h4 className="text-xs font-semibold text-teal-300 mb-2 text-center">
+                Launch Year
+              </h4>
+              <div
+                className="h-[160px] overflow-y-auto bg-gray-800/50 border border-gray-700 rounded-lg p-2 scrollbar-hide"
+                style={{ touchAction: "none", overscrollBehavior: "contain" }}
+              >
+                {Array.from({ length: 30 }, (_, i) => 2025 - i).map((year) => (
+                  <Button
+                    key={year}
+                    onClick={() => toggleFilter(`Launch Year:${year}`)}
+                    className="w-full text-[11px] font-medium text-white bg-gray-800 
+                               hover:bg-teal-500 transition-all rounded-md py-1 mb-1"
+                  >
+                    {year}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Country of Origin */}
+            <div className="flex flex-col">
+              <h4 className="text-xs font-semibold text-teal-300 mb-2 text-center">
+                Country of Origin
+              </h4>
+              <div
+                className="h-[160px] overflow-y-auto bg-gray-800/50 border border-gray-700 rounded-lg p-2 scrollbar-hide"
+                style={{ touchAction: "none", overscrollBehavior: "contain" }}
+              >
+                {Object.entries(countryMapping)
+                  .slice(0, 20)
+                  .map(([code, { name, flag }]) => (
+                    <Button
+                      key={code}
+                      onClick={() => toggleFilter(`Country:${code}`)}
+                      className="w-full text-[11px] font-medium text-white bg-gray-800 
+                                 hover:bg-teal-500 transition-all rounded-md py-1 mb-1 
+                                 flex items-center space-x-2"
+                    >
+                      <span className="text-lg">{flag}</span>
+                      <span>{name}</span>
+                    </Button>
+                  ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-2 text-center">
+            <Button
+              onClick={resetFilters}
+              className="px-4 py-2 text-xs font-semibold text-black bg-teal-300 
+                         hover:bg-teal-400 rounded-md shadow-md transition-all"
+            >
+              Reset Filters
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
 
-    </div>
-    </div>
-    </div>
+ {/* Infographics Section */}
+<Infographics
+  satellitesForCharts={satellitesForCharts}
+  loading={chartLoading}
+  error={chartError}
+/>
 
-
- 
-
-
-
-
-  <div>
-      {/* Other sections of Home */}
-      
-      {/* 📌 Infographics Section - pass satellites & states */}
-      <Infographics
-        satellitesForCharts={satellitesForCharts}
-        loading={chartLoading}
-        error={chartError}/>
-    </div>
-
-{/* 🌌 Full-Screen Mako Experience */}
-<div className="min-h-screen bg-gradient-to-b from-[#050716] via-[#1B1E3D] to-[#2E4867] text-white px-6 sm:px-8 lg:px-12 py-12 z-60 font-[Space Grotesk]">
-<div className="absolute w-full h-full overflow-hidden pointer-events-none">
-    {generateStars(150)} {/* Adjust number of stars here */}
+{/* ---------------------------
+   🌌 Mako Experience Section
+   --------------------------- */}
+<div className="
+  max-w-screen-2xl  /* <-- Wider than 7xl. Adjust to taste */
+  mx-auto 
+  w-full 
+  px-6            /* <-- Adjust your side padding */
+  sm:px-12 
+  lg:px-20 
+  py-12 
+  z-10
+">
+  {/* Title */}
+  <div className="text-6xl font-bold glow-text text-center mb-12">
+    <TypeAnimation
+      sequence={[
+        "Observe All Objects",
+        2000,
+        "",
+        500,
+        "Explore the Skies...",
+        2000,
+        "",
+        500,
+        "Tracking Satellites in Real-Time",
+        2500,
+      ]}
+      wrapper="span"
+      speed={50}
+      repeat={Infinity}
+    />
   </div>
-  {/* 📦 Grid Layout for Sections */}
-  <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12 pb-24 w-full">
 
-    {/* 🚀 The Future of Orbital Tracking */}
-    <div className="p-10 bg-[#1E233F] bg-opacity-95 rounded-xl shadow-xl border border-[#3E6A89] hover:scale-105 transition-transform duration-300 w-full mx-3 lg:col-span-2">
-      <h2 className="text-4xl font-semibold text-[#86EED8] tracking-wide">Next-Generation Orbital Tracking</h2>
+  {/* Grid Layout */}
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-16 pb-24">
+    {/* 
+      ^ If you want more or less spacing between cards, 
+      change `gap-16` to `gap-12`, etc.
+    */}
+
+    {/* Satellite Model Container */}
+    <div className="satellite-container relative left-[55%] top-[45%] scale-[3.5] sm:scale-[3.5] md:scale-[3.5]">
+      <div className="satellite">
+        <div className="radio-dish"></div>
+        <div className="antenna"></div>
+        <div className="antenna-ball"></div>
+        <div className="satellite-body"></div>
+        <div className="solar-panel left"></div>
+        <div className="solar-panel right"></div>
+      </div>
+    </div>
+
+    {/* The Future of Orbital Tracking */}
+    <div className="
+      p-10 
+      bg-[#1E233F] bg-opacity-95 
+      rounded-xl shadow-xl 
+      border border-[#3E6A89] 
+      hover:scale-105 
+      transition-transform 
+      duration-300 
+      lg:col-span-2
+    ">
+      <h2 className="text-4xl font-semibold text-[#86EED8] tracking-wide">
+        Next-Generation Orbital Tracking
+      </h2>
       <p className="mt-6 text-lg leading-relaxed text-gray-300">
-        Step into the **next era** of <span className="text-[#C8E49C] font-semibold uppercase">real-time orbital intelligence</span>. Powered by **high-fidelity Keplerian models**, this system provides a **seamless visualization** of Earth's satellites, designed for **precision-driven mission planning** and **collision risk mitigation**.
+        Step into the{" "}
+        <span className="text-[#C8E49C] font-semibold uppercase">
+          real-time orbital intelligence
+        </span>{" "}
+        era. Powered by <strong>high-fidelity Keplerian models</strong>, 
+        this system provides a <strong>seamless visualization</strong> 
+        of Earth’s satellites, designed for <strong>precision-driven mission planning</strong> 
+        and <strong>collision risk mitigation</strong>.
       </p>
     </div>
 
-    {/* ⚙️ How the System Works */}
-    <div className="p-8 bg-[#253654] bg-opacity-90 rounded-lg shadow-lg border border-[#5E8A94] hover:scale-105 transition-transform duration-300 w-full mx-3">
-      <h2 className="text-3xl font-medium text-[#6BB8C7] tracking-wide">Deep-Tech Insights</h2>
+    {/* Deep-Tech Insights */}
+    <div className="
+      p-8 
+      bg-[#253654] bg-opacity-90 
+      rounded-lg shadow-lg 
+      border border-[#5E8A94] 
+      hover:scale-105 
+      transition-transform 
+      duration-300
+    ">
+      <h2 className="text-3xl font-medium text-[#6BB8C7] tracking-wide">
+        Deep-Tech Insights
+      </h2>
       <p className="mt-5 text-lg leading-relaxed text-gray-300">
-        By leveraging **Two-Line Element (TLE) datasets**, we calculate orbital trajectories with an <span className="text-[#C8E49C] font-semibold tracking-wide">adaptive physics engine</span>. Advanced **GPU-accelerated rendering** fuels an **interactive 3D experience**, offering **real-time orbital evolution**.
+        By leveraging <strong>Two-Line Element (TLE) datasets</strong>, we calculate
+        orbital trajectories with an{" "}
+        <span className="text-[#C8E49C] font-semibold tracking-wide">
+          adaptive physics engine
+        </span>
+        . Advanced <strong>GPU-accelerated rendering</strong> fuels an 
+        <strong> interactive 3D experience</strong>, offering <strong>real-time orbital evolution</strong>.
       </p>
     </div>
 
-    {/* 🌍 Real-World Applications */}
-    <div className="p-10 bg-[#1E233F] bg-opacity-95 rounded-xl shadow-lg border border-[#4F89A5] hover:scale-105 transition-transform duration-300 w-full mx-3 lg:col-span-2">
-      <h2 className="text-4xl font-semibold text-[#86EED8] tracking-wide">Impact Across Industries</h2>
+    {/* Impact Across Industries */}
+    <div className="
+      p-10 
+      bg-[#1E233F] bg-opacity-95 
+      rounded-xl shadow-lg 
+      border border-[#4F89A5] 
+      hover:scale-105 
+      transition-transform 
+      duration-300 
+      lg:col-span-2
+    ">
+      <h2 className="text-4xl font-semibold text-[#86EED8] tracking-wide">
+        Impact Across Industries
+      </h2>
       <ul className="mt-6 list-disc pl-6 space-y-4 text-lg text-gray-300">
-        <li><span className="text-[#C8E49C] font-semibold">Orbital Debris Mitigation</span> — Advanced AI-powered tracking of space junk.</li>
-        <li><span className="text-[#6BB8C7] font-semibold">Navigation Precision</span> — Enhanced GPS and satellite communication systems.</li>
-        <li><span className="text-[#5E8A94] font-semibold">Earth Monitoring</span> — Optimized climate and environmental observation.</li>
+        <li>
+          <span className="text-[#C8E49C] font-semibold">
+            Orbital Debris Mitigation
+          </span>{" "}
+          — Advanced AI-powered tracking of space junk.
+        </li>
+        <li>
+          <span className="text-[#6BB8C7] font-semibold">
+            Navigation Precision
+          </span>{" "}
+          — Enhanced GPS and satellite communication systems.
+        </li>
+        <li>
+          <span className="text-[#5E8A94] font-semibold">
+            Earth Monitoring
+          </span>{" "}
+          — Optimized climate and environmental observation.
+        </li>
       </ul>
     </div>
 
-    {/* 📡 Advanced Capabilities */}
-    <div className="p-8 bg-[#253654] bg-opacity-90 rounded-lg shadow-lg border border-[#4F89A5] hover:scale-105 transition-transform duration-300 w-full mx-3">
-      <h2 className="text-3xl font-medium text-[#C8E49C] tracking-wide">System Capabilities</h2>
+    {/* System Capabilities */}
+    <div className="
+      p-8 
+      bg-[#253654] bg-opacity-90 
+      rounded-lg shadow-lg 
+      border border-[#4F89A5] 
+      hover:scale-105 
+      transition-transform 
+      duration-300
+    ">
+      <h2 className="text-3xl font-medium text-[#C8E49C] tracking-wide">
+        System Capabilities
+      </h2>
       <ul className="mt-5 list-disc pl-6 space-y-3 text-lg text-gray-300">
-        <li><span className="text-[#86EED8] font-semibold">Live Data Refresh</span> — Constant updates for orbital integrity.</li>
-        <li><span className="text-[#4F89A5] font-semibold">3D Orbital Mapping</span> — Built with **Three.js** and **WebGL**.</li>
-        <li><span className="text-[#5E8A94] font-semibold">Predictive Analytics</span> — Advanced forecasting for trajectory shifts.</li>
+        <li>
+          <span className="text-[#86EED8] font-semibold">Live Data Refresh</span>{" "}
+          — Constant updates for orbital integrity.
+        </li>
+        <li>
+          <span className="text-[#4F89A5] font-semibold">
+            3D Orbital Mapping
+          </span>{" "}
+          — Built with <strong>Three.js</strong> and <strong>WebGL</strong>.
+        </li>
+        <li>
+          <span className="text-[#5E8A94] font-semibold">
+            Predictive Analytics
+          </span>{" "}
+          — Advanced forecasting for trajectory shifts.
+        </li>
       </ul>
     </div>
 
-    {/* 🚀 Future Enhancements */}
-    <div className="p-10 bg-[#1E233F] bg-opacity-95 rounded-xl shadow-lg border border-[#3E6A89] hover:scale-105 transition-transform duration-300 w-full mx-3 lg:col-span-2">
-      <h2 className="text-4xl font-semibold text-[#C8E49C] tracking-wide">Upcoming Innovations</h2>
+    {/* Upcoming Innovations */}
+    <div className="
+      p-10 
+      bg-[#1E233F] bg-opacity-95 
+      rounded-xl shadow-lg 
+      border border-[#3E6A89] 
+      hover:scale-105 
+      transition-transform 
+      duration-300 
+      lg:col-span-2
+    ">
+      <h2 className="text-4xl font-semibold text-[#C8E49C] tracking-wide">
+        Upcoming Innovations
+      </h2>
       <ul className="mt-6 list-disc pl-6 space-y-4 text-lg text-gray-300">
-        <li><span className="text-[#6BB8C7] font-semibold">AI-Based Threat Detection</span> — Identifies anomalies in satellite orbits.</li>
-        <li><span className="text-[#86EED8] font-semibold">Solar Weather Integration</span> — Real-time space weather monitoring.</li>
-        <li><span className="text-[#5E8A94] font-semibold">Historical Orbit Playback</span> — Rewind & analyze satellite movements.</li>
+        <li>
+          <span className="text-[#6BB8C7] font-semibold">
+            AI-Based Threat Detection
+          </span>{" "}
+          — Identifies anomalies in satellite orbits.
+        </li>
+        <li>
+          <span className="text-[#86EED8] font-semibold">
+            Solar Weather Integration
+          </span>{" "}
+          — Real-time space weather monitoring.
+        </li>
+        <li>
+          <span className="text-[#5E8A94] font-semibold">
+            Historical Orbit Playback
+          </span>{" "}
+          — Rewind &amp; analyze satellite movements.
+        </li>
       </ul>
     </div>
 
-    {/* 🌌 Expanding the Frontier */}
-    <div className="p-9 bg-[#253654] bg-opacity-90 rounded-lg shadow-lg border border-[#4F89A5] hover:scale-105 transition-transform duration-300 w-full mx-3">
-      <h2 className="text-3xl font-medium text-[#6BB8C7] tracking-wide">Beyond Low Earth Orbit</h2>
+    {/* Beyond Low Earth Orbit */}
+    <div className="
+      p-9 
+      bg-[#253654] bg-opacity-90 
+      rounded-lg shadow-lg 
+      border border-[#4F89A5] 
+      hover:scale-105 
+      transition-transform 
+      duration-300
+    ">
+      <h2 className="text-3xl font-medium text-[#6BB8C7] tracking-wide">
+        Beyond Low Earth Orbit
+      </h2>
       <p className="mt-5 text-lg leading-relaxed text-gray-300">
-        As deep-space missions accelerate, this system will evolve to **track lunar assets**, **Martian surface explorers**, and **interplanetary relay satellites**.
+        As deep-space missions accelerate, this system will evolve to <strong>track
+        lunar assets</strong>, <strong>Martian surface explorers</strong>,
+        and <strong>interplanetary relay satellites</strong>.
       </p>
     </div>
 
-    {/* 📜 Educational Resources */}
-    <div className="p-8 bg-[#1E233F] bg-opacity-95 rounded-xl shadow-lg border border-[#3E6A89] hover:scale-105 transition-transform duration-300 w-full mx-3 lg:col-span-2">
-      <h2 className="text-4xl font-semibold text-[#86EED8] tracking-wide">Resources & Further Exploration</h2>
+    {/* Educational Resources */}
+    <div className="
+      p-8 
+      bg-[#1E233F] bg-opacity-95 
+      rounded-xl shadow-lg 
+      border border-[#3E6A89] 
+      hover:scale-105 
+      transition-transform 
+      duration-300 
+      lg:col-span-2
+    ">
+      <h2 className="text-4xl font-semibold text-[#86EED8] tracking-wide">
+        Resources &amp; Further Exploration
+      </h2>
       <ul className="mt-6 list-disc pl-6 space-y-4 text-lg text-gray-300">
-        <li><a href="https://www.spacestrak.com/" className="text-[#C8E49C] hover:underline hover:text-[#C8E49C]/80" target="_blank">SpaceTrak — TLE Data & Orbital Elements</a></li>
-        <li><a href="https://www.n2yo.com/" className="text-[#6BB8C7] hover:underline hover:text-[#6BB8C7]/80" target="_blank">N2YO — Live Satellite Tracking</a></li>
+        <li>
+          <a
+            href="https://www.spacestrak.com/"
+            className="text-[#C8E49C] hover:underline hover:text-[#C8E49C]/80"
+            target="_blank"
+            rel="noreferrer"
+          >
+            SpaceTrak — TLE Data &amp; Orbital Elements
+          </a>
+        </li>
+        <li>
+          <a
+            href="https://www.n2yo.com/"
+            className="text-[#6BB8C7] hover:underline hover:text-[#6BB8C7]/80"
+            target="_blank"
+            rel="noreferrer"
+          >
+            N2YO — Live Satellite Tracking
+          </a>
+        </li>
       </ul>
     </div>
-
   </div>
 </div>
-
-
-
 </div>
-
-);
-}
-
+);}
