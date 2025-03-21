@@ -22,7 +22,6 @@ function generateStars(numStars) {
     const duration = Math.random() * 5 + 3;
     const positionX = Math.random() * 100;
     const positionY = Math.random() * 100;
-
     return (
       <motion.div
         key={i}
@@ -49,14 +48,18 @@ function generateStars(numStars) {
 /* ------------------------------------------------------------------
    2) API Endpoints
 ------------------------------------------------------------------ */
+
+//FOR PRODUCTION
+
 const API_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/satellites";
 const CDM_URL = "https://satellite-tracker-production.up.railway.app/api/cdm/fetch";
 const SUGGEST_URL = "https://satellite-tracker-production.up.railway.app/api/satellites/suggest";
 
 
-//const API_BASE_URL = "http://127.0.0.1:8000/api/satellites";
-//const CDM_URL = "http://127.0.0.1:8000/api/cdm/fetch";
-//const SUGGEST_URL = "http://127.0.0.1:8000/api/satellites/suggest";
+// FOR DEV
+//const API_BASE_URL = "http://localhost:8000/api/satellites";
+//const CDM_URL = "http://localhost:8000/api/cdm/fetch";
+//const SUGGEST_URL = "http://localhost:8000/api/satellites/suggest";
 
 /* ------------------------------------------------------------------
    3) Earth Textures (Day/Night)
@@ -76,7 +79,6 @@ export default function Tracking() {
   const [searchQuery, setSearchQuery] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
-
   const [selectedSatellite, setSelectedSatellite] = useState(null);
   const [cdmEvents, setCdmEvents] = useState([]);
 
@@ -84,12 +86,17 @@ export default function Tracking() {
   const [isPaused, setIsPaused] = useState(false);
   const [speedFactor, setSpeedFactor] = useState(1);
 
-  // Toggles
-  const [showOrbitHistory, setShowOrbitHistory] = useState(false);
-  const [isFocusEnabled, setIsFocusEnabled] = useState(false); // <--- Restored focus toggle
-  const [cameraMode, setCameraMode] = useState("sideHorizon"); // default approach
+  // Toggles & Camera
+  const [showOrbitHistory, setShowOrbitHistory] = useState(true);
+  const [isFocusEnabled, setIsFocusEnabled] = useState(false);
+  const [cameraMode, setCameraMode] = useState("sideHorizon"); // "sideHorizon" | "topView" | "topFront"
+  const [cameraZoom, setCameraZoom] = useState(1);
 
-  // Telemetry overlay (always visible)
+  // NEW: Nearby orbits count (0 means disabled)
+  const [nearbyCount, setNearbyCount] = useState(0);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+
+  // Telemetry overlay
   const [lastVelocity, setLastVelocity] = useState("0.00");
   const [lastAltitude, setLastAltitude] = useState("0.00");
   const [lastPosition, setLastPosition] = useState({ x: "0.00", y: "0.00", z: "0.00" });
@@ -113,8 +120,26 @@ export default function Tracking() {
   const satrecRef = useRef(null);
   const simulationTimeRef = useRef(Date.now());
 
+  // NEW: Refs to store nearby orbit lines and nearby satellite data (mesh + satrec)
+  const nearbyOrbitLinesRef = useRef([]);
+  const nearbySatellitesRef = useRef([]);
+
   // Generate stable starfield
   const stableStars = useStableStars(150, generateStars);
+
+  // Keep refs in sync with state
+  const isPausedRef = useRef(false);
+  const speedFactorRef = useRef(1);
+  const isFocusEnabledRef = useRef(false);
+  const cameraModeRef = useRef("sideHorizon");
+  const cameraZoomRef = useRef(1);
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+    speedFactorRef.current = speedFactor;
+    isFocusEnabledRef.current = isFocusEnabled;
+    cameraModeRef.current = cameraMode;
+    cameraZoomRef.current = cameraZoom;
+  }, [isPaused, speedFactor, isFocusEnabled, cameraMode, cameraZoom]);
 
   /* -------------------------------------------------------------
      4) Fetch Active CDM on Mount
@@ -152,7 +177,6 @@ export default function Tracking() {
         console.error("Error fetching suggestions:", err);
       }
     }, 300);
-
     return () => clearTimeout(delayDebounce);
   }, [searchQuery]);
 
@@ -161,25 +185,21 @@ export default function Tracking() {
   ------------------------------------------------------------- */
   useEffect(() => {
     if (!mountRef.current) return;
-
     const width = mountRef.current.clientWidth;
     const height = mountRef.current.clientHeight;
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
-    // Camera: side horizon
-    const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 999999);
-    camera.position.set(6371 * 3, 0, 0); // ~3 Earth radii away
+    const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 9999999);
+    camera.position.set(6371 * 3, 0, 0);
     camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
 
-    // Light
     const light = new THREE.DirectionalLight(0xffffff, 1);
     light.position.set(10000, 10000, 10000);
     scene.add(light);
 
-    // Earth w/ day-night textures
     const globe = new THREE.Mesh(
       new THREE.SphereGeometry(6371, 64, 64),
       new THREE.MeshStandardMaterial({
@@ -195,13 +215,11 @@ export default function Tracking() {
     globeRef.current = globe;
     scene.add(globe);
 
-    // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(width, height);
     mountRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Controls
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.1;
@@ -215,74 +233,76 @@ export default function Tracking() {
       const deltaMs = now - lastTime;
       lastTime = now;
 
-      // Advance simulation time if not paused
       if (!isPausedRef.current && satrecRef.current) {
         simulationTimeRef.current += deltaMs * speedFactorRef.current;
       }
 
-      // If we have a satellite, update its position
+      // Update main satellite position & telemetry
       if (satrecRef.current && satelliteMeshRef.current) {
         const currentDate = new Date(simulationTimeRef.current);
         const posVel = satellite.propagate(satrecRef.current, currentDate);
-
         if (posVel.position && posVel.velocity) {
-          // Convert ECI => lat/long => x,y,z
+          const { x, y, z } = posVel.position;
+          satelliteMeshRef.current.position.set(x, z, -y);
           const gmst = satellite.gstime(currentDate);
           const geo = satellite.eciToGeodetic(posVel.position, gmst);
-          const lat = geo.latitude;
-          const lon = geo.longitude;
           const alt = geo.height;
-          const r = 6371 + alt;
-
-          const x = r * Math.cos(lat) * Math.cos(lon);
-          const z = r * Math.cos(lat) * Math.sin(lon);
-          const y = r * Math.sin(lat);
-
-          // Place satellite
-          satelliteMeshRef.current.position.set(x, y, z);
-
-          // Telemetry
+          setLastAltitude(alt.toFixed(2));
+          setLastPosition({
+            x: x.toFixed(2),
+            y: y.toFixed(2),
+            z: z.toFixed(2),
+          });
           const vx = posVel.velocity.x;
           const vy = posVel.velocity.y;
           const vz = posVel.velocity.z;
           const velocity = Math.sqrt(vx * vx + vy * vy + vz * vz);
-          const bstarVal = satrecRef.current.bstar;
-
           setLastVelocity(velocity.toFixed(2));
-          setLastAltitude(alt.toFixed(2));
-          setLastPosition({ x: x.toFixed(2), y: y.toFixed(2), z: z.toFixed(2) });
-          addTelemetry(velocity, alt, bstarVal);
-
-          // If "Focus on Satellite" is enabled => do camera logic
-          if (isFocusEnabledRef.current) {
-            const minCamDist = 6371 + 500; // clamp to 500 km above Earth
-            let desiredPos;
-
-            if (cameraModeRef.current === "topView") {
-              // Overhead
-              desiredPos = new THREE.Vector3(x, y + 3000, z);
-            } else {
-              // sideHorizon or fallback
-              desiredPos = new THREE.Vector3(x * 1.2, y * 0.1, z * 1.2);
-            }
-
-            // clamp
-            const dist = desiredPos.length();
-            if (dist < minCamDist) {
-              desiredPos.normalize().multiplyScalar(minCamDist);
-            }
-
-            // Smoothly move camera
-            camera.position.lerp(desiredPos, 0.05);
-            camera.lookAt(x, y, z);
-          }
+          addTelemetry(velocity, alt, satrecRef.current.bstar);
         }
+      }
+
+      // Update nearby satellites positions if not paused
+      if (!isPausedRef.current && nearbySatellitesRef.current.length > 0) {
+        const currentDate = new Date(simulationTimeRef.current);
+        nearbySatellitesRef.current.forEach(item => {
+          const posVel = satellite.propagate(item.satrec, currentDate);
+          if (posVel.position) {
+            const { x, y, z } = posVel.position;
+            item.mesh.position.set(x, z, -y);
+          }
+        });
+      }
+
+      // Continuous camera tracking for main satellite
+      if (isFocusEnabledRef.current && satelliteMeshRef.current && cameraRef.current) {
+        const satPos = satelliteMeshRef.current.position.clone();
+        let baseOffset = new THREE.Vector3();
+        if (cameraModeRef.current === "topFront") {
+          baseOffset.set(0, 800, 800);
+        } else if (cameraModeRef.current === "topView") {
+          baseOffset.set(0, 3000, 0);
+        } else {
+          baseOffset.set(2000, 0, 0);
+        }
+        baseOffset.multiplyScalar(cameraZoomRef.current);
+        const desiredPos = satPos.clone().add(baseOffset);
+        const minDistance = 6371 + 200;
+        const maxDistance = 6371 * 50;
+        const dist = desiredPos.length();
+        if (dist < minDistance) {
+          desiredPos.setLength(minDistance);
+        } else if (dist > maxDistance) {
+          desiredPos.setLength(maxDistance);
+        }
+        cameraRef.current.position.lerp(desiredPos, 0.08);
+        cameraRef.current.lookAt(satPos);
       }
 
       controls.update();
       renderer.render(scene, camera);
     };
-    animate();
+    animate(performance.now());
 
     return () => {
       if (renderer) renderer.dispose();
@@ -292,20 +312,7 @@ export default function Tracking() {
     };
   }, []);
 
-  // Basic references for loop
-  const isPausedRef = useRef(false);
-  const speedFactorRef = useRef(1);
-  const isFocusEnabledRef = useRef(false);
-  const cameraModeRef = useRef("sideHorizon");
-
-  useEffect(() => {
-    isPausedRef.current = isPaused;
-    speedFactorRef.current = speedFactor;
-    isFocusEnabledRef.current = isFocusEnabled;
-    cameraModeRef.current = cameraMode;
-  }, [isPaused, speedFactor, isFocusEnabled, cameraMode]);
-
-  // Hide/Show orbit line
+  // Hide/Show main orbit line when toggled
   useEffect(() => {
     if (orbitLineRef.current) {
       orbitLineRef.current.visible = showOrbitHistory;
@@ -313,51 +320,41 @@ export default function Tracking() {
   }, [showOrbitHistory]);
 
   /* -------------------------------------------------------------
-     7) Build Orbit for 3 orbits, smaller steps
+     7) Build Orbit for a Satellite using raw ECI positions
   ------------------------------------------------------------- */
-  function buildOrbitLine(satrec) {
+  function buildOrbitLineWithColor(satrec, color) {
     if (!sceneRef.current) return null;
-
-    // 3 orbits for LEO, MEO, GEO coverage
-    let orbitMins = satrec.period ? satrec.period * 3 : 300;
-    const stepMin = satrec.period < 120 ? 1 : 2; // smaller steps if short period
-
-    const orbitPoints = [];
-    const startTime = Date.now();
-
-    for (let t = 0; t <= orbitMins; t += stepMin) {
-      const timeMs = startTime + t * 60000;
-      const dateObj = new Date(timeMs);
-      const posVel = satellite.propagate(satrec, dateObj);
-      if (!posVel.position) continue;
-
-      const gmst = satellite.gstime(dateObj);
-      const geo = satellite.eciToGeodetic(posVel.position, gmst);
-
-      const lat = geo.latitude;
-      const lon = geo.longitude;
-      const alt = geo.height;
-      const r = 6371 + alt;
-
-      const x = r * Math.cos(lat) * Math.cos(lon);
-      const z = r * Math.cos(lat) * Math.sin(lon);
-      const y = r * Math.sin(lat);
-
-      orbitPoints.push(new THREE.Vector3(x, y, z));
+    const periodMin = satrec.period ?? (satrec.no ? (2 * Math.PI) / satrec.no : null);
+    if (!periodMin) {
+      console.warn("No valid orbital period available");
+      return null;
     }
-
+    const numPoints = 500;
+    const orbitPoints = [];
+    const baseTime = Date.now() / 1000;
+    for (let i = 0; i <= numPoints; i++) {
+      const offsetSec = (i / numPoints) * periodMin * 60;
+      const posVel = satellite.propagate(satrec, new Date((baseTime + offsetSec) * 1000));
+      if (!posVel.position) continue;
+      const { x, y, z } = posVel.position;
+      orbitPoints.push(new THREE.Vector3(x, z, -y));
+    }
     if (!orbitPoints.length) return null;
     const orbitGeo = new THREE.BufferGeometry().setFromPoints(orbitPoints);
-    // Mako-ish teal for orbit
-    const orbitMat = new THREE.LineBasicMaterial({
-      color: 0x0ea5e9,
-      linewidth: 2,
-    });
-    return new THREE.Line(orbitGeo, orbitMat);
+    return new THREE.Line(orbitGeo, new THREE.LineBasicMaterial({ color }));
   }
 
+  // Helper: Build a small satellite mesh (yellow)
+  function buildSatelliteMesh(satrec) {
+    const geo = new THREE.SphereGeometry(80, 8, 8);
+    // Nearby satellites remain yellow
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+    return new THREE.Mesh(geo, mat);
+  }
+  
+
   /* -------------------------------------------------------------
-     8) On Satellite Chosen
+     8) On Main Satellite Selection
   ------------------------------------------------------------- */
   useEffect(() => {
     if (!selectedSatellite || !selectedSatellite.tle_line1 || !selectedSatellite.tle_line2) {
@@ -378,8 +375,6 @@ export default function Tracking() {
         selectedSatellite.tle_line2.trim()
       );
       satrecRef.current = rec;
-
-      // Remove old mesh/line
       if (satelliteMeshRef.current) {
         sceneRef.current.remove(satelliteMeshRef.current);
         satelliteMeshRef.current.geometry.dispose();
@@ -392,22 +387,19 @@ export default function Tracking() {
         orbitLineRef.current.material.dispose();
         orbitLineRef.current = null;
       }
-
-      // Satellite mesh
+      // Create main satellite mesh (yellow)
       const satGeo = new THREE.SphereGeometry(120, 16, 16);
-      const satMat = new THREE.MeshBasicMaterial({ color: 0xff5533 });
+      // Create main satellite mesh (bright green)
+      const satMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
       const satMesh = new THREE.Mesh(satGeo, satMat);
       satelliteMeshRef.current = satMesh;
       sceneRef.current.add(satMesh);
-
-      // Orbit line
-      const orbitLine = buildOrbitLine(rec);
+      // Build and add main orbit line
+      const orbitLine = buildOrbitLineWithColor(rec, 0x0ea5e9);
       if (orbitLine) {
         orbitLineRef.current = orbitLine;
         sceneRef.current.add(orbitLine);
       }
-
-      // Reset sim time + chart data
       simulationTimeRef.current = Date.now();
       setVelocityData([]);
       setAltitudeData([]);
@@ -419,7 +411,69 @@ export default function Tracking() {
   }, [selectedSatellite]);
 
   /* -------------------------------------------------------------
-     9) Searching & Suggestions
+     9) Fetch Nearby Orbits and Satellite Meshes
+  ------------------------------------------------------------- */
+  useEffect(() => {
+    // Remove existing nearby orbit lines and satellite meshes
+    nearbyOrbitLinesRef.current.forEach(line => {
+      if (sceneRef.current) sceneRef.current.remove(line);
+    });
+    nearbyOrbitLinesRef.current = [];
+    nearbySatellitesRef.current.forEach(item => {
+      if (sceneRef.current) sceneRef.current.remove(item.mesh);
+    });
+    nearbySatellitesRef.current = [];
+
+    if (!selectedSatellite || nearbyCount < 1) return;
+
+    const controller = new AbortController();
+    async function fetchNearby() {
+      setNearbyLoading(true);
+      try {
+        const url = `${API_BASE_URL}/nearby/${selectedSatellite.norad_number}?limit=${nearbyCount}`;
+        const resp = await fetch(url, { signal: controller.signal });
+        if (!resp.ok) throw new Error(`Nearby fetch error: ${resp.status}`);
+        const data = await resp.json();
+        const sats = data.nearby_satellites || [];
+        const orbitLines = [];
+        const satelliteItems = [];
+        sats.forEach(sat => {
+          if (!sat.tle_line1 || !sat.tle_line2) return;
+          const rec = satellite.twoline2satrec(sat.tle_line1.trim(), sat.tle_line2.trim());
+          // Build nearby orbit line in red
+          const orbitLine = buildOrbitLineWithColor(rec, 0xff0000);
+          if (orbitLine && sceneRef.current) {
+            sceneRef.current.add(orbitLine);
+            orbitLines.push(orbitLine);
+          }
+          // Build nearby satellite mesh (yellow)
+          const mesh = buildSatelliteMesh(rec);
+          if (mesh && sceneRef.current) {
+            const posVel = satellite.propagate(rec, new Date(simulationTimeRef.current));
+            if (posVel.position) {
+              const { x, y, z } = posVel.position;
+              mesh.position.set(x, z, -y);
+            }
+            sceneRef.current.add(mesh);
+            satelliteItems.push({ satrec: rec, mesh });
+          }
+        });
+        nearbyOrbitLinesRef.current = orbitLines;
+        nearbySatellitesRef.current = satelliteItems;
+      } catch (err) {
+        console.error("Error fetching nearby orbits:", err);
+      } finally {
+        setNearbyLoading(false);
+      }
+    }
+    fetchNearby();
+    return () => {
+      controller.abort();
+    };
+  }, [selectedSatellite, nearbyCount]);
+
+  /* -------------------------------------------------------------
+     10) Searching & Suggestions
   ------------------------------------------------------------- */
   const handleSearch = async () => {
     if (!searchQuery) return;
@@ -471,69 +525,73 @@ export default function Tracking() {
   };
 
   /* -------------------------------------------------------------
-     10) Add Telemetry for Charts
+     11) Add Telemetry for Charts
   ------------------------------------------------------------- */
   function addTelemetry(velocity, altitude, bstarVal) {
-    setVelocityData((prev) => {
-      const arr = [...prev, velocity];
-      if (arr.length > 60) arr.shift();
-      return arr;
-    });
-    setAltitudeData((prev) => {
-      const arr = [...prev, altitude];
-      if (arr.length > 60) arr.shift();
-      return arr;
-    });
-    setBstarData((prev) => {
-      const arr = [...prev, bstarVal];
-      if (arr.length > 60) arr.shift();
-      return arr;
-    });
+    setVelocityData((prev) => [...prev, velocity]);
+    setAltitudeData((prev) => [...prev, altitude]);
+    setBstarData((prev) => [...prev, bstarVal]);
   }
 
   /* -------------------------------------------------------------
-     11) Render Chart
+     12) Render Chart
   ------------------------------------------------------------- */
   function renderChart(dataArray, color, label) {
-    // We'll always show the chart background
     const width = 400;
     const height = 160;
     const margin = { top: 20, right: 30, bottom: 20, left: 40 };
-
-    let minVal = 0;
-    let maxVal = 1;
-    if (dataArray.length > 0) {
-      minVal = Math.min(...dataArray);
-      maxVal = Math.max(...dataArray);
-    }
-    const range = maxVal - minVal || 1;
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;
 
-    const scaleY = (val) => ((val - minVal) / range) * chartHeight;
-
-    let pathData = `M0,${chartHeight} L${chartWidth},${chartHeight}`; // fallback
-    let notEnoughData = false;
-
-    if (dataArray.length >= 2) {
-      pathData = dataArray
-        .map((val, i) => {
-          const x = (i / (dataArray.length - 1)) * chartWidth;
-          const y = chartHeight - scaleY(val);
-          return i === 0 ? `M${x},${y}` : `L${x},${y}`;
-        })
-        .join(" ");
-    } else {
-      notEnoughData = true;
+    if (dataArray.length < 2) {
+      return (
+        <div className="w-full">
+          <div className="text-sm text-[#a5f3fc] mb-1">{label}</div>
+          <svg width="100%" height={height} style={{ backgroundColor: "rgba(0,0,0,0.3)" }}>
+            <text x="50%" y="50%" textAnchor="middle" fill="#fef9c3">
+              Not enough data...
+            </text>
+          </svg>
+        </div>
+      );
     }
 
-    // Y-axis ticks
+    let minVal = Math.min(...dataArray);
+    let maxVal = Math.max(...dataArray);
+
+    if (label === "Velocity (km/s)") {
+      const buffer = (maxVal - minVal) * 0.05 || 0.0001;
+      minVal -= buffer;
+      maxVal += buffer;
+    } else {
+      const padding = (maxVal - minVal) * 0.001;
+      minVal -= padding;
+      maxVal += padding;
+    }
+
+    const padding = (maxVal - minVal) * 0.1;
+    minVal -= padding;
+    maxVal += padding;
+
+    minVal = Math.floor(minVal * 100) / 100;
+    maxVal = Math.ceil(maxVal * 100) / 100;
+
+    const range = maxVal - minVal;
+    const scaleY = (val) => ((val - minVal) / range) * chartHeight;
+
+    const pathData = dataArray
+      .map((val, i) => {
+        const x = (i / (dataArray.length - 1)) * chartWidth;
+        const y = chartHeight - scaleY(val);
+        return i === 0 ? `M${x},${y}` : `L${x},${y}`;
+      })
+      .join(" ");
+
     const tickCount = 4;
-    const ticks = [];
-    for (let i = 0; i <= tickCount; i++) {
+    const ticks = Array.from({ length: tickCount + 1 }, (_, i) => {
       const v = minVal + (i * range) / tickCount;
       const y = chartHeight - scaleY(v);
-      ticks.push(
+      return (
         <g key={i}>
           <line x1={0} x2={chartWidth} y1={y} y2={y} stroke="#3b82f6" strokeWidth="0.5" />
           <text x={-6} y={y + 3} fontSize="10" fill="#a5f3fc" textAnchor="end">
@@ -541,7 +599,7 @@ export default function Tracking() {
           </text>
         </g>
       );
-    }
+    });
 
     return (
       <div className="w-full">
@@ -555,33 +613,8 @@ export default function Tracking() {
         >
           <g transform={`translate(${margin.left},${margin.top})`}>
             {ticks}
-            {/* X-axis */}
-            <line
-              x1={0}
-              x2={chartWidth}
-              y1={chartHeight}
-              y2={chartHeight}
-              stroke="#6ee7b7"
-              strokeWidth="1"
-            />
-            <path
-              d={pathData}
-              fill="none"
-              stroke={color}
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
-            {notEnoughData && (
-              <text
-                x={chartWidth / 2}
-                y={chartHeight / 2}
-                fill="#fef9c3"
-                textAnchor="middle"
-                fontSize="12"
-              >
-                Not enough data...
-              </text>
-            )}
+            <line x1={0} x2={chartWidth} y1={chartHeight} y2={chartHeight} stroke="#6ee7b7" strokeWidth="1" />
+            <path d={pathData} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" />
           </g>
         </svg>
       </div>
@@ -589,122 +622,196 @@ export default function Tracking() {
   }
 
   /* -------------------------------------------------------------
-     12) Render
+     13) Render
   ------------------------------------------------------------- */
   return (
     <div
       className="relative flex flex-col w-screen min-h-screen pt-[120px] overflow-hidden text-white"
-      style={{
-        background:
-          "linear-gradient(to bottom, #050716 0%, #1B1E3D 50%, #2E4867 100%)",
-      }}
+      style={{ background: "linear-gradient(to bottom, #050716 0%, #1B1E3D 50%, #2E4867 100%)" }}
     >
       {/* Starfield */}
       <div className="absolute w-full h-full overflow-hidden pointer-events-none z-0">
         {stableStars}
       </div>
 
-     {/* ---------- TOP SECTION ---------- */}
-<section className="z-10 px-8 py-12 w-full max-w-screen-2xl mx-auto space-y-6">
-  <div className="text-center text-3xl sm:text-4xl md:text-5xl font-bold tracking-wide text-teal-100">
-    <TypeAnimation
-      sequence={[
-        "Real-Time Satellite Tracking & CDM Monitoring",
-        3000,
-        "NOAA Data Integration & TLE Processing",
-        3000,
-        "Predictive Analytics for Collision Avoidance",
-        3500,
-      ]}
-      speed={40}
-      repeat={Infinity}
-    />
-  </div>
+     {/* ---------- TOP / HERO SECTION ---------- */}
+<section className="relative min-h-[90vh] w-full flex flex-col justify-center items-center text-white overflow-hidden">
+  {/* Dark overlay for extra contrast */}
+  <div className="absolute inset-0  pointer-events-none" />
 
-  <p className="text-lg sm:text-xl text-teal-200 max-w-4xl mx-auto leading-relaxed text-center">
-    Monitor real-time satellite positions and orbital parameters with precise TLE propagation.  
-    Integrated CDM event tracking ensures early detection of potential conjunctions,  
-    supporting advanced predictive analytics for risk assessment and space situational awareness.
-  </p>
+  <div className="relative z-10 w-full max-w-6xl mx-auto px-6 py-16 text-center space-y-8">
+    {/* Heading with TypeAnimation */}
+    <motion.h1
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.8 }}
+      className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight
+                 bg-clip-text text-transparent bg-gradient-to-r from-teal-300 to-blue-400"
+    >
+      <TypeAnimation
+        sequence={[
+          "Real-Time Satellite Tracking & CDM Monitoring",
+          3000,
+          "NOAA Data Integration & TLE Processing",
+          3000,
+          "Predictive Analytics for Collision Avoidance",
+          3500,
+        ]}
+        speed={40}
+        repeat={Infinity}
+      />
+    </motion.h1>
 
+    {/* Subtext */}
+    <motion.p
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2, duration: 0.8 }}
+      className="mx-auto max-w-3xl text-teal-200 text-lg sm:text-xl leading-relaxed"
+    >
+      Monitor real-time satellite positions and orbital parameters with precise TLE propagation.
+      Integrated CDM event tracking ensures early detection of potential conjunctions,
+      supporting advanced predictive analytics for risk assessment and space situational awareness.
+    </motion.p>
 
-
-        {/* Search + CDM */}
-        <div className="flex flex-col md:flex-row md:items-start md:justify-center gap-6 relative">
-          {/* Search */}
-          <div className="flex flex-col items-center">
-            <label className="mb-2 text-sm font-semibold text-teal-100">
-              Search Satellite (Name or NORAD)
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="STARLINK-3000 or 76000"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-72 p-2 rounded-md bg-black text-teal-100 outline-none 
-                           placeholder-gray-400 border border-teal-700"
-              />
-              {suggestions.length > 0 && (
-                <ul className="absolute left-[-300px] top-0 w-72 max-h-48 overflow-y-auto bg-black text-teal-100 border border-teal-700 rounded-md shadow-md z-50">
-                  {suggestions.map((sug, idx) => (
-                    <li
-                      key={idx}
-                      className="p-2 hover:bg-teal-700 cursor-pointer"
-                      onClick={() => handleSuggestionClick(sug)}
-                    >
-                      {sug.name} ({sug.norad_number})
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <button
-              onClick={handleSearch}
-              className="mt-3 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-md shadow transition-colors"
-            >
-              {loading ? "Searching..." : "Search"}
-            </button>
-          </div>
-
-          {/* CDM Events */}
-          <div className="flex flex-col">
-            <span className="mb-2 text-sm font-semibold text-teal-100">
-              Active CDM Events
-            </span>
-            <div className="max-h-32 overflow-y-auto border border-teal-700 rounded p-2 bg-black/40 text-sm w-72">
-              {cdmEvents.length === 0 ? (
-                <p className="text-teal-400">No active events</p>
-              ) : (
-                cdmEvents.map((ev) => (
-                  <div key={ev.cdm_id} className="mb-2 border-b border-teal-700 pb-1">
-                    <p className="text-teal-100">
-                      <strong>ID:</strong> {ev.cdm_id}
-                    </p>
-                    <p className="text-teal-200">
-                      <strong>Object:</strong> {ev.sat_1_name} ({ev.sat_1_type})
-                    </p>
-                    <p className="text-teal-300">
-                      <strong>TCA:</strong> {ev.tca}
-                    </p>
-                    <p className="text-teal-300">
-                      <strong>Min Range:</strong> {ev.min_rng} km
-                    </p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+    {/* Cards Row */}
+    <div className="flex flex-col md:flex-row gap-8 justify-center items-start mt-6">
+      {/* Search Card */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.3, duration: 0.6 }}
+        className="bg-black/60 backdrop-blur-lg p-8 rounded-xl border border-teal-700 shadow-xl w-full md:w-[420px]"
+      >
+        <label className="block mb-2 text-sm font-semibold text-teal-100">
+          Search Satellite (Name or NORAD)
+        </label>
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="STARLINK-3000 or 76000"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full p-2 rounded-md bg-black/70 text-teal-100 outline-none
+                       placeholder-gray-400 border border-teal-600 focus:border-teal-400"
+          />
+          {suggestions.length > 0 && (
+            <ul className="absolute left-0 top-[105%] w-full max-h-48 overflow-y-auto bg-black text-teal-100 border border-teal-700 rounded-md shadow-md z-50">
+              {suggestions.map((sug, idx) => (
+                <li
+                  key={idx}
+                  className="p-2 hover:bg-teal-700 cursor-pointer"
+                  onClick={() => handleSuggestionClick(sug)}
+                >
+                  {sug.name} ({sug.norad_number})
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-      </section>
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={handleSearch}
+          className="mt-4 w-full px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-md font-medium
+                     shadow transition-colors"
+        >
+          {loading ? "Searching..." : "Search"}
+        </motion.button>
+      </motion.div>
+
+{/* CDM Events Card */}
+<motion.div
+  initial={{ opacity: 0, scale: 0.9 }}
+  animate={{ opacity: 1, scale: 1 }}
+  transition={{ delay: 0.4, duration: 0.6 }}
+  className="bg-black/60 backdrop-blur-lg p-8 rounded-xl border border-teal-700 shadow-xl w-full md:w-[420px]"
+>
+  <h4 className="text-teal-100 font-semibold mb-4 text-xl">Active CDM Events</h4>
+  <div className="max-h-60 overflow-y-auto space-y-4">
+    {cdmEvents.length === 0 ? (
+      <p className="text-teal-400">No active events</p>
+    ) : (
+      cdmEvents.map((ev) => {
+        // Convert Probability of Collision (pc) to a percentage with 3 decimals:
+        const collisionPercent = (ev.pc * 100).toFixed(3);
+
+        return (
+          <div
+            key={ev.cdm_id}
+            className="p-3 rounded-md bg-black/50 border border-teal-700 last:mb-0 text-left"
+          >
+            {/* CDM Identifiers */}
+            <p className="text-teal-200">
+              <strong>CDM ID:</strong> {ev.cdm_id}
+            </p>
+            <p className="text-teal-300">
+              <strong>Created On:</strong> {ev.created}
+            </p>
+
+            {/* TCA & Range */}
+            <p className="text-teal-300">
+              <strong>Time of Closest Approach:</strong> {ev.tca}
+            </p>
+            <p className="text-teal-300">
+              <strong>Minimum Range:</strong> {ev.min_rng} km
+            </p>
+
+            {/* Probability of Collision as a percentage */}
+            <p className="text-teal-300">
+              <strong>Collision Probability:</strong> {collisionPercent}%
+            </p>
+
+            {/* Satellite #1 Details */}
+            <p className="text-teal-200 mt-2">
+              <strong>Satellite #1 ID:</strong> {ev.sat_1_id}
+            </p>
+            <p className="text-teal-200">
+              <strong>Name/Type:</strong> {ev.sat_1_name} ({ev.sat_1_type})
+            </p>
+            <p className="text-teal-200">
+              <strong>RCS:</strong> {ev.sat_1_rcs} &mdash; 
+              <strong> Excl. Volume:</strong> {ev.sat_1_excl_vol}
+            </p>
+
+            {/* Satellite #2 Details */}
+            <p className="text-teal-200 mt-2">
+              <strong>Satellite #2 ID:</strong> {ev.sat_2_id}
+            </p>
+            <p className="text-teal-200">
+              <strong>Name/Type:</strong> {ev.sat_2_name} ({ev.sat_2_type})
+            </p>
+            <p className="text-teal-200">
+              <strong>RCS:</strong> {ev.sat_2_rcs} &mdash; 
+              <strong> Excl. Volume:</strong> {ev.sat_2_excl_vol}
+            </p>
+
+            {/* Emergency & Active Status */}
+            <p className="text-teal-300 mt-2">
+              <strong>Emergency Reportable:</strong> {ev.emergency_reportable ? "Yes" : "No"}
+            </p>
+            <p className="text-teal-300">
+              <strong>Currently Active:</strong> {ev.is_active ? "Yes" : "No"}
+            </p>
+          </div>
+        );
+      })
+    )}
+  </div>
+</motion.div>
+
+    </div>
+  </div>
+</section>
+
+
 
       {/* ---------- MAIN SECTION (3D + Controls) ---------- */}
       <section className="z-10 flex flex-row w-full max-w-screen-2xl mx-auto px-8 gap-6 relative">
         {/* 3D UI Container */}
         <div className="relative flex-1 rounded-lg min-h-[600px] h-[65vh] overflow-hidden border border-teal-700">
           <div ref={mountRef} className="absolute inset-0" />
-
-          {/* Telemetry overlay ALWAYS visible */}
+          {/* Telemetry overlay */}
           <div className="absolute top-4 left-4 bg-black/60 text-sm text-teal-100 p-3 rounded shadow z-50 w-52">
             <p>Velocity: {lastVelocity} km/s</p>
             <p>Altitude: {lastAltitude} km</p>
@@ -732,9 +839,7 @@ export default function Tracking() {
             <span className="text-sm text-teal-100">Propagation</span>
             <button
               onClick={() => setIsPaused((prev) => !prev)}
-              className={`px-3 py-1 rounded-md text-sm font-semibold ${
-                isPaused ? "bg-green-500" : "bg-red-500"
-              }`}
+              className={`px-3 py-1 rounded-md text-sm font-semibold ${isPaused ? "bg-green-500" : "bg-red-500"}`}
             >
               {isPaused ? "Resume" : "Pause"}
             </button>
@@ -770,9 +875,7 @@ export default function Tracking() {
             <span className="text-sm text-teal-100">Focus on Satellite</span>
             <button
               onClick={() => setIsFocusEnabled((prev) => !prev)}
-              className={`px-3 py-1 rounded-md text-sm font-semibold ${
-                isFocusEnabled ? "bg-purple-500" : "bg-gray-600"
-              }`}
+              className={`px-3 py-1 rounded-md text-sm font-semibold ${isFocusEnabled ? "bg-purple-500" : "bg-gray-600"}`}
             >
               {isFocusEnabled ? "Disable" : "Enable"}
             </button>
@@ -788,7 +891,44 @@ export default function Tracking() {
             >
               <option value="sideHorizon">Side Horizon</option>
               <option value="topView">Top View</option>
+              <option value="topFront">Top &amp; Front View</option>
             </select>
+          </div>
+
+          {/* Zoom Panel: only visible when focus is enabled */}
+          {isFocusEnabled && (
+            <div>
+              <label className="text-sm text-teal-100 mb-1 block">Zoom</label>
+              <input
+                type="range"
+                min="0.2"
+                max="10"
+                step="0.1"
+                value={cameraZoom}
+                onChange={(e) => setCameraZoom(Number(e.target.value))}
+                className="w-full"
+              />
+              <p className="text-xs text-teal-300 mt-1">Zoom level: {cameraZoom}x</p>
+            </div>
+          )}
+
+          {/* NEW: Nearby Orbits Panel */}
+          <div>
+            <label className="text-sm text-teal-100 mb-1 block">Nearby Orbits (1-100)</label>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={nearbyCount}
+              onChange={(e) => setNearbyCount(Number(e.target.value))}
+              className="w-full"
+            />
+            {nearbyCount > 0 && (
+              <p className="text-xs text-teal-300 mt-1">
+                Showing {nearbyCount} nearby orbit(s){nearbyLoading && " (Loading...)"}
+              </p>
+            )}
           </div>
         </div>
       </section>
@@ -800,15 +940,12 @@ export default function Tracking() {
         </h2>
         <div className="flex flex-wrap gap-6 justify-center">
           <div className="flex-1 min-w-[300px] max-w-md p-4">
-            {/* Velocity (Mako cyan) */}
             {renderChart(velocityData, "#14b8a6", "Velocity (km/s)")}
           </div>
           <div className="flex-1 min-w-[300px] max-w-md p-4">
-            {/* Altitude (Mako blue) */}
             {renderChart(altitudeData, "#0ea5e9", "Altitude (km)")}
           </div>
           <div className="flex-1 min-w-[300px] max-w-md p-4">
-            {/* BSTAR: Light Yellow-Teal (#a7f3d0) */}
             {renderChart(bstarData, "#a7f3d0", "BSTAR")}
           </div>
         </div>

@@ -673,6 +673,11 @@ const changePage = async (newPage) => {
   
 
 
+
+
+
+
+
   const fetchAndUpdateSatellites = async (updatedFilters, newPage = 1) => {
     if (!is3DEnabled) return;
     if (loading || isFetching || (satellites.length > 0 && page === newPage)) {
@@ -710,6 +715,9 @@ const changePage = async (newPage) => {
         isFetching = false;  // ✅ Unlock fetch
     }
 };
+
+
+
 
 
 
