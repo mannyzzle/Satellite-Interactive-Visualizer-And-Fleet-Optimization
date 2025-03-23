@@ -141,6 +141,18 @@ export default function Tracking() {
     cameraZoomRef.current = cameraZoom;
   }, [isPaused, speedFactor, isFocusEnabled, cameraMode, cameraZoom]);
 
+  // Add this near your other state variables
+const [simTime, setSimTime] = useState(new Date(simulationTimeRef.current));
+
+// Update simulation time on an interval (e.g., every second)
+useEffect(() => {
+  const interval = setInterval(() => {
+    setSimTime(new Date(simulationTimeRef.current));
+  }, 1000);
+  return () => clearInterval(interval);
+}, []);
+
+
   /* -------------------------------------------------------------
      4) Fetch Active CDM on Mount
   ------------------------------------------------------------- */
@@ -812,13 +824,13 @@ export default function Tracking() {
         <div className="relative flex-1 rounded-lg min-h-[600px] h-[65vh] overflow-hidden border border-teal-700">
           <div ref={mountRef} className="absolute inset-0" />
           {/* Telemetry overlay */}
-          <div className="absolute top-4 left-4 bg-black/60 text-sm text-teal-100 p-3 rounded shadow z-50 w-52">
-            <p>Velocity: {lastVelocity} km/s</p>
-            <p>Altitude: {lastAltitude} km</p>
-            <p>
-              X={lastPosition.x}, Y={lastPosition.y}, Z={lastPosition.z}
-            </p>
-          </div>
+        <div className="absolute top-4 left-4 bg-black/60 text-sm text-teal-100 p-3 rounded shadow z-50 w-52">
+          <p>Velocity: {lastVelocity} km/s</p>
+          <p>Altitude: {lastAltitude} km</p>
+          <p>X={lastPosition.x}, Y={lastPosition.y}, Z={lastPosition.z}</p>
+          <p>Time: {simTime.toLocaleTimeString()}</p>
+        </div>
+
         </div>
 
         {/* Control Panel */}
