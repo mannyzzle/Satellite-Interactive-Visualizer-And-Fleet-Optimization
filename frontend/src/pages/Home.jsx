@@ -18,6 +18,8 @@ const basePath = import.meta.env.BASE_URL;  // ✅ Dynamically fetch the base UR
 const dayTexture = `${basePath}earth_day.jpg`;
 const nightTexture = `${basePath}earth_night.jpg`;
 const cloudTexture = `${basePath}clouds.png`;
+// 🔍 Autocomplete endpoint
+const SUGGEST_URL = "https://satellite-tracker-production.up.railway.app/api/satellites/suggest";
 
 
 
@@ -98,7 +100,23 @@ export default function Home() {
   const [page, setPage] = useState(1); // 🚀 Current page of satellites
   const [satellites, setSatellites] = useState([]);
   const [limit, setLimit] = useState(500);
-  const [searchQuery, setSearchQuery] = useState(""); // 🔍 For filtering satellites
+
+const [searchQuery, setSearchQuery] = useState(""); // 🔍 For filtering satellites
+const [suggestions, setSuggestions] = useState([]);
+const [searchLoading, setSearchLoading] = useState(false);
+
+// 🔍 Find which page a satellite lives on within current filters
+const findPageForSatellite = async (sat) => {
+  const filt = activeFilters.length ? activeFilters.join(",") : null;
+  const MAX_PAGES = 80;                // safety limit
+  for (let p = 1; p <= MAX_PAGES; p++) {
+    const data = await fetchSatellites(p, limit, filt);
+    if (data?.satellites?.some(s => s.norad_number === sat.norad_number)) {
+      return { page: p, sats: data.satellites };
+    }
+  }
+  return null; // not found
+};
 
 
   const [sidebarOpen, setSidebarOpen] = useState(() => {
@@ -1474,7 +1492,97 @@ const categories = {
 
 
 
+/* -------------------------------------------------------------
+   🔍 Autocomplete suggestions
+------------------------------------------------------------- */
+useEffect(() => {
+  if (!searchQuery.trim()) {
+    setSuggestions([]);
+    return;
+  }
+
+  const debounce = setTimeout(async () => {
+    try {
+      setSearchLoading(true);
+      const filtParam = activeFilters.length
+        ? `&filters=${encodeURIComponent(activeFilters.join(","))}`
+        : "";
+      const r = await fetch(`${SUGGEST_URL}?q=${encodeURIComponent(searchQuery)}&limit=10${filtParam}`);
+      const d = await r.json();
+      setSuggestions(d?.satellites || []);
+    } catch (e) {
+      console.error("suggest fetch:", e);
+      setSuggestions([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, 300);
+
+  return () => clearTimeout(debounce);
+}, [searchQuery, activeFilters]);
+
 // Automatically enable 3D after 1 second
+
+// ⏎ enter key search
+const handleSearch = async () => {
+  if (!searchQuery.trim()) return;
+  setLoading(true);
+  try {
+    const numeric = /^\d+$/.test(searchQuery.trim());
+    const endpoint = numeric
+      ? `${import.meta.env.VITE_API_BASE_URL || "/api/satellites"}/by_norad/${searchQuery.trim()}`
+      : `${import.meta.env.VITE_API_BASE_URL || "/api/satellites"}/${encodeURIComponent(searchQuery.trim().toLowerCase())}`;
+    const r = await fetch(endpoint);
+    if (!r.ok) throw new Error(r.statusText);
+    const sat = await r.json();
+
+    const found = await findPageForSatellite(sat);
+    if (found) {
+      setPage(found.page);
+      setSatellites(found.sats);
+      setFilteredSatellites(found.sats);
+    }
+
+    focusOnSatellite(sat);
+    enableInteraction();
+    setSelectedSatellite(sat);
+    setSuggestions([]);
+  } catch (err) {
+    console.error("search error:", err);
+  } finally {
+    setLoading(false);
+  }
+};
+
+// click dropdown suggestion
+const handleSuggestionClick = async (sug) => {
+  setSearchQuery(sug.name);
+  setSuggestions([]);
+  setLoading(true);
+  try {
+    const endpoint = sug.norad_number
+      ? `${import.meta.env.VITE_API_BASE_URL || "/api/satellites"}/by_norad/${sug.norad_number}`
+      : `${import.meta.env.VITE_API_BASE_URL || "/api/satellites"}/${encodeURIComponent(sug.name.toLowerCase())}`;
+    const r = await fetch(endpoint);
+    if (!r.ok) throw new Error(r.statusText);
+    const sat = await r.json();
+
+    const found = await findPageForSatellite(sat);
+    if (found) {
+      setPage(found.page);
+      setSatellites(found.sats);
+      setFilteredSatellites(found.sats);
+    }
+
+    focusOnSatellite(sat);
+    enableInteraction();
+    setSelectedSatellite(sat);
+  } catch (err) {
+    console.error("suggest click:", err);
+  } finally {
+    setLoading(false);
+  }
+};
 useEffect(() => {
   const timer = setTimeout(() => {
     setIs3DEnabled(true);
@@ -1653,6 +1761,7 @@ return (
               placeholder="Search satellites..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               className="w-full p-2 pl-10 text-white bg-gray-800 rounded-md 
                          focus:outline-none focus:ring-2 focus:ring-teal-400
                          border border-gray-600 shadow-sm text-sm"
@@ -1660,6 +1769,21 @@ return (
             <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">
               🔍
             </span>
+
+            {/* suggestions dropdown */}
+            {suggestions.length > 0 && (
+              <ul className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto bg-gray-800 text-white border border-gray-700 rounded-md shadow-lg">
+                {suggestions.map((sat) => (
+                  <li
+                    key={sat.norad_number}
+                    className="px-3 py-2 cursor-pointer hover:bg-teal-600 text-sm"
+                    onClick={() => handleSuggestionClick(sat)}
+                  >
+                    {sat.name} — NORAD {sat.norad_number}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div className="overflow-y-auto flex-grow scrollbar-hide p-3 bg-gray-800/50 rounded-lg">
