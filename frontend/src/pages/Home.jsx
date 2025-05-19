@@ -104,6 +104,9 @@ export default function Home() {
 const [searchQuery, setSearchQuery] = useState(""); // 🔍 For filtering satellites
 const [suggestions, setSuggestions] = useState([]);
 const [searchLoading, setSearchLoading] = useState(false);
+// refs to close dropdown on outside-click
+const inputRef = useRef(null);
+const dropdownRef = useRef(null);
 
 // 🔍 Find which page a satellite lives on within current filters
 const findPageForSatellite = async (sat) => {
@@ -1504,14 +1507,26 @@ useEffect(() => {
   const debounce = setTimeout(async () => {
     try {
       setSearchLoading(true);
+
+      // add filter only when a filter chip is active
       const filtParam = activeFilters.length
-        ? `&filters=${encodeURIComponent(activeFilters.join(","))}`
+        ? `&filter=${encodeURIComponent(activeFilters.join(","))}`
         : "";
-      const r = await fetch(`${SUGGEST_URL}?q=${encodeURIComponent(searchQuery)}&limit=10${filtParam}`);
-      const d = await r.json();
-      setSuggestions(d?.satellites || []);
+
+      const resp = await fetch(
+        `${SUGGEST_URL}?query=${encodeURIComponent(searchQuery)}&limit=10${filtParam}`
+      );
+      if (!resp.ok) throw new Error(resp.statusText);
+
+      // backend returns { suggestions: [...] }
+      const { suggestions = [] } = await resp.json();
+
+      // keep only items that actually pass the current filter set
+      const filtered = suggestions;
+
+      setSuggestions(filtered);
     } catch (e) {
-      console.error("suggest fetch:", e);
+      console.error("suggest fetch error:", e);
       setSuggestions([]);
     } finally {
       setSearchLoading(false);
@@ -1519,7 +1534,24 @@ useEffect(() => {
   }, 300);
 
   return () => clearTimeout(debounce);
-}, [searchQuery, activeFilters]);
+}, [searchQuery, activeFilters, filteredSatellites]);
+
+// close suggestions on outside click
+useEffect(() => {
+  if (suggestions.length === 0) return;
+  const handleClick = (e) => {
+    if (
+      dropdownRef.current &&
+      !dropdownRef.current.contains(e.target) &&
+      inputRef.current &&
+      !inputRef.current.contains(e.target)
+    ) {
+      setSuggestions([]);
+    }
+  };
+  document.addEventListener("mousedown", handleClick);
+  return () => document.removeEventListener("mousedown", handleClick);
+}, [suggestions]);
 
 // Automatically enable 3D after 1 second
 
@@ -1539,8 +1571,8 @@ const handleSearch = async () => {
     const found = await findPageForSatellite(sat);
     if (found) {
       setPage(found.page);
-      setSatellites(found.sats);
-      setFilteredSatellites(found.sats);
+      // setSatellites(found.sats);
+      // setFilteredSatellites(found.sats);
     }
 
     focusOnSatellite(sat);
@@ -1570,8 +1602,8 @@ const handleSuggestionClick = async (sug) => {
     const found = await findPageForSatellite(sat);
     if (found) {
       setPage(found.page);
-      setSatellites(found.sats);
-      setFilteredSatellites(found.sats);
+      // setSatellites(found.sats);
+      // setFilteredSatellites(found.sats);
     }
 
     focusOnSatellite(sat);
@@ -1757,6 +1789,7 @@ return (
 
           <div className="relative">
             <input
+              ref={inputRef}
               type="text"
               placeholder="Search satellites..."
               value={searchQuery}
@@ -1772,7 +1805,10 @@ return (
 
             {/* suggestions dropdown */}
             {suggestions.length > 0 && (
-              <ul className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto bg-gray-800 text-white border border-gray-700 rounded-md shadow-lg">
+              <ul
+                ref={dropdownRef}
+                className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto bg-gray-800 text-white border border-gray-700 rounded-md shadow-lg"
+              >
                 {suggestions.map((sat) => (
                   <li
                     key={sat.norad_number}
