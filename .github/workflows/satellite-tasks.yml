@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: '15 */6 * * *'  # Runs TLE Processor every 6 hours at minute 15
     - cron: '45 */8 * * *'  # Runs CDM Processor every 8 hours at minute 45
-    - cron: '0 * * * *'  # Runs Fetch All every hour at minute 0
+#    - cron: '0 * * * *'  # Runs Fetch All every hour at minute 0
     - cron: '30 * * * *'  #  Fetches and stores recent launch data every hour at minute 30
   workflow_dispatch:  # Allows manual trigger from GitHub UI
 
@@ -143,7 +143,7 @@ jobs:
         with:
           name: fetch_all_logs
           path: backend/app/logs/fetch_all_log.txt
-  
+
 
 
   fetch_launches:
