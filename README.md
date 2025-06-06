@@ -1,7 +1,9 @@
-# SATELLITE INTERACTIVE VISUALIZER
+# SATELLITE INTERACTIVE VISUALIZER (SAT-TRACK)
+
+![Landing Page](landing-page.png)
 
 ## Project Overview
-The **Satellite Interactive Visualizer** is a dynamic, 3D web-based interface that enables users to explore and interact with active satellites orbiting Earth. The platform features real-time satellite data displayed on a 3D globe, providing insights into satellite characteristics and their orbital paths. Additionally, the system will incorporate LLM-powered query capabilities for enhanced user interactivity.
+The **Satellite Interactive Visualizer** AKA SAT-TRACK is a dynamic, 3D web-based interface that enables users to explore and interact with active satellites orbiting Earth. The platform features real-time satellite data displayed on a 3D globe, providing insights into satellite characteristics and their orbital paths. Furthermore updates on recent/future launches and probabilistic collision events. Additionally, the system will incorporate LLM-powered query capabilities for enhanced user interactivity.
 
 ## Features
 ### Core Functionality:
