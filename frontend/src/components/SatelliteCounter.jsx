@@ -2,26 +2,32 @@ import React, { useState, useEffect, useMemo } from "react";
 import CountUp from "react-countup";
 import axios from "axios";
 import { motion } from "framer-motion";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import {
+  RadialBarChart,
+  RadialBar,
+  PolarAngleAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import { Typewriter } from "react-simple-typewriter";
 import { SATELLITES_API } from "../config";
 
 const API_URL = `${SATELLITES_API}/count`;
 const OBJECT_TYPE_API = `${SATELLITES_API}/object_types`;
 
-/// 🌌 Mako Color Palette (Dark → Medium → Light Variation)
-const MAKO_GRADIENT = [
-  "#C8E49C", // teal
-  "#3F5F85", // Dark Navy-Blue
-  "#86C1A9", // Rich Blue-Teal
-  "#5E8A94"// Vibrant Cyan-Teal
-   
+/// Orbit-themed palette — each ring gets a distinct hue along the Mako gradient.
+const RING_COLORS = [
+  "#86EED8", // bright teal — the "headline" payload ring
+  "#5BA9C4", // mid teal-blue
+  "#3F5F85", // navy
+  "#9FCF86", // soft mint
+  "#C8E49C", // pale lime
+  "#7B5BB4", // muted violet (only kicks in if there are 6+ object types)
 ];
 
 const SatelliteCounter = () => {
   const [satelliteCount, setSatelliteCount] = useState(0);
   const [objectTypes, setObjectTypes] = useState([]);
-  const [endAngle, setEndAngle] = useState(90); // 🔄 Animate pie chart filling
   // Stabilize the starfield so re-renders don't unmount + remount 150
   // motion.divs and restart every twinkle animation. This was the visible
   // background flicker — see CLAUDE.md.
@@ -55,9 +61,6 @@ const SatelliteCounter = () => {
         if (response.data && Array.isArray(response.data.types)) {
           console.log(`✅ Successfully fetched ${response.data.types.length} object types.`);
           setObjectTypes(response.data.types);
-
-          // 🔄 Start Pie Chart Animation (delayed for smooth effect)
-          setTimeout(() => setEndAngle(450), 1000);
         } else {
           console.warn("⚠️ API response missing expected format! Response:", response.data);
         }
@@ -69,6 +72,20 @@ const SatelliteCounter = () => {
     fetchSatelliteCount();
     fetchObjectTypes();
   }, []);
+
+  // Derived chart data — sorted descending by count so the largest category
+  // gets the brightest hue and the outermost ring. The "name" key is what
+  // RadialBar renders along the polar angle; "count" is the bar magnitude.
+  const totalObjects = objectTypes.reduce((sum, t) => sum + (t.count || 0), 0);
+  const chartData = objectTypes
+    .slice()
+    .sort((a, b) => (b.count || 0) - (a.count || 0))
+    .map((t, i) => ({
+      name: t.object_type,
+      count: t.count,
+      pct: totalObjects ? ((t.count || 0) / totalObjects) * 100 : 0,
+      fill: RING_COLORS[i % RING_COLORS.length],
+    }));
 
   return (
     <div className="relative w-screen h-screen flex items-center justify-center bg-[rgba(3, 0, 8, 0.85)]  overflow-hidden">
@@ -135,46 +152,90 @@ const SatelliteCounter = () => {
           </motion.div>
         </div>
 
-        {/* 📊 Chart Section (Right) */}
-        <motion.div
-          className="w-full lg:w-1/2 h-full flex justify-center items-center"
-          initial={{ opacity: 0, scale: 0.6 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 4, ease: "easeOut" }}
-        >
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={objectTypes}
+        {/* 📊 Orbital Distribution Ring (Right)
+            Concentric rings — one per object type, brightest = largest share.
+            Total count anchored in the center. No re-fired animations on
+            parent re-render. */}
+        <div className="relative w-full lg:w-1/2 h-full flex justify-center items-center">
+          <motion.div
+            className="relative w-full h-full"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 1.6, ease: "easeOut" }}
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <RadialBarChart
                 cx="50%"
                 cy="50%"
+                innerRadius="36%"
+                outerRadius="92%"
+                barSize={14}
+                data={chartData}
                 startAngle={90}
-                endAngle={endAngle} // 🔄 Smooth Animation
-                outerRadius="50%"
-                dataKey="count"
-                nameKey="object_type"
-                isAnimationActive={true}
-                stroke="none"
-                fillOpacity={0.9}
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
+                endAngle={-270}
               >
-                {objectTypes.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={MAKO_GRADIENT[index % MAKO_GRADIENT.length]}
-                    // No CSS transition here — Recharts' isAnimationActive on
-                    // the Pie owns the animation. Layering both made the chart
-                    // flicker on every re-render.
-                    style={{
-                      filter: "drop-shadow(0px 0px 16px #6BB8C7)",
-                    }}
+                {/* Hidden axis sets the value range so each bar's arc length
+                    encodes its share of the total. */}
+                <PolarAngleAxis
+                  type="number"
+                  domain={[0, totalObjects || 1]}
+                  angleAxisId={0}
+                  tick={false}
+                />
+                <RadialBar
+                  background={{ fill: "rgba(255,255,255,0.04)" }}
+                  dataKey="count"
+                  cornerRadius={6}
+                  isAnimationActive={true}
+                  animationDuration={1200}
+                />
+                <Tooltip
+                  cursor={false}
+                  contentStyle={{
+                    background: "rgba(8, 16, 28, 0.92)",
+                    border: "1px solid rgba(134, 238, 216, 0.4)",
+                    borderRadius: 6,
+                    color: "#E5F4F1",
+                    fontSize: 13,
+                  }}
+                  formatter={(value, _name, item) => [
+                    `${value.toLocaleString()} (${item.payload.pct.toFixed(1)}%)`,
+                    item.payload.name,
+                  ]}
+                />
+              </RadialBarChart>
+            </ResponsiveContainer>
+
+            {/* Center stat — fixed positioning prevents layout fights
+                with Recharts' SVG sizing. Pointer-events-none lets tooltip
+                hovers reach the bars underneath. */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <div className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#86EED8] tracking-wider drop-shadow-lg">
+                <CountUp start={0} end={totalObjects} duration={2.5} separator="," />
+              </div>
+              <div className="text-xs sm:text-sm md:text-base text-gray-400 uppercase tracking-[0.25em] mt-1">
+                Tracked
+              </div>
+            </div>
+
+            {/* Legend along the bottom — replaces Recharts' built-in labels
+                so we can style them and they don't fight the chart layout. */}
+            <div className="absolute left-0 right-0 bottom-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs sm:text-sm pointer-events-none">
+              {chartData.map((d) => (
+                <div key={d.name} className="flex items-center gap-2">
+                  <span
+                    className="inline-block w-2.5 h-2.5 rounded-sm"
+                    style={{ background: d.fill, boxShadow: `0 0 10px ${d.fill}` }}
                   />
-                ))}
-              </Pie>
-              <Tooltip contentStyle={{ backgroundColor: "rgba(84, 226, 200, 0.85)", color: "rgba(255, 255, 255, 0.85)", border: "none" }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </motion.div>
+                  <span className="text-gray-300 font-medium">
+                    {d.name}{" "}
+                    <span className="text-gray-500">{d.pct.toFixed(1)}%</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
       </motion.div>
     </div>
   );
