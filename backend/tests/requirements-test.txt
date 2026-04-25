@@ -1,0 +1,6 @@
+pytest==8.3.4
+pytest-xdist==3.6.1
+httpx==0.28.1
+sgp4==2.23
+skyfield==1.49
+numpy<2.0
