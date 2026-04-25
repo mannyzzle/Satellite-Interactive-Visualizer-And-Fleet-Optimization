@@ -224,9 +224,9 @@ export default function SatelliteList() {
         </div>
       {/* ========== Title & Intro ========== */}
       <div className="w-full text-center mb-4">
-        <h1 className="text-4xl font-bold text-teal-300">Satellite Launches</h1>
+        <h1 className="text-4xl font-bold text-teal-300">Satellite Catalog</h1>
         <p className="text-teal-400 text-lg">
-          Tracking thousands of satellites in real-time.
+          Browse the active fleet by orbit and purpose, in real-time.
         </p>
       </div>
       <div className="mb-8 text-center">

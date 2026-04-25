@@ -136,20 +136,9 @@ const SatelliteCounter = () => {
             Gain insights into <span className="text-[#3E6A89] font-bold">LEO, GEO, and beyond</span>.  
           </p>
 
-          {/* 🚀 Animated Counter */}
-          <motion.div
-            className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-[#86EED8] tracking-wider animate-pulse glow-text"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1.5, delay: 1 }}
-          >
-            <span className="drop-shadow-lg">
-              <CountUp start={0} end={satelliteCount} duration={5} separator="," />
-            </span>
-            <span className="text-lg sm:text-xl md:text-2xl font-medium text-gray-400 ml-2">
-              Objects Currently Being Tracked
-            </span>
-          </motion.div>
+          {/* The radial chart on the right shows the live count in its
+              center already — no duplicate counter here on the left. Keep
+              the column compact so the hero copy + chart line up. */}
         </div>
 
         {/* 📊 Orbital Distribution Ring (Right)
@@ -208,13 +197,20 @@ const SatelliteCounter = () => {
 
             {/* Center stat — fixed positioning prevents layout fights
                 with Recharts' SVG sizing. Pointer-events-none lets tooltip
-                hovers reach the bars underneath. */}
+                hovers reach the bars underneath. Uses the authoritative
+                /api/satellites/count value (totalObjects from /object_types
+                should match but /count is canonical). */}
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
               <div className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#86EED8] tracking-wider drop-shadow-lg">
-                <CountUp start={0} end={totalObjects} duration={2.5} separator="," />
+                <CountUp
+                  start={0}
+                  end={satelliteCount || totalObjects}
+                  duration={2.5}
+                  separator=","
+                />
               </div>
               <div className="text-xs sm:text-sm md:text-base text-gray-400 uppercase tracking-[0.25em] mt-1">
-                Tracked
+                Objects Tracked
               </div>
             </div>
 

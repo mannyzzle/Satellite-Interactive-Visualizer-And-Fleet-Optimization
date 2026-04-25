@@ -2029,36 +2029,23 @@ return (
   py-12 
   z-10
 ">
-  {/* Title */}
-  <div className="text-6xl font-bold glow-text text-center mb-12">
-    <TypeAnimation
-      sequence={[
-        "Observe All Objects",
-        2000,
-        "",
-        500,
-        "Explore the Skies...",
-        2000,
-        "",
-        500,
-        "Tracking Satellites in Real-Time",
-        2500,
-      ]}
-      wrapper="span"
-      speed={50}
-      repeat={Infinity}
-    />
+  {/* Section header — static, not a rotating type-animation, so it
+      doesn't compete with the hero typewriter above. */}
+  <div className="text-center mb-4">
+    <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold glow-text text-[#86EED8]">
+      What it does
+    </h2>
+    <p className="mt-3 text-gray-400 text-base sm:text-lg max-w-2xl mx-auto">
+      Three things, all powered by real public data — no marketing fluff.
+    </p>
   </div>
 
-  {/* Grid Layout */}
-  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-16 pb-24">
-    {/* 
-      ^ If you want more or less spacing between cards, 
-      change `gap-16` to `gap-12`, etc.
-    */}
+  {/* Capability grid — three concrete, evidence-backed cards.
+      The animated CSS satellite stays as a visual anchor on the side. */}
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pt-12 pb-24">
 
-    {/* Satellite Model Container */}
-    <div className="satellite-container relative left-[55%] top-[45%] scale-[3.5] sm:scale-[3.5] md:scale-[3.5]">
+    {/* Satellite Model Container — preserved decorative element */}
+    <div className="satellite-container relative left-[55%] top-[45%] scale-[3.5] sm:scale-[3.5] md:scale-[3.5] lg:col-span-1 hidden md:block">
       <div className="satellite">
         <div className="radio-dish"></div>
         <div className="antenna"></div>
@@ -2069,217 +2056,105 @@ return (
       </div>
     </div>
 
-    {/* The Future of Orbital Tracking */}
+    {/* Card 1 — Live SGP4 Propagation */}
     <div className="
-      p-10 
-      bg-[#1E233F] bg-opacity-95 
-      rounded-xl shadow-xl 
-      border border-[#3E6A89] 
-      hover:scale-105 
-      transition-transform 
-      duration-300 
-      lg:col-span-2
+      p-8
+      bg-[#1E233F]/90
+      rounded-xl border border-[#3E6A89]
+      hover:border-[#86EED8]/60 hover:shadow-[0_0_40px_-10px_rgba(134,238,216,0.4)]
+      transition-all duration-300
+      flex flex-col
     ">
-      <h2 className="text-4xl font-semibold text-[#86EED8] tracking-wide">
-        Next-Generation Orbital Tracking
-      </h2>
-      <p className="mt-6 text-lg leading-relaxed text-gray-300">
-        Step into the{" "}
-        <span className="text-[#C8E49C] font-semibold uppercase">
-          real-time orbital intelligence
-        </span>{" "}
-        era. Powered by <strong>high-fidelity Keplerian models</strong>, 
-        this system provides a <strong>seamless visualization</strong> 
-        of Earth’s satellites, designed for <strong>precision-driven mission planning</strong> 
-        and <strong>collision risk mitigation</strong>.
+      <div className="text-[#86EED8] text-sm font-mono uppercase tracking-[0.25em] mb-3">
+        01 — Real-time
+      </div>
+      <h3 className="text-2xl font-semibold text-[#86EED8] mb-4">
+        Live SGP4 Propagation
+      </h3>
+      <p className="text-gray-300 leading-relaxed">
+        30,000+ active satellites tracked using <strong>SGP4</strong> against
+        TLE data refreshed every 15 minutes from Space-Track. Every dot on
+        the globe is propagated client-side via <code className="text-[#C8E49C] text-sm">satellite.js</code>,
+        so the positions you see are computed for <em>this exact moment</em>.
       </p>
     </div>
 
-    {/* Deep-Tech Insights */}
+    {/* Card 2 — Conjunction Monitoring */}
     <div className="
-      p-8 
-      bg-[#253654] bg-opacity-90 
-      rounded-lg shadow-lg 
-      border border-[#5E8A94] 
-      hover:scale-105 
-      transition-transform 
-      duration-300
+      p-8
+      bg-[#1E233F]/90
+      rounded-xl border border-[#3E6A89]
+      hover:border-[#86EED8]/60 hover:shadow-[0_0_40px_-10px_rgba(134,238,216,0.4)]
+      transition-all duration-300
+      flex flex-col
     ">
-      <h2 className="text-3xl font-medium text-[#6BB8C7] tracking-wide">
-        Deep-Tech Insights
-      </h2>
-      <p className="mt-5 text-lg leading-relaxed text-gray-300">
-        By leveraging <strong>Two-Line Element (TLE) datasets</strong>, we calculate
-        orbital trajectories with an{" "}
-        <span className="text-[#C8E49C] font-semibold tracking-wide">
-          adaptive physics engine
-        </span>
-        . Advanced <strong>GPU-accelerated rendering</strong> fuels an 
-        <strong> interactive 3D experience</strong>, offering <strong>real-time orbital evolution</strong>.
+      <div className="text-[#86EED8] text-sm font-mono uppercase tracking-[0.25em] mb-3">
+        02 — Collision risk
+      </div>
+      <h3 className="text-2xl font-semibold text-[#86EED8] mb-4">
+        Conjunction Monitoring
+      </h3>
+      <p className="text-gray-300 leading-relaxed">
+        Public Conjunction Data Messages (CDMs) from Space-Track surface
+        upcoming close approaches: <strong>time of closest approach</strong>,
+        miss distance, and collision probability. The Tracking page shows
+        the live feed and ties each CDM back to the two NORAD objects
+        involved.
       </p>
     </div>
 
-    {/* Impact Across Industries */}
+    {/* Card 3 — Historical Orbit Analysis */}
     <div className="
-      p-10 
-      bg-[#1E233F] bg-opacity-95 
-      rounded-xl shadow-lg 
-      border border-[#4F89A5] 
-      hover:scale-105 
-      transition-transform 
-      duration-300 
-      lg:col-span-2
+      p-8
+      bg-[#1E233F]/90
+      rounded-xl border border-[#3E6A89]
+      hover:border-[#86EED8]/60 hover:shadow-[0_0_40px_-10px_rgba(134,238,216,0.4)]
+      transition-all duration-300
+      flex flex-col
     ">
-      <h2 className="text-4xl font-semibold text-[#86EED8] tracking-wide">
-        Impact Across Industries
-      </h2>
-      <ul className="mt-6 list-disc pl-6 space-y-4 text-lg text-gray-300">
-        <li>
-          <span className="text-[#C8E49C] font-semibold">
-            Orbital Debris Mitigation
-          </span>{" "}
-          — Advanced AI-powered tracking of space junk.
-        </li>
-        <li>
-          <span className="text-[#6BB8C7] font-semibold">
-            Navigation Precision
-          </span>{" "}
-          — Enhanced GPS and satellite communication systems.
-        </li>
-        <li>
-          <span className="text-[#5E8A94] font-semibold">
-            Earth Monitoring
-          </span>{" "}
-          — Optimized climate and environmental observation.
-        </li>
-      </ul>
-    </div>
-
-    {/* System Capabilities */}
-    <div className="
-      p-8 
-      bg-[#253654] bg-opacity-90 
-      rounded-lg shadow-lg 
-      border border-[#4F89A5] 
-      hover:scale-105 
-      transition-transform 
-      duration-300
-    ">
-      <h2 className="text-3xl font-medium text-[#C8E49C] tracking-wide">
-        System Capabilities
-      </h2>
-      <ul className="mt-5 list-disc pl-6 space-y-3 text-lg text-gray-300">
-        <li>
-          <span className="text-[#86EED8] font-semibold">Live Data Refresh</span>{" "}
-          — Constant updates for orbital integrity.
-        </li>
-        <li>
-          <span className="text-[#4F89A5] font-semibold">
-            3D Orbital Mapping
-          </span>{" "}
-          — Built with <strong>Three.js</strong> and <strong>WebGL</strong>.
-        </li>
-        <li>
-          <span className="text-[#5E8A94] font-semibold">
-            Predictive Analytics
-          </span>{" "}
-          — Advanced forecasting for trajectory shifts.
-        </li>
-      </ul>
-    </div>
-
-    {/* Upcoming Innovations */}
-    <div className="
-      p-10 
-      bg-[#1E233F] bg-opacity-95 
-      rounded-xl shadow-lg 
-      border border-[#3E6A89] 
-      hover:scale-105 
-      transition-transform 
-      duration-300 
-      lg:col-span-2
-    ">
-      <h2 className="text-4xl font-semibold text-[#C8E49C] tracking-wide">
-        Upcoming Innovations
-      </h2>
-      <ul className="mt-6 list-disc pl-6 space-y-4 text-lg text-gray-300">
-        <li>
-          <span className="text-[#6BB8C7] font-semibold">
-            AI-Based Threat Detection
-          </span>{" "}
-          — Identifies anomalies in satellite orbits.
-        </li>
-        <li>
-          <span className="text-[#86EED8] font-semibold">
-            Solar Weather Integration
-          </span>{" "}
-          — Real-time space weather monitoring.
-        </li>
-        <li>
-          <span className="text-[#5E8A94] font-semibold">
-            Historical Orbit Playback
-          </span>{" "}
-          — Rewind &amp; analyze satellite movements.
-        </li>
-      </ul>
-    </div>
-
-    {/* Beyond Low Earth Orbit */}
-    <div className="
-      p-9 
-      bg-[#253654] bg-opacity-90 
-      rounded-lg shadow-lg 
-      border border-[#4F89A5] 
-      hover:scale-105 
-      transition-transform 
-      duration-300
-    ">
-      <h2 className="text-3xl font-medium text-[#6BB8C7] tracking-wide">
-        Beyond Low Earth Orbit
-      </h2>
-      <p className="mt-5 text-lg leading-relaxed text-gray-300">
-        As deep-space missions accelerate, this system will evolve to <strong>track
-        lunar assets</strong>, <strong>Martian surface explorers</strong>,
-        and <strong>interplanetary relay satellites</strong>.
+      <div className="text-[#86EED8] text-sm font-mono uppercase tracking-[0.25em] mb-3">
+        03 — History
+      </div>
+      <h3 className="text-2xl font-semibold text-[#86EED8] mb-4">
+        Historical Orbit Analysis
+      </h3>
+      <p className="text-gray-300 leading-relaxed">
+        Every NORAD has a stored TLE history. Click any satellite to see
+        <strong> altitude</strong>, <strong>velocity</strong>, and{" "}
+        <strong>B*</strong> drag-term over time, charted from the actual
+        archival TLE data — useful for spotting orbit decay or maneuvers.
       </p>
     </div>
 
-    {/* Educational Resources */}
+    {/* Bottom row — sources + tech stack, single full-width card */}
     <div className="
-      p-8 
-      bg-[#1E233F] bg-opacity-95 
-      rounded-xl shadow-lg 
-      border border-[#3E6A89] 
-      hover:scale-105 
-      transition-transform 
-      duration-300 
-      lg:col-span-2
+      p-8
+      bg-[#1E233F]/70
+      rounded-xl border border-[#3E6A89]/60
+      lg:col-span-3
     ">
-      <h2 className="text-4xl font-semibold text-[#86EED8] tracking-wide">
-        Resources &amp; Further Exploration
-      </h2>
-      <ul className="mt-6 list-disc pl-6 space-y-4 text-lg text-gray-300">
-        <li>
-          <a
-            href="https://www.spacestrak.com/"
-            className="text-[#C8E49C] hover:underline hover:text-[#C8E49C]/80"
-            target="_blank"
-            rel="noreferrer"
-          >
-            SpaceTrak — TLE Data &amp; Orbital Elements
-          </a>
-        </li>
-        <li>
-          <a
-            href="https://www.n2yo.com/"
-            className="text-[#6BB8C7] hover:underline hover:text-[#6BB8C7]/80"
-            target="_blank"
-            rel="noreferrer"
-          >
-            N2YO — Live Satellite Tracking
-          </a>
-        </li>
-      </ul>
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+        <div className="flex-1">
+          <div className="text-[#86EED8] text-sm font-mono uppercase tracking-[0.25em] mb-3">
+            Data sources
+          </div>
+          <ul className="text-gray-300 space-y-1 leading-relaxed">
+            <li>· <a href="https://www.space-track.org" target="_blank" rel="noreferrer" className="text-[#86EED8] hover:underline">Space-Track</a> — TLEs + CDMs</li>
+            <li>· <a href="https://www.swpc.noaa.gov" target="_blank" rel="noreferrer" className="text-[#86EED8] hover:underline">NOAA SWPC</a> — F10.7, Kp, solar wind</li>
+            <li>· <a href="https://thespacedevs.com/llapi" target="_blank" rel="noreferrer" className="text-[#86EED8] hover:underline">SpaceLaunchNow</a> — upcoming + past launches</li>
+          </ul>
+        </div>
+        <div className="flex-1">
+          <div className="text-[#86EED8] text-sm font-mono uppercase tracking-[0.25em] mb-3">
+            How it's built
+          </div>
+          <ul className="text-gray-300 space-y-1 leading-relaxed">
+            <li>· React + Vite + Three.js (WebGL renderer)</li>
+            <li>· FastAPI + Postgres + SGP4/Skyfield on Railway</li>
+            <li>· <a href="https://github.com/mannyzzle/Satellite-Interactive-Visualizer-And-Fleet-Optimization" target="_blank" rel="noreferrer" className="text-[#86EED8] hover:underline">Source on GitHub</a></li>
+          </ul>
+        </div>
+      </div>
     </div>
   </div>
 </div>

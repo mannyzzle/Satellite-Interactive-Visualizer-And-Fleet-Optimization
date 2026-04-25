@@ -9,10 +9,12 @@ export default defineConfig({
   testDir: "./tests",
   // Vitest owns the unit tests; Playwright only runs e2e + stress projects.
   testIgnore: ["**/unit/**"],
-  fullyParallel: true,
+  // E2E hits the live deployed site, so 3+ parallel workers tend to time out
+  // against the API. Keep concurrency low to avoid flakiness; retry once.
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  retries: 1,
+  workers: 1,
   reporter: [["list"]],
   use: {
     baseURL: PROD_URL,

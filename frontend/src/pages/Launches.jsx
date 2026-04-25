@@ -126,9 +126,10 @@ export default function Launches() {
               <span className="font-medium">{new Date(launch.launch_date).toUTCString()}</span>
             </div>
 
-            {/* ⏳ BIGGER RED Countdown */}
-            <div className="text-red-500 text-5xl md:text-3xl font-bold mt-2">
-               {countdowns[launch.id] }
+            {/* ⏳ Countdown — soft amber on dark UI; big and tabular so the
+                seconds field doesn't jiggle as digits change width. */}
+            <div className="text-amber-300 text-3xl md:text-2xl font-semibold mt-2 tracking-wider tabular-nums">
+              {countdowns[launch.id]}
             </div>
 
             {/* 🎥 Watch Live Button */}

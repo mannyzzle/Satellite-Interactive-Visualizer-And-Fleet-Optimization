@@ -646,11 +646,16 @@ useEffect(() => {
   <div className="absolute inset-0  pointer-events-none" />
 
   <div className="relative z-10 w-full max-w-6xl mx-auto px-6 py-16 text-center space-y-8">
-    {/* Heading with TypeAnimation */}
+    {/* Heading with TypeAnimation
+        Reserve enough vertical space for the longest title's wrapped 2-line
+        state so the section doesn't twitch when the type animation crosses
+        a wrap-point. The titles below are intentionally close in length to
+        keep the height reservation predictable. */}
     <motion.h1
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.8 }}
+      style={{ minHeight: "2.4em" }}
       className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight
                  bg-clip-text text-transparent bg-gradient-to-r from-teal-300 to-blue-400"
     >
