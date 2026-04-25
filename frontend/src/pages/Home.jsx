@@ -601,9 +601,11 @@ const changePage = async (newPage) => {
   
   const removeAllSatelliteModels = () => {
     if (!is3DEnabled) return;
-    console.log("🗑️ Removing all satellite models...");
-    console.log("🚀 Before cleanup, satelliteObjectsRef:", Object.keys(satelliteObjectsRef.current));
-    console.log("🛰️ Satellites in Scene (before cleanup):", sceneRef.current.children.length);
+    // Scene can be null briefly: is3DEnabled flips before sceneRef is wired up
+    // on first mount, and StrictMode unmount nulls the ref between cleanup
+    // and remount. Guarding here prevents a noisy TypeError that could trip
+    // a re-render storm.
+    if (!sceneRef.current) return;
 
     Object.keys(satelliteObjectsRef.current).forEach((norad_number) => {
         const satModel = satelliteObjectsRef.current[norad_number];
@@ -630,9 +632,6 @@ const changePage = async (newPage) => {
 
     // ✅ Ensure no lingering references
     satelliteObjectsRef.current = {};
-
-    console.log("✅ After cleanup, satelliteObjectsRef:", Object.keys(satelliteObjectsRef.current));
-    console.log("🛰️ Satellites in Scene (after cleanup):", sceneRef.current.children.length);
 };
 
 
@@ -749,8 +748,6 @@ const updateSceneWithFilteredSatellites = (satellites) => {
   }
   
   console.log(`🛰️ Updating scene with ${satellites.length} satellites...`);
-  console.log("🚀 Current satelliteObjectsRef (before update):", Object.keys(satelliteObjectsRef.current));
-  console.log("🛰️ Satellites in Scene (before update):", sceneRef.current.children.length);
 
   // ✅ Ensure satellites are cleared before adding new ones
   removeAllSatelliteModels();
@@ -781,10 +778,9 @@ const updateSceneWithFilteredSatellites = (satellites) => {
       });
 
       setTimeout(() => {
+          if (!sceneRef.current) return; // unmounted between timeouts
           console.log("🛰️ Adding new orbit paths...");
           addOrbitPaths();
-          console.log("🚀 Current satelliteObjectsRef (after update):", Object.keys(satelliteObjectsRef.current));
-          console.log("🛰️ Satellites in Scene (after update):", sceneRef.current.children.length);
       }, 300);
   }, 500);
 };
@@ -799,10 +795,12 @@ useEffect(() => {
       console.warn("⚠️ No satellites to load, waiting for fetch...");
       return;
   }
+  // is3DEnabled flips before the scene-init effect finishes wiring up sceneRef
+  // on first mount; this guard prevents a TypeError that previously cascaded
+  // into a re-render storm and visible flicker.
+  if (!sceneRef.current) return;
 
   console.log(`🚀 Updating scene for ${satellites.length} satellites...`);
-  console.log("🚀 Current satelliteObjectsRef (before update):", Object.keys(satelliteObjectsRef.current));
-  console.log("🛰️ Satellites in Scene (before update):", sceneRef.current.children.length);
 
   const newSatelliteIds = new Set(satellites.map((s) => s.norad_number));
 
@@ -827,12 +825,8 @@ useEffect(() => {
 
   setTimeout(() => {
     addOrbitPaths();  // 🚀 Ensure orbits are added after everything else
-    console.log("✅ Orbit paths manually added after delay.");
   }, 500); // ⏳ Small delay ensures everything is loaded before orbits are drawn
-
-  console.log("🚀 Current satelliteObjectsRef (after update):", Object.keys(satelliteObjectsRef.current));
-  console.log("🛰️ Satellites in Scene (after update):", sceneRef.current.children.length);
-}, [satellites,is3DEnabled]);
+}, [satellites, is3DEnabled]);
 
   
 

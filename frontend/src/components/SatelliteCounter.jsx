@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import CountUp from "react-countup";
 import axios from "axios";
 import { motion } from "framer-motion";
@@ -22,6 +22,10 @@ const SatelliteCounter = () => {
   const [satelliteCount, setSatelliteCount] = useState(0);
   const [objectTypes, setObjectTypes] = useState([]);
   const [endAngle, setEndAngle] = useState(90); // 🔄 Animate pie chart filling
+  // Stabilize the starfield so re-renders don't unmount + remount 150
+  // motion.divs and restart every twinkle animation. This was the visible
+  // background flicker — see CLAUDE.md.
+  const stars = useMemo(() => generateStars(150), []);
 
   useEffect(() => {
     // 🌍 Fetch total number of satellites
@@ -70,7 +74,7 @@ const SatelliteCounter = () => {
     <div className="relative w-screen h-screen flex items-center justify-center bg-[rgba(3, 0, 8, 0.85)]  overflow-hidden">
         {/* 🌌 Starfield (Randomly Placed Stars) */}
   <div className="absolute w-full h-full overflow-hidden pointer-events-none">
-    {generateStars(150)} {/* Adjust number of stars here */}
+    {stars}
   </div>
 
   
@@ -151,13 +155,15 @@ const SatelliteCounter = () => {
                 label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
               >
                 {objectTypes.map((entry, index) => (
-                  <Cell 
-                    key={`cell-${index}`} 
+                  <Cell
+                    key={`cell-${index}`}
                     fill={MAKO_GRADIENT[index % MAKO_GRADIENT.length]}
+                    // No CSS transition here — Recharts' isAnimationActive on
+                    // the Pie owns the animation. Layering both made the chart
+                    // flicker on every re-render.
                     style={{
-                      filter: "drop-shadow(0px 0px 16px #6BB8C7)", // ✨ Soft Glow Effect
-                      transition: "fill 5s ease-in-out",
-                    }} 
+                      filter: "drop-shadow(0px 0px 16px #6BB8C7)",
+                    }}
                   />
                 ))}
               </Pie>
