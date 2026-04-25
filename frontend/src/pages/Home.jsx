@@ -14,12 +14,12 @@ import { Select, SelectTrigger, SelectContent, SelectItem } from "../components/
 import { motion } from "framer-motion";
 import { TypeAnimation } from "react-type-animation";
 import { useMemo } from "react";
+import { SATELLITES_API } from "../config";
 const basePath = import.meta.env.BASE_URL;  // ✅ Dynamically fetch the base URL
 const dayTexture = `${basePath}earth_day.jpg`;
 const nightTexture = `${basePath}earth_night.jpg`;
-const cloudTexture = `${basePath}clouds.png`;
 // 🔍 Autocomplete endpoint
-const SUGGEST_URL = "https://satellite-tracker-production.up.railway.app/api/satellites/suggest";
+const SUGGEST_URL = `${SATELLITES_API}/suggest`;
 
 
 
@@ -148,9 +148,6 @@ const findPageForSatellite = async (sat) => {
   const textureLoader = new THREE.TextureLoader();
   const dayMap = textureLoader.load(dayTexture);
   const nightMap = textureLoader.load(nightTexture);
-  const clouds = textureLoader.load(cloudTexture);
-  const sunTexture = textureLoader.load(`${basePath}sun_texture.jpg`);
-  const moonTexture = textureLoader.load(`${basePath}moon_texture.jpg`);
 
 
 

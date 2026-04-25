@@ -9,7 +9,16 @@ venv/
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
 
 #satellite file
 
 tle_latest.json
+
+# Frontend test artifacts
+frontend/test-results/
+frontend/playwright-report/
+frontend/.playwright/
+
+# Allow only one canonical lockfile (npm); ignore the pnpm side-channel
+frontend/pnpm-lock.yaml

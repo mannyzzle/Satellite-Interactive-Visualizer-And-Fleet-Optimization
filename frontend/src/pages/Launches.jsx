@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { StarField } from "./Home";
-
-
+import { LAUNCHES_API } from "../config";
 
 export default function Launches() {
   const [launches, setLaunches] = useState([]);
@@ -10,17 +9,10 @@ export default function Launches() {
   const [error, setError] = useState(null);
   const [countdowns, setCountdowns] = useState({});
 
-  
-//API_URL = "https://satellite-tracker-production.up.railway.app/api/launches/upcoming"
-
-//TESTING
-//API_URL = "http://localhost:8000/api/launches/upcoming"
-
-
   useEffect(() => {
     async function fetchLaunches() {
       try {
-        const response = await fetch("https://satellite-tracker-production.up.railway.app/api/launches/upcoming");
+        const response = await fetch(`${LAUNCHES_API}/upcoming`);
         if (!response.ok) throw new Error("Failed to fetch upcoming launches.");
 
         const data = await response.json();

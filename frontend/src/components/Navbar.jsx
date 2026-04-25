@@ -72,7 +72,6 @@ export default function Navbar() {
           <Link to="/satellites" className="hover:text-teal-300 transition-colors duration-200">Satellites</Link>
           <Link to="/launches" className="hover:text-teal-300 transition-colors duration-200">Launches</Link>
           <Link to="/tracking" className="hover:text-teal-300 transition-colors duration-200">Tracking</Link>
-          <Link to="/gallery" className="hover:text-teal-300 transition-colors duration-200">Gallery</Link>
           <Link to="/about" className="hover:text-teal-300 transition-colors duration-200">About</Link>
 
           {/* Resources Dropdown (Desktop) */}
@@ -109,16 +108,6 @@ export default function Navbar() {
           UTC Time: <span className="ml-3 text-teal-300 font-medium">{utcTime}</span>
         </div>
 
-        {/* Live Tracking Always On */}
-        <div className="border-l border-gray-700 pl-6">
-          <button
-            className="px-5 py-3 rounded-md font-medium text-sm shadow-md transition-all duration-300 bg-green-500 hover:bg-green-600 cursor-default"
-            disabled
-          >
-            Live Tracking: ON
-          </button>
-        </div>
-
         {/* Mobile Menu Toggle */}
         <button 
           className="md:hidden text-white text-2xl ml-4 focus:outline-none"
@@ -136,7 +125,6 @@ export default function Navbar() {
           <Link to="/satellites" className="block px-6 py-2 hover:bg-gray-700 transition-colors duration-200">Satellites</Link>
           <Link to="/launches" className="block px-6 py-2 hover:bg-gray-700 transition-colors duration-200">Launches</Link>
           <Link to="/tracking" className="block px-6 py-2 hover:bg-gray-700 transition-colors duration-200">Tracking</Link>
-          <Link to="/gallery" className="block px-6 py-2 hover:bg-gray-700 transition-colors duration-200">Gallery</Link>
           <Link to="/about" className="block px-6 py-2 hover:bg-gray-700 transition-colors duration-200">About</Link>
           <button 
             onClick={() => setIsResourcesOpen((prev) => !prev)} 

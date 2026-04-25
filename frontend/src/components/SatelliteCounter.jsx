@@ -4,13 +4,10 @@ import axios from "axios";
 import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { Typewriter } from "react-simple-typewriter";
+import { SATELLITES_API } from "../config";
 
-const API_URL = "https://satellite-tracker-production.up.railway.app/api/satellites/count";
-const OBJECT_TYPE_API = "https://satellite-tracker-production.up.railway.app/api/satellites/object_types";
-
-//TESTING✅ FastAPI Backend Endpoints
-//const API_URL = "http://127.0.0.1:8000/api/satellites/count";
-//const OBJECT_TYPE_API = "http://127.0.0.1:8000/api/satellites/object_types";
+const API_URL = `${SATELLITES_API}/count`;
+const OBJECT_TYPE_API = `${SATELLITES_API}/object_types`;
 
 /// 🌌 Mako Color Palette (Dark → Medium → Light Variation)
 const MAKO_GRADIENT = [

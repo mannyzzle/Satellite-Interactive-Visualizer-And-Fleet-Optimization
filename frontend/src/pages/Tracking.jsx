@@ -4,6 +4,7 @@ import { TypeAnimation } from "react-type-animation";
 import * as satellite from "satellite.js";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { SATELLITES_API, CDM_API } from "../config";
 
 /* ------------------------------------------------------------------
    1) Mako Gradient + Starfield
@@ -47,19 +48,12 @@ function generateStars(numStars) {
 
 /* ------------------------------------------------------------------
    2) API Endpoints
+   See ../config.js for the single source of truth (env-overridable).
 ------------------------------------------------------------------ */
 
-//FOR PRODUCTION
-
-const API_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/satellites";
-const CDM_URL = "https://satellite-tracker-production.up.railway.app/api/cdm/fetch";
-const SUGGEST_URL = "https://satellite-tracker-production.up.railway.app/api/satellites/suggest";
-
-
-// FOR DEV
-//const API_BASE_URL = "http://localhost:8000/api/satellites";
-//const CDM_URL = "http://localhost:8000/api/cdm/fetch";
-//const SUGGEST_URL = "http://localhost:8000/api/satellites/suggest";
+const API_BASE_URL = SATELLITES_API;
+const CDM_URL = `${CDM_API}/fetch`;
+const SUGGEST_URL = `${SATELLITES_API}/suggest`;
 
 /* ------------------------------------------------------------------
    3) Earth Textures (Day/Night)

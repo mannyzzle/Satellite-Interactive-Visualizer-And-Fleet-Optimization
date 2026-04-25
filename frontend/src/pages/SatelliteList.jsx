@@ -3,9 +3,9 @@ import axios from "axios";
 import { Link } from "react-router-dom";
 import { CircularProgress } from "@mui/material";
 import { StarField } from "./Home";
+import { SATELLITES_API } from "../config";
 
-const API_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/satellites/";
-//const API_BASE_URL = "http://127.0.0.1:8000/api/satellites";
+const API_BASE_URL = `${SATELLITES_API}/`;
 
 export default function SatelliteList() {
   const [satelliteData, setSatelliteData] = useState({});

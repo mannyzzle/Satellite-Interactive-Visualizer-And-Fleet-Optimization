@@ -13,7 +13,6 @@ import {
   ResponsiveContainer,
   Legend
 } from "recharts";
-import { Switch } from "@mui/material";
 
 export default function SatelliteDetails() {
   const { name } = useParams();
@@ -23,7 +22,6 @@ export default function SatelliteDetails() {
   const [historicalTLEs, setHistoricalTLEs] = useState([]);
   const [chartData, setChartData] = useState([]);
   const [error, setError] = useState(null);
-  const [liveTracking, setLiveTracking] = useState(false);
 
   // On mount, fetch the satellite + TLE data and process for charts
   useEffect(() => {
@@ -113,14 +111,6 @@ export default function SatelliteDetails() {
       {/* Title / Header */}
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-bold text-teal-400">{satelliteData.name}</h2>
-        <div className="flex items-center space-x-3">
-          <span className="text-teal-300">Live Tracking:</span>
-          <Switch
-            checked={liveTracking}
-            onChange={() => setLiveTracking(!liveTracking)}
-            color="success"
-          />
-        </div>
       </div>
 
       <p className="text-teal-200 mb-4">NORAD ID: {satelliteData.norad_number}</p>

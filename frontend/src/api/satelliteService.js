@@ -1,15 +1,11 @@
 // src/api/satelliteService.js
 
 import axios from "axios";
+import { SATELLITES_API, CDM_API, OLD_TLES_API } from "../config";
 
-const API_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/satellites/";
-const CDM_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/cdm/";
-const OLD_TLES_BASE_URL = "https://satellite-tracker-production.up.railway.app/api/old_tles/";
-
-//testing
-//const API_BASE_URL = "http://127.0.0.1:8000/api/satellites/";
-//const CDM_BASE_URL = "http://127.0.0.1:8000/api/cdm/";
-//const OLD_TLES_BASE_URL = "http://127.0.0.1:8000/api/old_tles/";
+const API_BASE_URL = `${SATELLITES_API}/`;
+const CDM_BASE_URL = `${CDM_API}/`;
+const OLD_TLES_BASE_URL = `${OLD_TLES_API}/`;
 
 
 

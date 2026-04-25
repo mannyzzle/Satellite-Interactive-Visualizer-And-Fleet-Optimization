@@ -36,28 +36,70 @@ The **Satellite Interactive Visualizer** AKA SAT-TRACK is a dynamic, 3D web-base
 ```
 SATELLITE-INTERACTIVE-VISUALIZER/
 ├── backend/
-│   ├── app.py                  # API endpoints for satellite data
-│   ├── ingest_tle_from_source.py  # Script for TLE ingestion
-│   ├── load_data.py            # TLE parsing and database updates
-│   ├── setup_database.py       # Database setup
-│   ├── table_analysis.py       # TLE validation and analysis
-│   ├── remove_outliers.py      # Data cleanup and outlier detection
+│   ├── app/
+│   │   ├── main.py                # FastAPI entry; mounts /api routers
+│   │   ├── database.py            # psycopg2 connection (SSL required)
+│   │   ├── variables.py           # SGP4/Skyfield helpers + purpose classifier
+│   │   ├── tle_fetch.py           # Pulls TLEs from Space-Track
+│   │   ├── tle_processor.py       # Archives stale, inserts active, classifies
+│   │   ├── cdm.py                 # Worker: pulls Conjunction Data Messages
+│   │   ├── fetch_launches.py      # SpaceLaunchNow → DB upsert
+│   │   ├── omni_low.py            # NOAA SWPC + ACE space weather ingest
+│   │   ├── de421.bsp              # JPL planetary ephemeris (binary)
+│   │   ├── api/
+│   │   │   ├── satellites.py      # /api/satellites/*
+│   │   │   ├── cdm.py             # /api/cdm/fetch
+│   │   │   ├── old_tles.py        # /api/old_tles/fetch/{norad}
+│   │   │   └── launches.py        # /api/launches/{upcoming,previous}
+│   │   └── services/llm_service.py
+│   ├── tests/                     # pytest: contracts, orbital mechanics, filters, k6 load
+│   ├── Dockerfile                 # API service image
+│   ├── Updater.Dockerfile         # Worker image (TLE/CDM/launch/weather)
+│   ├── railway.toml
+│   └── requirements.txt
 ├── frontend/
-│   ├── public/
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── Globe.js         # 3D visualization of Earth and satellites
-│   │   │   ├── Sidebar.js       # Sidebar for satellite search and filters
-│   │   │   └── SatelliteInfo.js # Information display panel
-│   │   ├── App.js              # Main React component
-│   │   ├── index.js            # React entry point
-│   └── package.json            # React project configuration
-├── data/                       # Satellite TLE and related data
-├── venv/                       # Python virtual environment
-├── requirements.txt            # Python dependencies
-├── README.md                   # Project documentation
-├── Dockerfile                  # Containerization for the application
-└── .devcontainer/              # Development container configuration
+│   │   ├── main.jsx, App.jsx
+│   │   ├── config.js              # Single source for backend URL (env-overridable)
+│   │   ├── pages/                 # Home, Tracking, SatelliteList, SatelliteDetail, Launches, About
+│   │   ├── components/            # Navbar, SatelliteCounter, Infographics, ...
+│   │   └── api/satelliteService.js
+│   ├── tests/                     # Vitest unit + Playwright e2e + stress
+│   ├── public/                    # Earth day/night textures, favicon, 404.html
+│   ├── vite.config.js, tailwind.config.js
+│   └── package.json
+├── README.md
+└── package.json                   # root: gh-pages dev dep
+```
+
+## Tests
+
+This project ships with a meaningful test suite — not toy unit tests. Each
+group asserts something the project's value props depend on.
+
+```bash
+# Backend: API contracts + orbital-mechanics correctness + filter semantics
+cd backend
+pip install -r tests/requirements-test.txt
+pytest -v -m "not load"
+
+# Frontend unit tests (jsdom)
+cd frontend
+pnpm install
+pnpm test:unit
+
+# Frontend end-to-end against the live deploy (Playwright)
+pnpm exec playwright install
+pnpm test:e2e
+
+# In-browser stress: 500 satellites + 1000 orbits, FPS + memory assertions
+pnpm test:stress
+
+# Backend load tests (k6 — manual, hits prod read-only)
+brew install k6
+k6 run backend/tests/load/api_smoke.k6.js
+k6 run backend/tests/load/cdm_burst.k6.js
+k6 run backend/tests/load/sustained.k6.js
 ```
 
 ---
