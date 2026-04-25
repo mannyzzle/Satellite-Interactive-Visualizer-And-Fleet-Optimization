@@ -88,20 +88,24 @@ const SatelliteCounter = () => {
         {/* 📜 Info Section (Left) */}
         <div className="flex flex-col items-center lg:items-start w-full lg:w-1/2 space-y-6">
           
-          {/* 🛰️ Title */}
+          {/* 🛰️ Title
+              Reserve enough vertical space for the longest 2-line state of
+              the typewritten string so the page doesn't jolt when the text
+              crosses its wrap threshold mid-cycle. Cap the loop at 1 pass
+              so the cursor blinks but we don't churn the layout forever. */}
           <motion.h1
             className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-[#86EED8] tracking-wide glow-text"
+            style={{ minHeight: "2.4em" }}
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 1 }}
           >
             <Typewriter
               words={["Welcome to Sat-Track"]}
-              loop={true}
+              loop={1}
               cursor
               cursorStyle="|"
               typeSpeed={50}
-              deleteSpeed={25}
               delaySpeed={2000}
             />
           </motion.h1>
