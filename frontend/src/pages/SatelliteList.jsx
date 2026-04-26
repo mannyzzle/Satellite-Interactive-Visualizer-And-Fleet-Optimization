@@ -1,435 +1,565 @@
-import { useEffect, useState } from "react";
-import axios from "axios";
-import { Link } from "react-router-dom";
-import { CircularProgress } from "@mui/material";
-import { StarField } from "./Home";
+// Satellite catalog browser. Single filterable + paginated table replacing
+// the old 21-section paginated-grid layout. Filters: orbit type, object
+// type, plus a name-or-NORAD search that hits /api/satellites/suggest and
+// navigates straight to the detail page on pick. URL query params keep
+// filter + page state so deep links work.
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Filter as FilterIcon,
+  Orbit,
+  RotateCcw,
+  Satellite as SatIcon,
+  Search,
+  X,
+} from "lucide-react";
+import { fetchSatellites } from "../api/satelliteService";
 import { SATELLITES_API } from "../config";
+import { StarField } from "../components/StarField";
+import { ShimmerBar, SkeletonStyles } from "../components/Skeleton";
+import { getCountryFlag, getCountryName } from "../lib/countries";
 
-const API_BASE_URL = `${SATELLITES_API}/`;
+const PAGE_SIZE = 50;
+
+// Color-coded orbit dot. Reads at a glance — no need to scan the orbit
+// column for the four-letter code.
+const ORBIT_DOT = {
+  LEO: "bg-cyan-400",
+  MEO: "bg-teal-400",
+  GEO: "bg-violet-400",
+  HEO: "bg-amber-400",
+};
+
+// Filter pill option lists. The label is what the backend's filter param
+// expects — Home/Tracking already use the same vocabulary.
+const ORBIT_OPTIONS = [
+  { id: "", label: "All", range: "" },
+  { id: "LEO", label: "LEO", range: "160 – 2,000 km" },
+  { id: "MEO", label: "MEO", range: "2,000 – 35,786 km" },
+  { id: "GEO", label: "GEO", range: "≈ 35,786 km" },
+  { id: "HEO", label: "HEO", range: "Highly elliptical" },
+];
+
+const TYPE_OPTIONS = [
+  { id: "", label: "All" },
+  { id: "PAYLOAD", label: "Payload" },
+  { id: "DEBRIS", label: "Debris" },
+  { id: "ROCKET BODY", label: "Rocket body" },
+  { id: "UNKNOWN", label: "Unknown" },
+];
+
+const STATUS_PILL = {
+  Active: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  Decaying: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  Inactive: "bg-slate-500/15 text-slate-300 border-slate-500/30",
+};
+
+function statusClasses(status) {
+  return STATUS_PILL[status] || STATUS_PILL.Inactive;
+}
+
+function buildFilterParam(orbit, type) {
+  const parts = [];
+  if (orbit) parts.push(orbit);
+  if (type) parts.push(type);
+  return parts.join(",");
+}
 
 export default function SatelliteList() {
-  const [satelliteData, setSatelliteData] = useState({});
-  const [totalCounts, setTotalCounts] = useState({});
+  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const orbit = params.get("orbit") || "";
+  const type = params.get("type") || "";
+  const page = Math.max(1, parseInt(params.get("page") || "1", 10));
+
+  const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  // `loading` = first paint (show full skeleton). `refreshing` = subsequent
+  // filter/page changes — keep stale rows visible to avoid flicker, just
+  // dim them and show a top progress bar. Big perceived-speed improvement.
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
-  // Track page & loading states for orbit categories
-  const [pageNumbers, setPageNumbers] = useState({});
-  const [loadingCategories, setLoadingCategories] = useState({});
+  // Search input + suggestions — pick a result to jump straight to detail.
+  const [query, setQuery] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [highlightedIdx, setHighlightedIdx] = useState(-1);
+  const inputRef = useRef(null);
+  const dropdownRef = useRef(null);
 
-  // Track page & loading states for purposes
-  const [purposeData, setPurposeData] = useState({});
-  const [purposeCounts, setPurposeCounts] = useState({});
-  const [purposePageNumbers, setPurposePageNumbers] = useState({});
-  const [loadingPurposes, setLoadingPurposes] = useState({});
-
-  const limit = 8;
-
-  // ---------------------------
-  // Orbit categories (LEO/MEO/GEO/HEO)
-  // ---------------------------
-  const categories = [
-    {
-      name: "LEO",
-      label: "Low Earth Orbit (LEO)",
-      description: "Satellites in LEO operate between 160km and 2,000km."
-    },
-    {
-      name: "MEO",
-      label: "Medium Earth Orbit (MEO)",
-      description: "Satellites in MEO reside between LEO and GEO, typically used for GPS."
-    },
-    {
-      name: "GEO",
-      label: "Geostationary Orbit (GEO)",
-      description: "Geostationary satellites maintain a fixed position above the equator at 35,786 km."
-    },
-    {
-      name: "HEO",
-      label: "Highly Elliptical Orbit (HEO)",
-      description: "Satellites in HEO follow elongated paths, useful for long-duration coverage."
-    }
-  ];
-
-  // ---------------------------
-  // Object Purposes (Communications, Navigation, etc.)
-  // ---------------------------
-  const objectPurposes = [
-    { 
-      name: "Communications", 
-      label: "Communications", 
-      filter: "Communications",
-      description: "Satellites providing communication services (TV, internet, phone)."
-    },
-    { 
-      name: "Navigation", 
-      label: "Navigation", 
-      filter: "Navigation",
-      description: "Satellites enabling GPS, GLONASS, BeiDou, etc."
-    },
-    { 
-      name: "Military/Reconnaissance", 
-      label: "Military/Reconnaissance", 
-      filter: "Military/Reconnaissance",
-      description: "Defense or surveillance-oriented satellites."
-    },
-    { 
-      name: "Weather Monitoring", 
-      label: "Weather Monitoring", 
-      filter: "Weather Monitoring",
-      description: "Satellites tracking storms, climate data, etc."
-    },
-    {
-      name: "Earth Observation",
-      label: "Earth Observation",
-      filter: "Earth Observation",
-      description: "Satellites imaging Earth’s surface and environment."
-    },
-    {
-      name: "Scientific Research",
-      label: "Scientific Research",
-      filter: "Scientific Research",
-      description: "Satellites dedicated to science experiments or data collection."
-    },
-    {
-      name: "Technology Demonstration",
-      label: "Technology Demonstration",
-      filter: "Technology Demonstration",
-      description: "Satellites testing new tech or prototypes in orbit."
-    },
-    {
-      name: "Satellite Servicing & Logistics",
-      label: "Satellite Servicing & Logistics",
-      filter: "Satellite Servicing & Logistics",
-      description: "Satellites handling refueling, repairs, or logistics in space."
-    },
-    {
-      name: "Deep Space Exploration",
-      label: "Deep Space Exploration",
-      filter: "Deep Space Exploration",
-      description: "Probes and craft going beyond Earth orbit (Moon, Mars, etc.)."
-    },
-    {
-      name: "Human Spaceflight",
-      label: "Human Spaceflight",
-      filter: "Human Spaceflight",
-      description: "Crewed missions or space stations with human occupants."
-    },
-    {
-      name: "Space Infrastructure",
-      label: "Space Infrastructure",
-      filter: "Space Infrastructure",
-      description: "Modules, habitats, or orbital stations supporting space operations."
-    },
-    {
-      name: "Space Debris",
-      label: "Space Debris",
-      filter: "Space Debris",
-      description: "Dead satellites or debris tracked in orbit."
-    },
-    {
-      name: "Rocket Body (Debris)",
-      label: "Rocket Body (Debris)",
-      filter: "Rocket Body (Debris)",
-      description: "Expended rocket stages and similar large debris."
-    },
-    {
-      name: "Starlink Constellation",
-      label: "Starlink Constellation",
-      filter: "Starlink Constellation",
-      description: "SpaceX internet constellation satellites."
-    },
-    {
-      name: "OneWeb Constellation",
-      label: "OneWeb Constellation",
-      filter: "OneWeb Constellation",
-      description: "OneWeb's broadband internet constellation."
-    },
-    {
-      name: "Iridium NEXT Constellation",
-      label: "Iridium NEXT Constellation",
-      filter: "Iridium NEXT Constellation",
-      description: "Iridium’s next-gen sat phone/data constellation."
-    },
-    {
-      name: "Unknown",
-      label: "Unknown",
-      filter: "Unknown",
-      description: "Satellites without a publicly known purpose."
-    }
-  ];
-
-  // ---------------------------
-  // FETCH Orbit Categories
-  // ---------------------------
+  // Server fetch driven by filter/page state. First load shows skeletons;
+  // subsequent re-fetches keep the previous rows on screen (dimmed) so the
+  // page doesn't flash empty between filter changes.
   useEffect(() => {
-    // When component mounts, fetch page=1 for each orbit category
-    categories.forEach(category => {
-      fetchCategoryData(category.name, 1);
-    });
-    // Also fetch page=1 for each object purpose
-    objectPurposes.forEach(p => {
-      fetchPurposeData(p.name, p.filter, 1);
-    });
-  }, []);
+    let cancelled = false;
+    if (rows.length === 0) setLoading(true);
+    else setRefreshing(true);
+    setError(null);
+    const filt = buildFilterParam(orbit, type) || null;
+    fetchSatellites(page, PAGE_SIZE, filt)
+      .then((data) => {
+        if (cancelled) return;
+        setRows(data?.satellites || []);
+        setTotal(data?.total || 0);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.message || "Failed to load catalog");
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+        setRefreshing(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orbit, type, page]);
 
-  const fetchCategoryData = async (category, page) => {
-    setLoadingCategories(prev => ({ ...prev, [category]: true }));
-    try {
-      const response = await axios.get(
-        `${API_BASE_URL}?page=${page}&limit=${limit}&filter=${encodeURIComponent(category)}`
-      );
-      if (!response.data || !Array.isArray(response.data.satellites)) {
-        throw new Error("Invalid API response");
-      }
-      setSatelliteData(prev => ({ ...prev, [category]: response.data.satellites }));
-      setTotalCounts(prev => ({ ...prev, [category]: response.data.total }));
-      setPageNumbers(prev => ({ ...prev, [category]: page }));
-    } catch (err) {
-      console.error("Error fetching satellites:", err);
-      setError("Failed to fetch satellite data.");
-    } finally {
-      setLoadingCategories(prev => ({ ...prev, [category]: false }));
+  // Suggestions — debounced 250ms.
+  useEffect(() => {
+    if (!query.trim()) {
+      setSuggestions([]);
+      return;
     }
-  };
-
-  // ---------------------------
-  // FETCH Object Purposes
-  // ---------------------------
-  const fetchPurposeData = async (purposeName, filterStr, page) => {
-    setLoadingPurposes(prev => ({ ...prev, [purposeName]: true }));
-
-    try {
-      const response = await axios.get(
-        `${API_BASE_URL}?page=${page}&limit=${limit}&filter=${encodeURIComponent(filterStr)}`
-      );
-      if (!response.data || !Array.isArray(response.data.satellites)) {
-        throw new Error("Invalid API response");
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(
+          `${SATELLITES_API}/suggest?query=${encodeURIComponent(query)}&limit=8`
+        );
+        if (!r.ok) throw new Error(r.statusText);
+        const { suggestions = [] } = await r.json();
+        setSuggestions(suggestions);
+        setHighlightedIdx(-1);
+      } catch {
+        setSuggestions([]);
       }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query]);
 
-      setPurposeData(prev => ({ ...prev, [purposeName]: response.data.satellites }));
-      setPurposeCounts(prev => ({ ...prev, [purposeName]: response.data.total }));
-      setPurposePageNumbers(prev => ({ ...prev, [purposeName]: page }));
-    } catch (err) {
-      console.error("Error fetching purposes:", err);
-      setError("Failed to fetch purpose-based data.");
-    } finally {
-      setLoadingPurposes(prev => ({ ...prev, [purposeName]: false }));
-    }
-  };
+  // Outside-click closes the suggestions dropdown.
+  useEffect(() => {
+    if (suggestions.length === 0) return;
+    const onDown = (e) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target) &&
+        inputRef.current &&
+        !inputRef.current.contains(e.target)
+      ) {
+        setSuggestions([]);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [suggestions]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  function setFilter(key, value) {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    next.set("page", "1"); // reset paging on filter change
+    setParams(next);
+  }
+  function setPage(p) {
+    const next = new URLSearchParams(params);
+    next.set("page", String(p));
+    setParams(next);
+  }
+  function resetFilters() {
+    setParams(new URLSearchParams());
+  }
+
+  function pickSuggestion(s) {
+    setSuggestions([]);
+    setQuery("");
+    navigate(`/satellites/${encodeURIComponent(s.name)}`);
+  }
 
   return (
-    <div className="p-6 bg-gray-900 min-h-screen pt-[120px] bg-gradient-to-b from-[#050716] via-[#1B1E3D] to-[#2E4867] text-white">
-   <div className="absolute w-full h-full overflow-hidden pointer-events-none">
-   <StarField numStars={150} />
+    <div className="min-h-screen relative pt-[110px] pb-16 bg-gradient-to-b from-[#050716] via-[#101635] to-[#1B2447] text-white overflow-hidden">
+      <SkeletonStyles />
+      <style>{`
+        @keyframes tk-fade-in {
+          from { opacity: 0; transform: translateY(4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes tk-progress {
+          0%   { transform: translateX(-100%); }
+          100% { transform: translateX(400%); }
+        }
+      `}</style>
+      {/* Top-of-page progress bar — visible during filter/page re-fetches
+          so the user knows something is happening, without blanking the
+          table. Hidden when idle (no layout shift). */}
+      <div
+        className={`fixed top-[70px] left-0 right-0 h-0.5 z-30 overflow-hidden transition-opacity ${
+          refreshing ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+      >
+        <div
+          className="h-full w-1/4 bg-gradient-to-r from-transparent via-teal-300 to-transparent"
+          style={{ animation: "tk-progress 1.4s ease-in-out infinite" }}
+        />
+      </div>
+      <div className="absolute inset-0 pointer-events-none">
+        <StarField numStars={150} />
+      </div>
+
+      <div className="relative max-w-screen-2xl mx-auto px-6 sm:px-12 lg:px-20">
+        {/* Hero */}
+        <div className="mb-8">
+          <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-teal-300/80 mb-2 flex items-center gap-2">
+            <SatIcon size={12} /> Catalog
+          </div>
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white">
+            Satellite Catalog
+          </h1>
+          <p className="mt-2 text-gray-400 max-w-3xl">
+            Filter the live fleet by orbit type and object class. Click any
+            row to inspect a satellite's orbit profile, TLE history, and
+            neighbors in similar orbits.
+          </p>
         </div>
-      {/* ========== Title & Intro ========== */}
-      <div className="w-full text-center mb-4">
-        <h1 className="text-4xl font-bold text-teal-300">Satellite Catalog</h1>
-        <p className="text-teal-400 text-lg">
-          Browse the active fleet by orbit and purpose, in real-time.
-        </p>
-      </div>
-      <div className="mb-8 text-center">
-        <p className="text-teal-200 text-sm italic">
-          Data updates every 15 minutes. All times in UTC.
-        </p>
-      </div>
 
-      {/* ========== 1) ORBIT CATEGORIES (LEO, MEO, etc.) ========== */}
-      <div className="grid grid-cols-2 gap-6">
-        {categories.map(category => {
-          const satellites = satelliteData[category.name] || [];
-          const page = pageNumbers[category.name] || 1;
-          const total = totalCounts[category.name] || 0;
-          const totalPages = Math.ceil(total / limit);
+        {/* Filter card */}
+        <div className="p-4 mb-6 bg-gray-900/85 backdrop-blur-xl border border-gray-700/60 rounded-xl">
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <FilterIcon size={14} className="text-teal-300" />
+            <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-gray-500">
+              Orbit
+            </span>
+            {ORBIT_OPTIONS.map((o) => {
+              const active = orbit === o.id;
+              return (
+                <button
+                  key={o.id || "any-orbit"}
+                  onClick={() => setFilter("orbit", o.id)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs rounded-full border transition-colors
+                              ${
+                                active
+                                  ? "bg-teal-500/20 border-teal-400/60 text-teal-100"
+                                  : "bg-gray-900/60 border-gray-700/60 text-gray-300 hover:bg-gray-800/80 hover:text-white"
+                              }`}
+                  title={o.range || ""}
+                >
+                  {o.id ? <Orbit size={11} /> : null}
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
 
-          return (
-            <div key={category.name} className="flex items-center gap-6">
-              {/* Visualization Box */}
-              <div className="trajectory-box w-[240px] h-[240px] bg-gray-800 rounded-lg flex justify-center items-center relative">
-                <h4 className="text-teal-200 text-xs absolute top-2">
-                  {category.label}
-                </h4>
-                <div className="core-sphere"></div>
-                <div className={`trajectory-orbit ${category.name.toLowerCase()}-path`}>
-                  <div className={`probe ${category.name.toLowerCase()}-unit`}></div>
-                </div>
-              </div>
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-gray-500 ml-5">
+              Type
+            </span>
+            {TYPE_OPTIONS.map((o) => {
+              const active = type === o.id;
+              return (
+                <button
+                  key={o.id || "any-type"}
+                  onClick={() => setFilter("type", o.id)}
+                  className={`px-3 py-1 text-xs rounded-full border transition-colors
+                              ${
+                                active
+                                  ? "bg-teal-500/20 border-teal-400/60 text-teal-100"
+                                  : "bg-gray-900/60 border-gray-700/60 text-gray-300 hover:bg-gray-800/80 hover:text-white"
+                              }`}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
 
-              {/* Satellite List & Pagination */}
-              <div className="bg-gray-800 p-5 rounded-lg shadow-lg flex flex-col justify-between min-h-[360px] w-full">
-                <h3 className="text-md font-semibold text-teal-300 mb-2 text-center">
-                  {category.label} ({total} total)
-                </h3>
-                <p className="text-teal-200 text-xs mb-2 text-center">
-                  {category.description}
-                </p>
-
-                {loadingCategories[category.name] ? (
-                  <div className="flex flex-grow items-center justify-center">
-                    <CircularProgress size={35} thickness={4} style={{ color: "#2dd4bf" }} />
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2">
-                    {satellites.map(sat => (
-                      <div
-                        key={sat.norad_number}
-                        className="p-2 bg-gray-700 rounded-md text-center text-xs border border-gray-600 hover:bg-gray-600"
+          {/* Search row */}
+          <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-gray-800/60">
+            <div className="relative flex-1 min-w-[240px]">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                <Search size={16} />
+              </span>
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="Jump to a satellite by name or NORAD…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowDown" && suggestions.length) {
+                    e.preventDefault();
+                    setHighlightedIdx((i) => (i + 1) % suggestions.length);
+                  } else if (e.key === "ArrowUp" && suggestions.length) {
+                    e.preventDefault();
+                    setHighlightedIdx((i) =>
+                      i <= 0 ? suggestions.length - 1 : i - 1
+                    );
+                  } else if (e.key === "Enter" && suggestions.length) {
+                    e.preventDefault();
+                    pickSuggestion(suggestions[Math.max(0, highlightedIdx)]);
+                  } else if (e.key === "Escape") {
+                    setSuggestions([]);
+                  }
+                }}
+                className="w-full pl-9 pr-9 py-2 text-sm text-white bg-gray-800/80
+                           placeholder:text-gray-500 rounded-lg border border-gray-700
+                           focus:outline-none focus:ring-2 focus:ring-teal-400/60"
+              />
+              {query && (
+                <button
+                  onClick={() => {
+                    setQuery("");
+                    setSuggestions([]);
+                  }}
+                  aria-label="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-white rounded hover:bg-gray-700"
+                >
+                  <X size={14} />
+                </button>
+              )}
+              {suggestions.length > 0 && (
+                <ul
+                  ref={dropdownRef}
+                  className="absolute z-50 mt-1 w-full max-h-72 overflow-y-auto
+                             bg-gray-900/95 backdrop-blur-md border border-gray-700
+                             rounded-lg shadow-xl divide-y divide-gray-800/60"
+                >
+                  {suggestions.map((s, idx) => {
+                    const isH = idx === highlightedIdx;
+                    return (
+                      <li
+                        key={s.norad_number}
+                        onMouseEnter={() => setHighlightedIdx(idx)}
+                        onClick={() => pickSuggestion(s)}
+                        className={`px-3 py-2 cursor-pointer text-sm flex items-center gap-2
+                                    ${isH ? "bg-teal-500/20 text-teal-50" : "hover:bg-gray-800"}`}
                       >
-                        <Link
-                          to={`/satellites/${encodeURIComponent(sat.name)}`}
-                          className="text-cyan-300 hover:text-cyan-200 font-medium"
-                        >
-                          {sat.name}
-                        </Link>
-                        <p className="text-teal-300 text-xs">NORAD: {sat.norad_number}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Pagination */}
-                <div className="flex justify-between items-center mt-4">
-                  <button
-                    onClick={() => fetchCategoryData(category.name, 1)}
-                    disabled={page === 1}
-                    className="px-3 py-1 text-sm bg-teal-700 hover:bg-teal-800 text-white rounded disabled:bg-gray-600 disabled:cursor-not-allowed"
-                  >
-                    First
-                  </button>
-                  <button
-                    onClick={() => fetchCategoryData(category.name, page - 1)}
-                    disabled={page === 1}
-                    className="px-3 py-1 text-sm bg-teal-700 hover:bg-teal-800 text-white rounded disabled:bg-gray-600 disabled:cursor-not-allowed"
-                  >
-                    Prev
-                  </button>
-
-                  <span className="text-teal-200 text-xs">
-                    Page {page} of {totalPages}
-                  </span>
-
-                  <button
-                    onClick={() => fetchCategoryData(category.name, page + 1)}
-                    disabled={page >= totalPages}
-                    className="px-3 py-1 text-sm bg-teal-700 hover:bg-teal-800 text-white rounded disabled:bg-gray-600 disabled:cursor-not-allowed"
-                  >
-                    Next
-                  </button>
-                  <button
-                    onClick={() => fetchCategoryData(category.name, totalPages)}
-                    disabled={page >= totalPages}
-                    className="px-3 py-1 text-sm bg-teal-700 hover:bg-teal-800 text-white rounded disabled:bg-gray-600 disabled:cursor-not-allowed"
-                  >
-                    Last
-                  </button>
-                </div>
-              </div>
+                        <SatIcon
+                          size={14}
+                          className={`shrink-0 ${isH ? "text-teal-300" : "text-gray-500"}`}
+                        />
+                        <span className="flex-1 truncate">{s.name}</span>
+                        <span className="text-[10px] font-mono text-gray-400">
+                          #{s.norad_number}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
-          );
-        })}
-      </div>
-
-
-      {/* ========== 2) OBJECT PURPOSES SECTION ========== */}
-      <div className="mt-12">
-      <div className="absolute w-full h-full overflow-hidden pointer-events-none">
-      <StarField numStars={150} />
+            <button
+              onClick={resetFilters}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium
+                         bg-gray-800/80 hover:bg-gray-700 text-gray-200
+                         border border-gray-700 rounded-md transition-colors"
+            >
+              <RotateCcw size={12} />
+              Reset
+            </button>
+          </div>
         </div>
-        <h2 className="text-2xl font-bold text-teal-300 text-center mb-6">
-          Satellite Purposes
-        </h2>
 
-        <div className="grid grid-cols-2 gap-6">
-          {objectPurposes.map(p => {
-            const sats = purposeData[p.name] || [];
-            const page = purposePageNumbers[p.name] || 1;
-            const total = purposeCounts[p.name] || 0;
-            const totalPages = Math.ceil(total / limit);
+        {/* Result count strip */}
+        <div className="flex items-center justify-between mb-2 text-xs text-gray-400">
+          <span>
+            {loading
+              ? "Loading…"
+              : `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(
+                  page * PAGE_SIZE,
+                  total
+                )} of ${total.toLocaleString()}`}
+          </span>
+          {error ? <span className="text-rose-300">Error: {error}</span> : null}
+        </div>
 
-            return (
-              <div key={p.name} className="bg-gray-800 p-5 rounded-lg shadow-lg flex flex-col justify-between min-h-[360px]">
-                <h3 className="text-md font-semibold text-teal-300 mb-2 text-center">
-                  {p.label} ({total} total)
-                </h3>
-                <p className="text-teal-200 text-xs mb-2 text-center">
-                  {p.description}
-                </p>
-
-                {/* Show Spinner or Satellite Items */}
-                {loadingPurposes[p.name] ? (
-                  <div className="flex flex-grow items-center justify-center">
-                    <CircularProgress size={35} thickness={4} style={{ color: "#2dd4bf" }} />
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2">
-                    {sats.map(sat => (
-                      <div
-                        key={sat.norad_number}
-                        className="p-2 bg-gray-700 rounded-md text-center text-xs border border-gray-600 hover:bg-gray-600"
-                      >
-                        <Link
-                          to={`/satellites/${encodeURIComponent(sat.name)}`}
-                          className="text-cyan-300 hover:text-cyan-200 font-medium"
+        {/* Catalog table */}
+        <div
+          className={`relative bg-gray-900/85 backdrop-blur-xl border border-gray-700/60 rounded-xl overflow-hidden transition-opacity ${
+            refreshing ? "opacity-70" : "opacity-100"
+          }`}
+        >
+          {/* Subtle teal accent gradient at the top for visual richness */}
+          <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-teal-400/40 to-transparent" />
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-testid="catalog-table">
+              <thead className="bg-gray-800/50 text-[10px] font-mono uppercase tracking-[0.2em] text-gray-400 sticky top-0">
+                <tr>
+                  <th className="text-left px-4 py-2.5">Name</th>
+                  <th className="text-left px-4 py-2.5">NORAD</th>
+                  <th className="text-left px-4 py-2.5">Country</th>
+                  <th className="text-left px-4 py-2.5">Orbit</th>
+                  <th className="text-left px-4 py-2.5">Type</th>
+                  <th className="text-left px-4 py-2.5">Launched</th>
+                  <th className="text-left px-4 py-2.5">Status</th>
+                  <th className="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading
+                  ? Array.from({ length: 8 }).map((_, i) => (
+                      <tr key={i} className="border-t border-gray-800/60">
+                        <td className="px-4 py-3"><ShimmerBar className="h-3 w-48" /></td>
+                        <td className="px-4 py-3"><ShimmerBar className="h-3 w-16" /></td>
+                        <td className="px-4 py-3"><ShimmerBar className="h-3 w-10" /></td>
+                        <td className="px-4 py-3"><ShimmerBar className="h-3 w-12" /></td>
+                        <td className="px-4 py-3"><ShimmerBar className="h-3 w-20" /></td>
+                        <td className="px-4 py-3"><ShimmerBar className="h-3 w-24" /></td>
+                        <td className="px-4 py-3"><ShimmerBar className="h-5 w-16 rounded-full" /></td>
+                        <td className="px-4 py-3"><ShimmerBar className="h-3 w-3" /></td>
+                      </tr>
+                    ))
+                  : rows.length === 0
+                  ? (
+                    <tr>
+                      <td colSpan={8} className="text-center text-gray-500 py-12">
+                        No satellites match the current filter.
+                      </td>
+                    </tr>
+                  )
+                  : rows.map((sat, idx) => {
+                      const isActive = sat.active_status === "Active";
+                      const orbitDot = ORBIT_DOT[sat.orbit_type] || "bg-gray-500";
+                      return (
+                        <tr
+                          key={sat.norad_number}
+                          data-testid="catalog-row"
+                          // Stagger reveal — pure CSS, no Framer Motion
+                          // overhead per row. Disabled during refreshing
+                          // so already-visible rows don't replay the
+                          // animation on every filter change.
+                          style={
+                            !refreshing
+                              ? {
+                                  animation: "tk-fade-in 320ms ease-out both",
+                                  animationDelay: `${Math.min(idx, 16) * 18}ms`,
+                                }
+                              : undefined
+                          }
+                          className="group border-t border-gray-800/60 hover:bg-teal-500/5 transition-colors cursor-pointer"
+                          onClick={() => navigate(`/satellites/${encodeURIComponent(sat.name)}`)}
                         >
-                          {sat.name}
-                        </Link>
-                        <p className="text-teal-300 text-xs">
-                          NORAD: {sat.norad_number}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                          <td className="px-4 py-2.5 text-gray-100 font-medium truncate max-w-[18rem]">
+                            <span className="group-hover:text-teal-100 transition-colors">
+                              {sat.name}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-gray-300 font-mono text-xs">
+                            #{sat.norad_number}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span className="inline-flex items-center gap-1.5 text-sm text-gray-200">
+                              <span className="text-base leading-none">{getCountryFlag(sat.country)}</span>
+                              <span className="text-xs text-gray-400 font-mono">{sat.country || "—"}</span>
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            {sat.orbit_type ? (
+                              <span className="inline-flex items-center gap-1.5 text-xs text-gray-200">
+                                <span className={`w-1.5 h-1.5 rounded-full ${orbitDot} shadow-[0_0_6px_currentColor]`} />
+                                {sat.orbit_type}
+                              </span>
+                            ) : (
+                              <span className="text-gray-500 text-xs">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 text-gray-300 text-xs">
+                            {sat.object_type || "—"}
+                          </td>
+                          <td className="px-4 py-2.5 text-gray-400 text-xs">
+                            {sat.launch_date
+                              ? new Date(sat.launch_date).toISOString().slice(0, 10)
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-medium ${statusClasses(
+                                sat.active_status
+                              )}`}
+                            >
+                              {/* Pulsing dot for live/active satellites */}
+                              <span className="relative flex w-1.5 h-1.5">
+                                {isActive ? (
+                                  <span className="absolute inset-0 rounded-full bg-emerald-400 opacity-75 animate-ping" />
+                                ) : null}
+                                <span
+                                  className={`relative w-1.5 h-1.5 rounded-full ${
+                                    isActive
+                                      ? "bg-emerald-400"
+                                      : sat.active_status === "Decaying"
+                                      ? "bg-amber-400"
+                                      : "bg-slate-400"
+                                  }`}
+                                />
+                              </span>
+                              {sat.active_status || "Unknown"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-gray-600 group-hover:text-teal-300 transition-all">
+                            <ChevronRight
+                              size={14}
+                              className="group-hover:translate-x-0.5 transition-transform"
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-                {/* Pagination for each purpose */}
-                <div className="flex justify-between items-center mt-4">
-                  <button
-                    onClick={() => fetchPurposeData(p.name, p.filter, 1)}
-                    disabled={page === 1}
-                    className="px-3 py-1 text-sm bg-teal-700 hover:bg-teal-800 text-white rounded disabled:bg-gray-600 disabled:cursor-not-allowed"
-                  >
-                    First
-                  </button>
-                  <button
-                    onClick={() => fetchPurposeData(p.name, p.filter, page - 1)}
-                    disabled={page === 1}
-                    className="px-3 py-1 text-sm bg-teal-700 hover:bg-teal-800 text-white rounded disabled:bg-gray-600 disabled:cursor-not-allowed"
-                  >
-                    Prev
-                  </button>
-
-                  <span className="text-teal-200 text-xs">
-                    Page {page} of {totalPages}
-                  </span>
-
-                  <button
-                    onClick={() => fetchPurposeData(p.name, p.filter, page + 1)}
-                    disabled={page >= totalPages}
-                    className="px-3 py-1 text-sm bg-teal-700 hover:bg-teal-800 text-white rounded disabled:bg-gray-600 disabled:cursor-not-allowed"
-                  >
-                    Next
-                  </button>
-                  <button
-                    onClick={() => fetchPurposeData(p.name, p.filter, totalPages)}
-                    disabled={page >= totalPages}
-                    className="px-3 py-1 text-sm bg-teal-700 hover:bg-teal-800 text-white rounded disabled:bg-gray-600 disabled:cursor-not-allowed"
-                  >
-                    Last
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+        {/* Pagination */}
+        <div className="mt-4 flex items-center justify-between">
+          <span className="text-[11px] text-gray-400">
+            Page <span className="text-gray-200 font-medium">{page}</span>
+            {" / "}
+            {totalPages.toLocaleString()}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(1)}
+              disabled={page === 1 || loading}
+              aria-label="First page"
+              className="p-1.5 rounded-md text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronsLeft size={16} />
+            </button>
+            <button
+              onClick={() => setPage(Math.max(1, page - 1))}
+              disabled={page === 1 || loading}
+              aria-label="Previous page"
+              className="p-1.5 rounded-md text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              onClick={() => setPage(Math.min(totalPages, page + 1))}
+              disabled={page >= totalPages || loading}
+              aria-label="Next page"
+              className="p-1.5 rounded-md text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronRight size={16} />
+            </button>
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={page >= totalPages || loading}
+              aria-label="Last page"
+              className="p-1.5 rounded-md text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronsRight size={16} />
+            </button>
+          </div>
         </div>
       </div>
-
-      {/* Error message (if any) */}
-      {error && (
-        <div className="text-red-400 text-center mt-4">
-          {error}
-        </div>
-      )}
     </div>
   );
 }

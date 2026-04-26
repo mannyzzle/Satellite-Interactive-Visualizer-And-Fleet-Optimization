@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { ChevronDown, Menu } from "lucide-react";
 
 // Custom hook to detect clicks outside of a referenced element
 function useOnClickOutside(ref, handler) {
@@ -78,11 +79,15 @@ export default function Navbar() {
           <div className="relative" ref={resourcesRef}>
             <button
               onClick={() => setIsResourcesOpen((prev) => !prev)}
-              className="hover:text-teal-300 transition-colors duration-200 focus:outline-none"
+              className="hover:text-teal-300 transition-colors duration-200 focus:outline-none flex items-center gap-1"
               aria-expanded={isResourcesOpen}
               aria-haspopup="true"
             >
-              Resources ⏷
+              Resources
+              <ChevronDown
+                size={14}
+                className={`transition-transform duration-200 ${isResourcesOpen ? "rotate-180" : ""}`}
+              />
             </button>
             {isResourcesOpen && (
               <div className="absolute right-0 mt-2 w-64 bg-gray-800 text-white rounded-md shadow-lg border border-gray-700 transition transform origin-top-right">
@@ -109,12 +114,12 @@ export default function Navbar() {
         </div>
 
         {/* Mobile Menu Toggle */}
-        <button 
-          className="md:hidden text-white text-2xl ml-4 focus:outline-none"
+        <button
+          className="md:hidden text-white ml-4 focus:outline-none p-1"
           onClick={() => setIsMenuOpen((prev) => !prev)}
           aria-label="Toggle mobile menu"
         >
-          ☰
+          <Menu size={22} />
         </button>
       </div>
 
@@ -126,13 +131,17 @@ export default function Navbar() {
           <Link to="/launches" className="block px-6 py-2 hover:bg-gray-700 transition-colors duration-200">Launches</Link>
           <Link to="/tracking" className="block px-6 py-2 hover:bg-gray-700 transition-colors duration-200">Tracking</Link>
           <Link to="/about" className="block px-6 py-2 hover:bg-gray-700 transition-colors duration-200">About</Link>
-          <button 
-            onClick={() => setIsResourcesOpen((prev) => !prev)} 
-            className="block w-full px-6 py-2 hover:bg-gray-700 transition-colors duration-200 text-left focus:outline-none"
+          <button
+            onClick={() => setIsResourcesOpen((prev) => !prev)}
+            className="w-full px-6 py-2 hover:bg-gray-700 transition-colors duration-200 text-left focus:outline-none flex items-center gap-1"
             aria-expanded={isResourcesOpen}
             aria-haspopup="true"
           >
-            Resources ⏷
+            Resources
+            <ChevronDown
+              size={14}
+              className={`transition-transform duration-200 ${isResourcesOpen ? "rotate-180" : ""}`}
+            />
           </button>
           {isResourcesOpen && (
             <div className="w-full bg-gray-700 rounded-md text-center py-2 border border-gray-600 transition transform origin-top">

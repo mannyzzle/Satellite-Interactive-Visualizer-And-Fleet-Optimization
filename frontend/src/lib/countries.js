@@ -1,0 +1,106 @@
+// Country code → flag emoji + display name. Codes match Space-Track's
+// `country` field (loose ISO-ish — sometimes 2-letter, sometimes 3-letter,
+// sometimes org acronyms like "ESA" / "NATO" / "DEB"). The list lived
+// inline in Home.jsx; lifted here so SatelliteList + SatelliteDetail can
+// reuse it without dragging the Home module into their bundles.
+export const countryMapping = {
+  // Major space-faring nations
+  US: { name: "USA", flag: "🇺🇸" },
+  PRC: { name: "China", flag: "🇨🇳" },
+  UK: { name: "United Kingdom", flag: "🇬🇧" },
+  CIS: { name: "CIS (Former USSR)", flag: "🇷🇺" },
+  JPN: { name: "Japan", flag: "🇯🇵" },
+  IND: { name: "India", flag: "🇮🇳" },
+  ESA: { name: "European Space Agency", flag: "🇪🇺" },
+  FR: { name: "France", flag: "🇫🇷" },
+  GER: { name: "Germany", flag: "🇩🇪" },
+  SKOR: { name: "South Korea", flag: "🇰🇷" },
+  IT: { name: "Italy", flag: "🇮🇹" },
+  SPN: { name: "Spain", flag: "🇪🇸" },
+  RUS: { name: "Russia", flag: "🇷🇺" },
+  UKR: { name: "Ukraine", flag: "🇺🇦" },
+  BRAZ: { name: "Brazil", flag: "🇧🇷" },
+  CAN: { name: "Canada", flag: "🇨🇦" },
+  AUS: { name: "Australia", flag: "🇦🇺" },
+
+  // Communications & global operators
+  SES: { name: "SES (Luxembourg)", flag: "🇱🇺" },
+  O3B: { name: "O3B Networks", flag: "🛰️" },
+  GLOB: { name: "Globalstar", flag: "🌎" },
+  IRID: { name: "Iridium Communications", flag: "🛰️" },
+  ITSO: { name: "INTELSAT", flag: "🛰️" },
+  INMA: { name: "INMARSAT", flag: "🛰️" },
+  EUME: { name: "EUMETSAT", flag: "🇪🇺" },
+  EUTE: { name: "EUTELSAT", flag: "🇪🇺" },
+
+  // Middle East & Africa
+  UAE: { name: "United Arab Emirates", flag: "🇦🇪" },
+  ISRA: { name: "Israel", flag: "🇮🇱" },
+  IRAN: { name: "Iran", flag: "🇮🇷" },
+  SAFR: { name: "South Africa", flag: "🇿🇦" },
+  EGYP: { name: "Egypt", flag: "🇪🇬" },
+  TURK: { name: "Turkey", flag: "🇹🇷" },
+  KAZ: { name: "Kazakhstan", flag: "🇰🇿" },
+  QAT: { name: "Qatar", flag: "🇶🇦" },
+  PAKI: { name: "Pakistan", flag: "🇵🇰" },
+  KEN: { name: "Kenya", flag: "🇰🇪" },
+
+  // Americas
+  ARGN: { name: "Argentina", flag: "🇦🇷" },
+  MEX: { name: "Mexico", flag: "🇲🇽" },
+  CHLE: { name: "Chile", flag: "🇨🇱" },
+  PER: { name: "Peru", flag: "🇵🇪" },
+  BOL: { name: "Bolivia", flag: "🇧🇴" },
+  URY: { name: "Uruguay", flag: "🇺🇾" },
+  VENZ: { name: "Venezuela", flag: "🇻🇪" },
+  COL: { name: "Colombia", flag: "🇨🇴" },
+  NIC: { name: "Nicaragua", flag: "🇳🇮" },
+
+  // Europe
+  BEL: { name: "Belgium", flag: "🇧🇪" },
+  NOR: { name: "Norway", flag: "🇳🇴" },
+  POL: { name: "Poland", flag: "🇵🇱" },
+  HUN: { name: "Hungary", flag: "🇭🇺" },
+  SING: { name: "Singapore", flag: "🇸🇬" },
+  BELA: { name: "Belarus", flag: "🇧🇾" },
+  NETH: { name: "Netherlands", flag: "🇳🇱" },
+  CZE: { name: "Czech Republic", flag: "🇨🇿" },
+  SVK: { name: "Slovakia", flag: "🇸🇰" },
+  AUT: { name: "Austria", flag: "🇦🇹" },
+  SWTZ: { name: "Switzerland", flag: "🇨🇭" },
+  LUXE: { name: "Luxembourg", flag: "🇱🇺" },
+  DEN: { name: "Denmark", flag: "🇩🇰" },
+  SWE: { name: "Sweden", flag: "🇸🇪" },
+  FIN: { name: "Finland", flag: "🇫🇮" },
+  ROM: { name: "Romania", flag: "🇷🇴" },
+
+  // Asia-Pacific
+  TWN: { name: "Taiwan", flag: "🇹🇼" },
+  INDO: { name: "Indonesia", flag: "🇮🇩" },
+  THAI: { name: "Thailand", flag: "🇹🇭" },
+  BGD: { name: "Bangladesh", flag: "🇧🇩" },
+  PHL: { name: "Philippines", flag: "🇵🇭" },
+  NZ: { name: "New Zealand", flag: "🇳🇿" },
+  MYA: { name: "Myanmar", flag: "🇲🇲" },
+  LKA: { name: "Sri Lanka", flag: "🇱🇰" },
+  MALA: { name: "Malaysia", flag: "🇲🇾" },
+  VTNM: { name: "Vietnam", flag: "🇻🇳" },
+  MNG: { name: "Mongolia", flag: "🇲🇳" },
+  NPL: { name: "Nepal", flag: "🇳🇵" },
+
+  // International orgs & space stations
+  ISS: { name: "ISS (International Space Station)", flag: "🚀" },
+  AB: { name: "Arab Satellite Communications Organization", flag: "🌍" },
+  IM: { name: "International Maritime Satellite Organization", flag: "🌊" },
+  NATO: { name: "North Atlantic Treaty Organization", flag: "🛡️" },
+  RASC: { name: "Regional African Satellite Communications Org", flag: "🌍" },
+  UNKN: { name: "Unknown", flag: "❓" },
+
+  // Debris & misc
+  TBD: { name: "To Be Determined / Unknown", flag: "🛰️" },
+  DEB: { name: "Space Debris", flag: "🗑️" },
+  RB: { name: "Rocket Body (Debris)", flag: "🚀" },
+};
+
+export const getCountryFlag = (code) => countryMapping[code]?.flag || "🌍";
+export const getCountryName = (code) => countryMapping[code]?.name || code || "Unknown";

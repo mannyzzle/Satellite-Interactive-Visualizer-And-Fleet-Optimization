@@ -178,19 +178,57 @@ const SatelliteCounter = () => {
                   isAnimationActive={true}
                   animationDuration={1200}
                 />
+                {/* Custom tooltip content. Recharts' default label for
+                    RadialBar is the row index (0,1,2…) which renders as a
+                    big black "0" — useless. Roll our own panel so we control
+                    every color and avoid inherited dark text. */}
                 <Tooltip
                   cursor={false}
-                  contentStyle={{
-                    background: "rgba(8, 16, 28, 0.92)",
-                    border: "1px solid rgba(134, 238, 216, 0.4)",
-                    borderRadius: 6,
-                    color: "#E5F4F1",
-                    fontSize: 13,
+                  wrapperStyle={{ outline: "none" }}
+                  content={({ active, payload }) => {
+                    if (!active || !payload || !payload.length) return null;
+                    const d = payload[0].payload;
+                    return (
+                      <div
+                        style={{
+                          background: "rgba(8, 16, 28, 0.95)",
+                          border: "1px solid rgba(134, 238, 216, 0.4)",
+                          borderRadius: 6,
+                          padding: "6px 10px",
+                          fontSize: 13,
+                          color: "#E5F4F1",
+                          boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            fontWeight: 600,
+                            color: "#E5F4F1",
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: 2,
+                              background: d.fill,
+                              display: "inline-block",
+                            }}
+                          />
+                          {d.name}
+                        </div>
+                        <div style={{ marginTop: 2, color: "#9FCBC2" }}>
+                          {d.count.toLocaleString()}{" "}
+                          <span style={{ color: "#7A9C97" }}>
+                            ({d.pct.toFixed(1)}%)
+                          </span>
+                        </div>
+                      </div>
+                    );
                   }}
-                  formatter={(value, _name, item) => [
-                    `${value.toLocaleString()} (${item.payload.pct.toFixed(1)}%)`,
-                    item.payload.name,
-                  ]}
                 />
               </RadialBarChart>
             </ResponsiveContainer>

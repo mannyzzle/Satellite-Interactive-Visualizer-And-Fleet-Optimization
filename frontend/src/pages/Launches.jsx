@@ -1,13 +1,55 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { StarField } from "./Home";
+import { Rocket, MapPin, Video, Loader2, AlertCircle } from "lucide-react";
+import { StarField } from "../components/StarField";
 import { LAUNCHES_API } from "../config";
+
+// Leaf component: each card owns its own 1Hz tick. Avoids re-rendering the
+// parent list (and all its motion.divs) once per second — the previous
+// pattern called setCountdowns({...}) on the parent every 1000ms. Exported
+// for unit testing.
+export function Countdown({ launchDate }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!launchDate) {
+      if (ref.current) ref.current.textContent = "🚀 Launched!";
+      return;
+    }
+    const target = new Date(launchDate).getTime();
+    const tick = () => {
+      const diff = target - Date.now();
+      if (diff <= 0) {
+        if (ref.current) ref.current.textContent = "🚀 Launched!";
+        return false;
+      }
+      const days = Math.floor(diff / 86_400_000);
+      const hours = Math.floor((diff % 86_400_000) / 3_600_000);
+      const minutes = Math.floor((diff % 3_600_000) / 60_000);
+      const seconds = Math.floor((diff % 60_000) / 1000);
+      if (ref.current) {
+        ref.current.textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+      }
+      return true;
+    };
+    tick();
+    const id = setInterval(() => {
+      if (!tick()) clearInterval(id);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [launchDate]);
+
+  return (
+    <div
+      ref={ref}
+      className="text-amber-300 text-3xl md:text-2xl font-semibold mt-2 tracking-wider tabular-nums"
+    />
+  );
+}
 
 export default function Launches() {
   const [launches, setLaunches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [countdowns, setCountdowns] = useState({});
 
   useEffect(() => {
     async function fetchLaunches() {
@@ -48,38 +90,20 @@ export default function Launches() {
     fetchLaunches();
   }, []);
 
-  // Countdown Timer
-  const calculateCountdown = (launchDate) => {
-    if (!launchDate) return "🚀 Launched!";
-    const launchTime = new Date(launchDate).getTime();
-    const now = new Date().getTime();
-    const timeDiff = launchTime - now;
-
-    if (timeDiff <= 0) return "🚀 Launched!";
-
-    const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
-
-    return `${days}d ${hours}h ${minutes}m ${seconds}s`;
-  };
-
-  // Refresh countdown every second
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCountdowns((prevCountdowns) =>
-        launches.reduce((acc, launch) => {
-          acc[launch.id] = calculateCountdown(launch.launch_date);
-          return acc;
-        }, {})
-      );
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [launches]);
-
-  if (loading) return <div className="p-4 text-center text-gray-300">⏳ Loading upcoming launches...</div>;
-  if (error) return <div className="p-4 text-center text-red-400">❌ {error}</div>;
+  if (loading)
+    return (
+      <div className="p-6 flex items-center justify-center gap-2 text-gray-300">
+        <Loader2 size={18} className="animate-spin text-teal-300" />
+        Loading upcoming launches…
+      </div>
+    );
+  if (error)
+    return (
+      <div className="p-6 flex items-center justify-center gap-2 text-red-400">
+        <AlertCircle size={18} />
+        {error}
+      </div>
+    );
   if (!launches.length) return <div className="p-4 text-center text-gray-400">No upcoming launches found.</div>;
 
   return (
@@ -114,33 +138,32 @@ export default function Launches() {
             <h2 className="text-xl font-semibold text-teal-300 mt-3">{launch.name}</h2>
             <p className="text-gray-400 text-sm mt-1">{launch.mission_description || "No description available"}</p>
 
-            <div className="mt-3 text-gray-300 text-sm">
-              🚀 <span className="font-medium text-[#86EED8]">{launch.rocket_name}</span>
+            <div className="mt-3 flex items-center gap-1.5 text-sm text-gray-300">
+              <Rocket size={14} className="text-[#86EED8] shrink-0" />
+              <span className="font-medium text-[#86EED8]">{launch.rocket_name}</span>
             </div>
-            <div className="text-gray-400 text-sm">
-              📍 <span className="font-medium">{launch.pad_name || "Unknown pad"}</span>
+            <div className="flex items-center gap-1.5 text-sm text-gray-400">
+              <MapPin size={14} className="shrink-0" />
+              <span className="font-medium">{launch.pad_name || "Unknown pad"}</span>
             </div>
 
-            {/* 🕒 Launch Date & Countdown */}
             <div className="text-gray-300 text-sm mt-2">
               <span className="font-medium">{new Date(launch.launch_date).toUTCString()}</span>
             </div>
 
-            {/* ⏳ Countdown — soft amber on dark UI; big and tabular so the
-                seconds field doesn't jiggle as digits change width. */}
-            <div className="text-amber-300 text-3xl md:text-2xl font-semibold mt-2 tracking-wider tabular-nums">
-              {countdowns[launch.id]}
-            </div>
+            {/* Per-card countdown component owns its own 1Hz tick. Big +
+                tabular-nums so digit-width changes don't jiggle. */}
+            <Countdown launchDate={launch.launch_date} />
 
-            {/* 🎥 Watch Live Button */}
             {launch.video_url && (
               <a
                 href={launch.video_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-4 text-blue-400 hover:text-blue-300 text-sm underline"
+                className="mt-4 inline-flex items-center gap-1.5 text-blue-400 hover:text-blue-300 text-sm"
               >
-                🎥 Watch Launch
+                <Video size={14} />
+                <span className="underline">Watch Launch</span>
               </a>
             )}
           </motion.div>

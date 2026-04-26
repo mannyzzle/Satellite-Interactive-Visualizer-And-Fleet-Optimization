@@ -53,34 +53,43 @@ test.describe("Stress: home page rendering", () => {
 });
 
 test.describe("Stress: tracking page memory stability", () => {
-  test("60s of single-satellite propagation doesn't grow heap > 50%", async ({ page, browserName }) => {
+  test("60s of CDM-table interaction doesn't grow heap > 50%", async ({ page, browserName }) => {
     test.skip(
       browserName !== "chromium",
       "performance.memory is a Chromium-only API"
     );
 
+    // Tracking used to drive a propagation animation loop. After the
+    // Mission Control redesign there is no animation loop on this page —
+    // the memory regression we want to catch now is on table-row → detail
+    // panel cycling (which rehydrates the detail card on every click and
+    // could leak listeners/handlers if mishandled).
     await visit(page);
     await page.locator("a:has-text('Tracking')").first().click({ force: true });
+    await expect(page).toHaveURL(/\/tracking$/);
     await expect(
-      page.getByText(/Predictive Analytics for Collision Avoidance/i)
-    ).toBeVisible({ timeout: 30_000 });
+      page.getByText(/Conjunction Risk Dashboard/i)
+    ).toBeVisible({ timeout: 45_000 });
 
-    // Pick the first suggestion to start propagation
-    const search = page.getByPlaceholder(/STARLINK-3000 or 76000/i);
-    await search.fill("ISS");
-    const firstSuggestion = page.locator("text=/ISS \\(ZARYA\\)/i").first();
-    if (await firstSuggestion.isVisible().catch(() => false)) {
-      await firstSuggestion.click().catch(() => {});
-    }
+    const rows = page.locator('[data-testid="cdm-row"]');
+    await expect.poll(() => rows.count(), { timeout: 30_000 }).toBeGreaterThan(0);
 
-    // Baseline heap
     const baseline = await page.evaluate(
       () => performance.memory && performance.memory.usedJSHeapSize
     );
     if (!baseline) test.skip(true, "performance.memory unavailable");
 
-    // Run for 60 s while the propagation loop drives renders
-    await page.waitForTimeout(60_000);
+    // Cycle row selection for ~60s.
+    const t0 = Date.now();
+    let i = 0;
+    while (Date.now() - t0 < 60_000) {
+      const count = await rows.count();
+      if (count > 0) {
+        await rows.nth(i % count).click({ force: true }).catch(() => {});
+      }
+      i++;
+      await page.waitForTimeout(2_500);
+    }
 
     const final = await page.evaluate(() => performance.memory.usedJSHeapSize);
     const growth = (final - baseline) / baseline;

@@ -1,5 +1,5 @@
 import { TypeAnimation } from "react-type-animation";
-import { StarField } from "./Home";
+import { StarField } from "../components/StarField";
 
 export default function About() {
   return (

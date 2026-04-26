@@ -1,39 +1,55 @@
-// Tracking page e2e — exercises real-time satellite focus + CDM panel.
-// Tests the *predictive collision avoidance* value prop end-to-end.
+// Tracking page e2e — exercises the Mission Control / CDM analytics UI.
+//
+// The page used to be a single-sat propagation view. After redesign it's a
+// conjunction-events dashboard. These tests check:
+//   1. Hero loads + at least one populated KPI tile.
+//   2. The CDM table renders rows; clicking one populates the detail panel.
 import { test, expect } from "@playwright/test";
 import { visit } from "./helpers";
 
 async function navigateToTracking(page) {
   await visit(page);
-  // Click the real navbar link so React Router handles the route change.
-  // There are two "Tracking" links on the page (desktop + mobile menu).
-  // Three.js canvas can overlay the navbar; force click to bypass.
   await page.locator("a:has-text('Tracking')").first().click({ force: true });
   await expect(page).toHaveURL(/\/tracking$/);
 }
 
-test.describe("Tracking page", () => {
-  test("renders Predictive Analytics title + Active CDM Events", async ({ page }) => {
+test.describe("Tracking page (Mission Control)", () => {
+  test("renders the hero + KPI tiles + risk timeline", async ({ page }) => {
     await navigateToTracking(page);
-    // Title is animated via TypeAnimation — match the leading phrase only
-    await expect(
-      page.getByText(/Predictive Analytics/i).first()
-    ).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(/Active CDM Events/i)).toBeVisible();
 
-    // At least one CDM event card should be rendered, with TCA + range visible
-    await expect(page.getByText(/CDM ID:/i).first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(/Time of Closest Approach:/i).first()).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /Conjunction Risk Dashboard/i })
+    ).toBeVisible({ timeout: 30_000 });
+
+    // The risk-timeline section header renders before the data loads (the
+    // chart area is replaced by an animated skeleton).
+    await expect(page.getByText(/Risk timeline/i)).toBeVisible({
+      timeout: 30_000,
+    });
+
+    // KPI tiles render their *labels* only once the CDM payload arrives —
+    // before that they're shimmer skeletons. The live backend is slow with
+    // 40k+ events, so allow generous time.
+    await expect(page.getByText(/Active CDMs/i).first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByText(/Top probability/i).first()).toBeVisible();
+    await expect(page.getByText(/Most imminent TCA/i).first()).toBeVisible();
   });
 
-  test("typing into the search box surfaces autocomplete suggestions", async ({ page }) => {
+  test("CDM table rows populate the detail panel on click", async ({ page }) => {
     await navigateToTracking(page);
 
-    const search = page.getByPlaceholder(/STARLINK-3000 or 76000/i);
-    await expect(search).toBeVisible({ timeout: 30_000 });
-    await search.fill("ISS");
+    const rows = page.locator('[data-testid="cdm-row"]');
+    // Wait for the table to settle with real data from the live backend.
+    await expect.poll(() => rows.count(), { timeout: 30_000 }).toBeGreaterThan(0);
 
-    // At least one autocomplete row containing "ISS"
-    await expect(page.locator("text=/ISS/i").first()).toBeVisible({ timeout: 15_000 });
+    await rows.first().click();
+
+    const detail = page.locator('[data-testid="cdm-detail"]');
+    await expect(detail.getByText(/Time of closest approach/i)).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(detail.getByText(/Collision probability/i)).toBeVisible();
   });
 });
