@@ -30,3 +30,20 @@ def fetch_cdm_events():
 
     return {"cdm_events": cdm_events}
 
+
+@router.get("/{cdm_id}")
+def fetch_cdm_event(cdm_id: str):
+    """Fetch a single CDM event by id."""
+    from fastapi import HTTPException
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT * FROM cdm_events WHERE cdm_id = %s LIMIT 1", (cdm_id,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="CDM event not found")
+        return {"cdm_event": row}
+    finally:
+        cursor.close()
+        conn.close()
+

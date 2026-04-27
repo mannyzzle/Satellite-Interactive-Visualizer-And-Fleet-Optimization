@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { SATELLITES_API } from "../config";
 import { StarField } from "../components/StarField";
+import NLSearchBar from "../components/NLSearchBar";
 
 // Wrap the case-insensitive substring of `query` inside `text` with a
 // highlighted span. Returns the original string when there is no match or no
@@ -2068,6 +2069,14 @@ return (
               className="px-3 pb-3 pt-1 space-y-3 max-h-[42vh] overflow-y-auto scrollbar-hide"
               style={{ touchAction: "none", overscrollBehavior: "contain" }}
             >
+              {/* AI search — natural language → structured filter */}
+              <section>
+                <h4 className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 px-1">
+                  Ask the catalog
+                </h4>
+                <NLSearchBar onSelectSatellite={(sat) => focusOnSatellite(sat)} />
+              </section>
+
               {/* Categories */}
               <section>
                 <h4 className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 px-1">

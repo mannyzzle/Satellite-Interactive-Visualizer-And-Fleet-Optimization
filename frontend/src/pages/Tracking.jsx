@@ -35,6 +35,7 @@ import { StarField } from "../components/StarField";
 import { KpiTile, KpiSkeleton } from "../components/KpiTile";
 import { ShimmerBar, SkeletonStyles } from "../components/Skeleton";
 import { CDM_API } from "../config";
+import CDMBriefingCard from "../components/CDMBriefingCard";
 
 // Filter chips applied to the timeline + table. Single-active-filter model
 // to mirror the Home sidebar UX.
@@ -566,6 +567,7 @@ export default function Tracking() {
               })}
             </div>
           )}
+          {selected ? <CDMBriefingCard cdmId={selected.cdm_id} /> : null}
         </div>
 
         {/* Footer attribution */}

@@ -21,6 +21,7 @@ import { fetchSatellites } from "../api/satelliteService";
 import { SATELLITES_API } from "../config";
 import { StarField } from "../components/StarField";
 import { ShimmerBar, SkeletonStyles } from "../components/Skeleton";
+import NLSearchBar from "../components/NLSearchBar";
 import { getCountryFlag, getCountryName } from "../lib/countries";
 
 const PAGE_SIZE = 50;
@@ -279,6 +280,15 @@ export default function SatelliteList() {
                 </button>
               );
             })}
+          </div>
+
+          {/* AI catalog search — natural language → structured filter */}
+          <div className="pt-3 border-t border-gray-800/60">
+            <NLSearchBar
+              onSelectSatellite={(sat) =>
+                navigate(`/satellites/${encodeURIComponent(sat.name)}`)
+              }
+            />
           </div>
 
           {/* Search row */}

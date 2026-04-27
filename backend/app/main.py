@@ -7,9 +7,9 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from api import satellites, cdm, old_tles, launches  # Absolute import for Docker
+    from api import satellites, cdm, old_tles, launches, llm  # Absolute import for Docker
 except ImportError:
-    from .api import satellites, cdm, old_tles, launches  # Relative import for local
+    from .api import satellites, cdm, old_tles, launches, llm  # Relative import for local
 
    
 from sqlalchemy import create_engine
@@ -33,7 +33,7 @@ app.add_middleware(
 
 # Routers
 app.include_router(satellites.router, prefix="/api/satellites", tags=["Satellites"])
-#app.include_router(llm.router, prefix="/api/llm", tags=["LLM"])
+app.include_router(llm.router, prefix="/api/llm", tags=["LLM"])
 app.include_router(cdm.router, prefix="/api/cdm", tags=["CDM"])
 app.include_router(old_tles.router, prefix="/api/old_tles", tags=["Old TLEs"])
 app.include_router(launches.router, prefix="/api/launches", tags=["Launches"])

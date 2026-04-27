@@ -14,3 +14,4 @@ export const SATELLITES_API = `${API_BASE_URL}/api/satellites`;
 export const CDM_API = `${API_BASE_URL}/api/cdm`;
 export const OLD_TLES_API = `${API_BASE_URL}/api/old_tles`;
 export const LAUNCHES_API = `${API_BASE_URL}/api/launches`;
+export const LLM_API = `${API_BASE_URL}/api/llm`;
