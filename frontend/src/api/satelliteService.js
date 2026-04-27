@@ -113,7 +113,7 @@ export async function searchByNL(query, limit = 200) {
   const url = `${LLM_API}/search`;
   try {
     const response = await axios.post(url, { query, limit }, {
-      validateStatus: (s) => s < 500,
+      validateStatus: (s) => s < 600,
     });
     if (response.status === 429) {
       return { error: "rate_limit", message: "Too many searches — try again in a minute." };
@@ -137,7 +137,13 @@ export async function searchByNL(query, limit = 200) {
 export async function fetchCDMBriefing(cdmId) {
   const url = `${LLM_API}/cdm/${encodeURIComponent(cdmId)}/briefing`;
   try {
-    const response = await axios.get(url, { validateStatus: (s) => s < 500 });
+    const response = await axios.get(url, { validateStatus: (s) => s < 600 });
+    if (response.status === 429) {
+      return { error: "rate_limit", message: "Too many briefing requests — try again in a minute." };
+    }
+    if (response.status === 503) {
+      return { error: "unavailable", message: "AI briefings temporarily unavailable (over budget or key missing)." };
+    }
     if (response.status >= 400) {
       return { error: response.status, message: response.data?.detail || "Briefing unavailable." };
     }
