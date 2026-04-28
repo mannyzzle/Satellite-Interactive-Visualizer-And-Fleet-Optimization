@@ -36,6 +36,7 @@ import { SATELLITES_API } from "../config";
 import { StarField } from "../components/StarField";
 import {
   SAT_GEOMETRY,
+  SAT_MATERIALS,
   materialForOrbit,
   makeAtmosphereMaterial,
   makePulseMarker,
@@ -86,7 +87,10 @@ export default function Home() {
 
   // Toggle function
   const toggleExpanded = () => setIsExpanded((prev) => !prev);
-  let isFetching = false;  // Prevent duplicate fetch calls
+  // useRef so the lock survives across renders (was previously
+  // `let isFetching = false`, which reset on every render and made
+  // the guard a no-op).
+  const isFetchingRef = useRef(false);
   const [is3DEnabled, setIs3DEnabled] = useState(false);
   const threeDRef = useRef(null);
 
@@ -686,39 +690,33 @@ const changePage = async (newPage) => {
 
   const fetchAndUpdateSatellites = async (updatedFilters, newPage = 1) => {
     if (!is3DEnabled) return;
-    if (loading || isFetching || (satellites.length > 0 && page === newPage)) {
+    if (loading || isFetchingRef.current || (satellites.length > 0 && page === newPage)) {
         console.log("⚠️ Skipping redundant satellite fetch.");
         return;
     }
 
-    isFetching = true;  // 🚀 Lock fetch to prevent duplication
+    isFetchingRef.current = true;
     setLoading(true);
     setPage(newPage);
 
-    console.log("🛑 Removing all old satellites before fetching...");
-    removeAllSatelliteModels(); // ✅ Ensure satellites are cleared
-    removeAllOrbitPaths(); // ✅ Ensure orbit paths are cleared
+    removeAllSatelliteModels();
+    removeAllOrbitPaths();
 
     try {
-        console.log(`📡 Fetching satellites (page ${newPage}, filters: ${updatedFilters})`);
         const data = await fetchSatellites(newPage, 500, updatedFilters.join(","));
 
         if (data?.satellites?.length) {
-            console.log(`📌 Loaded ${data.satellites.length} satellites for page ${newPage}`);
-
-            // ✅ Store only 100 satellites
             const limitedSatellites = data.satellites.slice(0, 500);
             setSatellites(limitedSatellites);
             updateSceneWithFilteredSatellites(limitedSatellites);
         } else {
-            console.warn("⚠️ No satellites found for this page.");
             setSatellites([]);
         }
     } catch (error) {
         console.error("❌ Error fetching satellites:", error);
     } finally {
         setLoading(false);
-        isFetching = false;  // ✅ Unlock fetch
+        isFetchingRef.current = false;
     }
 };
 
@@ -1175,14 +1173,22 @@ useEffect(() => {
         rendererRef.current = null;
       }
       if (sceneRef.current) {
+        // Skip the shared satellite geometry + the 5 flyweight materials
+        // (LEO/MEO/GEO/HEO/DEFAULT) — they live at module scope, are
+        // reused across mounts, and disposing them here would brick the
+        // next mount's renders. Only per-instance resources get disposed.
         sceneRef.current.traverse((object) => {
-          if (object.isMesh) {
+          if (!object.isMesh) return;
+          if (object.geometry && object.geometry !== SAT_GEOMETRY) {
             object.geometry.dispose();
-            if (Array.isArray(object.material)) {
-              object.material.forEach((m) => m.dispose());
-            } else {
-              object.material.dispose();
-            }
+          }
+          const disposeMat = (m) => {
+            if (m && !Object.values(SAT_MATERIALS).includes(m)) m.dispose();
+          };
+          if (Array.isArray(object.material)) {
+            object.material.forEach(disposeMat);
+          } else {
+            disposeMat(object.material);
           }
         });
         sceneRef.current = null;
@@ -1562,15 +1568,27 @@ useEffect(() => {
 const revealPickedSatellite = (sat) => {
   if (!is3DEnabled || !sceneRef.current) return;
 
-  // 1) Clean the scene so old satellites + their orbit lines disappear.
+  // 1) Clean the scene of any stale models + orbits.
   resetMarker();
   removeAllSatelliteModels();
   removeAllOrbitPaths();
 
-  // 2) Add only the picked satellite + its orbit.
+  // 2) Re-load the picked satellite first (so it's prominent in the
+  //    ref map and ready when focusOnSatellite looks it up), then the
+  //    rest of the currently-paginated page.
+  //
+  //    Why both: an earlier version of this function only loaded the
+  //    picked sat. That left the list (which still shows the page's
+  //    rows pinned + the picked sat) out of sync with the scene —
+  //    clicking any other list row 404'd on the model lookup and the
+  //    20-attempt retry loop silently gave up, making buttons appear
+  //    dead. Loading the page back in keeps list ⇄ scene aligned.
   loadSatelliteModel(sat);
-  // Orbit lines are wired up by `addOrbitPaths()` reading the current
-  // `satelliteObjectsRef`. Give the model a tick to register, then draw.
+  const pageList =
+    filteredSatellites.length > 0 ? filteredSatellites : satellites;
+  for (const s of pageList) {
+    if (s.norad_number !== sat.norad_number) loadSatelliteModel(s);
+  }
   setTimeout(() => {
     if (sceneRef.current) addOrbitPaths();
   }, 250);
