@@ -154,11 +154,30 @@ const findPageForSatellite = async (sat) => {
     localStorage.setItem("sidebarOpen", sidebarOpen); // Save state change
   }, [sidebarOpen]);
 
-  // ESC closes the sidebar — better than dragging the user back to the
-  // chevron button when they want to refocus on the globe.
+  // ESC has two jobs:
+  //   1. If a satellite is selected, clear the selection — drop the
+  //      marker, reset the OrbitControls target back to Earth's center,
+  //      and let the auto-rotate drift resume.
+  //   2. Otherwise close the sidebar.
+  // Without #1 the camera stays "stuck" looking at the picked satellite
+  // even after the user lost interest, because nothing else clears the
+  // marker / controls.target.
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === "Escape") setSidebarOpen(false);
+      if (e.key !== "Escape") return;
+      if (selectedPointerRef.current && sceneRef.current) {
+        sceneRef.current.remove(selectedPointerRef.current);
+        if (selectedPointerRef.current.geometry) selectedPointerRef.current.geometry.dispose();
+        if (selectedPointerRef.current.material) selectedPointerRef.current.material.dispose();
+        selectedPointerRef.current = null;
+        if (controlsRef.current) {
+          controlsRef.current.target.set(0, 0, 0);
+          controlsRef.current.update();
+        }
+        setSelectedSatellite(null);
+        return;
+      }
+      setSidebarOpen(false);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -351,14 +370,19 @@ useEffect(() => {
         orbitColor = 0xFFFF00;  // 🟡 Bright Yellow (Inactive satellites)
     }
 
-    // Plain solid-color orbit line. The earlier vertex-color comet-trail
-    // experiment looked busy + emphasised individual orbits too much,
-    // so back to the simpler look that just shows the path.
+    // Subtle-per-line, glowy-in-aggregate. Each orbit alone is dim
+    // (opacity 0.45, additive blending); but where many overlap, the
+    // additive contribution stacks and the constellation lanes light
+    // up against the dark background. depthWrite is off so orbits
+    // don't write to the z-buffer and start hiding satellites
+    // behind them at edge-on angles.
     const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
     const orbitMaterial = new THREE.LineBasicMaterial({
         color: orbitColor,
-        opacity: 0.65,
+        opacity: 0.45,
         transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
     });
 
     return new THREE.Line(orbitGeometry, orbitMaterial);
@@ -369,13 +393,19 @@ useEffect(() => {
 
 
 
-  const resetMarker = () => {
-    if (selectedPointerRef.current) {
-      console.log("🔄 Removing previous marker...");
+  const resetMarker = ({ resetTarget = true } = {}) => {
+    if (selectedPointerRef.current && sceneRef.current) {
       sceneRef.current.remove(selectedPointerRef.current);
-      selectedPointerRef.current.geometry.dispose();
-      selectedPointerRef.current.material.dispose();
+      if (selectedPointerRef.current.geometry) selectedPointerRef.current.geometry.dispose();
+      if (selectedPointerRef.current.material) selectedPointerRef.current.material.dispose();
       selectedPointerRef.current = null;
+    }
+    // Snap OrbitControls' anchor back to Earth so auto-rotate drifts
+    // around the planet again. Pass `{ resetTarget: false }` from inside
+    // focusOnSatellite where the next update overrides target anyway.
+    if (resetTarget && controlsRef.current) {
+      controlsRef.current.target.set(0, 0, 0);
+      controlsRef.current.update();
     }
   };
   
@@ -469,7 +499,15 @@ function smoothCameraTransition(targetPosition, satellite) {
     } else {
       cameraRef.current.position.copy(targetPos);
       cameraRef.current.lookAt(targetPosition);
-      console.log("✅ Camera transition complete!");
+      // Critical: OrbitControls reads its orientation from the
+      // controls.target, NOT from camera.lookAt. Without this update
+      // the camera "looks at" the satellite for one frame, then
+      // OrbitControls' next .update() snaps it back to face the
+      // origin (controls.target default). Sync them.
+      if (controlsRef.current) {
+        controlsRef.current.target.copy(targetPosition);
+        controlsRef.current.update();
+      }
     }
   }
 
@@ -510,7 +548,9 @@ const focusOnSatellite = useCallback((sat) => {
           return;
       }
 
-      resetMarker(); // ✅ Remove existing marker before adding a new one
+      // Skip the OrbitControls.target reset — we're about to lerp to
+      // a new satellite which will set its own target.
+      resetMarker({ resetTarget: false });
 
       if (selectedPointerRef.current?.userData?.followingSatellite === sat.norad_number) {
           console.log("✅ Marker already exists for this satellite, skipping...");
