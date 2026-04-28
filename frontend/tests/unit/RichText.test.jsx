@@ -69,4 +69,25 @@ describe("<RichText />", () => {
     const firstItem = container.querySelector("ul li");
     expect(firstItem?.querySelector("strong")?.textContent).toBe("special");
   });
+
+  it("renders # ## ### markers as styled headings, not literal text", () => {
+    const md = "# Main\n\n## Sub\n\n### Tiny";
+    const { container } = render(<RichText>{md}</RichText>);
+    // Expect heading elements at the right levels (mapped to h2/h3/h4 to
+    // avoid colliding with page H1s).
+    expect(container.querySelector("h2")?.textContent).toBe("Main");
+    expect(container.querySelector("h3")?.textContent).toBe("Sub");
+    expect(container.querySelector("h4")?.textContent).toBe("Tiny");
+    // Critically: no literal `#` or `##` should survive in the rendered DOM.
+    expect(container.textContent).not.toMatch(/^#/);
+    expect(container.textContent).not.toMatch(/##\s/);
+  });
+
+  it("renders a heading + body in the same block", () => {
+    const md = "## HEADLINE\nBody text follows.";
+    const { container } = render(<RichText>{md}</RichText>);
+    expect(container.querySelector("h3")?.textContent).toBe("HEADLINE");
+    expect(container.querySelector("p")?.textContent).toBe("Body text follows.");
+    expect(container.textContent).not.toContain("##");
+  });
 });

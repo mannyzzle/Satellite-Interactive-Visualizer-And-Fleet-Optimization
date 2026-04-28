@@ -99,6 +99,16 @@ function renderItalic(text, baseKey) {
   return out;
 }
 
+// Heading level → element + Tailwind classes. Sized smaller than usual
+// because these render inside cramped panels (digest card, briefing
+// modal). The teal eyebrow color matches the rest of the section
+// labels in the app so headings feel native.
+const HEADING_STYLES = {
+  1: { Tag: "h2", cls: "text-base font-semibold text-white tracking-wide mt-1 mb-1" },
+  2: { Tag: "h3", cls: "text-[11px] font-mono uppercase tracking-[0.25em] text-teal-300/80 mt-2 mb-0.5" },
+  3: { Tag: "h4", cls: "text-[11px] font-mono uppercase tracking-[0.2em] text-gray-400 mt-1 mb-0.5" },
+};
+
 export default function RichText({ children, className = "" }) {
   if (typeof children !== "string") return null;
   // Split into blocks separated by blank lines so we can render proper
@@ -108,6 +118,22 @@ export default function RichText({ children, className = "" }) {
     <div className={`space-y-2 ${className}`}>
       {blocks.map((block, bi) => {
         const lines = block.split("\n");
+
+        // Heading block — block contains exactly one line starting with
+        // 1-3 hashes followed by a space. We detect it eagerly so the
+        // separator-eyebrow (`## HEADLINE`) renders as styled section
+        // chrome instead of literal `## HEADLINE` text.
+        const headingMatch = lines.length === 1 ? /^(#{1,3})\s+(.*)$/.exec(lines[0]) : null;
+        if (headingMatch) {
+          const level = headingMatch[1].length;
+          const { Tag, cls } = HEADING_STYLES[level];
+          return (
+            <Tag key={bi} className={cls}>
+              {renderInline(headingMatch[2])}
+            </Tag>
+          );
+        }
+
         // Detect list block: every line starts with "- ", "* ", or "• ".
         const isList = lines.every((l) => /^\s*[-*•]\s+/.test(l));
         if (isList) {
@@ -120,6 +146,31 @@ export default function RichText({ children, className = "" }) {
             </ul>
           );
         }
+
+        // Mixed block: leading-line heading + paragraph body. e.g.
+        //   ## HEADLINE
+        //   Body line about something.
+        // Treat the heading as its own block before the rest.
+        const firstHeading = /^(#{1,3})\s+(.*)$/.exec(lines[0]);
+        if (firstHeading && lines.length > 1) {
+          const level = firstHeading[1].length;
+          const { Tag, cls } = HEADING_STYLES[level];
+          const rest = lines.slice(1);
+          return (
+            <React.Fragment key={bi}>
+              <Tag className={cls}>{renderInline(firstHeading[2])}</Tag>
+              <p className="leading-relaxed">
+                {rest.map((l, li) => (
+                  <React.Fragment key={li}>
+                    {li > 0 ? <br /> : null}
+                    {renderInline(l)}
+                  </React.Fragment>
+                ))}
+              </p>
+            </React.Fragment>
+          );
+        }
+
         // Otherwise, render lines with <br/>s within a paragraph.
         return (
           <p key={bi} className="leading-relaxed">
