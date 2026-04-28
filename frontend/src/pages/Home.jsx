@@ -34,6 +34,12 @@ import {
 } from "lucide-react";
 import { SATELLITES_API } from "../config";
 import { StarField } from "../components/StarField";
+import {
+  SAT_GEOMETRY,
+  materialForOrbit,
+  makeAtmosphereMaterial,
+  makePulseMarker,
+} from "../lib/satelliteGeometry";
 import NLSearchBar from "../components/NLSearchBar";
 
 // Wrap the case-insensitive substring of `query` inside `text` with a
@@ -142,6 +148,16 @@ const findPageForSatellite = async (sat) => {
   useEffect(() => {
     localStorage.setItem("sidebarOpen", sidebarOpen); // Save state change
   }, [sidebarOpen]);
+
+  // ESC closes the sidebar — better than dragging the user back to the
+  // chevron button when they want to refocus on the globe.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
 
 
@@ -382,50 +398,23 @@ const loadSatelliteModel = (satellite) => {
     return;
   }
 
-  const purposeColors = {
-    "Communications": 0x0000FF, // 🟦 Blue
-    "Navigation": 0x0000FF, // 🟦 Blue
-    "OneWeb Constellation": 0x0000FF, // 🟦 Blue
-    "Iridium NEXT Constellation": 0x0000FF, // 🟦 Blue
-    "Starlink Constellation": 0x0000FF, // 🟦 Blue
-  
-    "Weather Monitoring": 0x00FF00, // 🟩 Green
-    "Earth Observation": 0x00FF00, // 🟩 Green
-    "Scientific Research": 0x00FF00, // 🟩 Green
-    "Space Infrastructure": 0x00FF00, // 🟩 Green
-  
-    "Technology Demonstration": 0xFFA500, // 🟧 Orange
-    "Human Spaceflight": 0xFFA500, // 🟧 Orange
-    "Satellite Servicing & Logistics": 0xFFA500, // 🟧 Orange
-    "Deep Space Exploration": 0xFFA500, // 🟧 Orange
-    "Military/Reconnaissance": 0xFFA500, // 🟧 Orange
-  
-    "Rocket Body (Debris)": 0xFF0000, // 🟥 Red
-    "Space Debris": 0xFF0000, // 🟥 Red
-    "Unknown Payload": 0xFF0000, // 🟥 Red
-    "Unknown": 0xFF0000, // 🟥 Red
-  };
-  
-  // 🚀 **Determine Color Based on Purpose**
-  const sphereColor = purposeColors[satellite.purpose] || 0xFFFFFF; // Default to white if undefined
-  
+  // Use module-shared geometry + material (one of 5 flyweights keyed
+  // by orbit type). This is the cheap perf win: the previous code
+  // allocated a fresh SphereGeometry + MeshBasicMaterial per satellite
+  // — 500× duplicate GPU buffers and material programs per page.
+  const mesh = new THREE.Mesh(SAT_GEOMETRY, materialForOrbit(satellite.orbit_type));
+  mesh.position.copy(initialPos);
+  // Modest random rotation per sat so the cube/panels read with
+  // varying orientation — feels more alive than uniform alignment.
+  mesh.rotation.set(
+    Math.random() * Math.PI,
+    Math.random() * Math.PI,
+    Math.random() * Math.PI
+  );
+  mesh.userData = satellite;
 
-  // ✅ Create Sphere for Satellite
-  const sphereGeometry = new THREE.SphereGeometry(0.1, 8, 8);
-  const sphereMaterial = new THREE.MeshBasicMaterial({ color: sphereColor });
-  const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-
-  // 🚀 Set Position
-  sphere.position.copy(initialPos);
-
-  // ✅ Attach metadata
-  sphere.userData = satellite;
-
-  // ✅ Store reference & add to scene
-  satelliteObjectsRef.current[satellite.norad_number] = sphere;
-  scene.add(sphere);
-
-  console.log(`✅ Sphere successfully added: ${satellite.name} (${satellite.norad_number})`);
+  satelliteObjectsRef.current[satellite.norad_number] = mesh;
+  scene.add(mesh);
 };
 
 
@@ -497,11 +486,19 @@ const focusOnSatellite = useCallback((sat) => {
   setIsTracking(true);
   localStorage.setItem("selectedSatellite", JSON.stringify(sat));
 
+  // Cap retry: previously this looped forever if the satellite was never
+  // loaded into the scene (e.g. user changed filter mid-focus). 20 attempts
+  // = 10s ceiling, then we silently give up.
+  let attempts = 0;
+  const MAX_ATTEMPTS = 20;
   const checkModelLoaded = () => {
       const satModel = satelliteObjectsRef.current[sat.norad_number];
 
       if (!satModel || !satModel.position) {
-          console.warn(`⚠️ Satellite model ${sat.name} not found, retrying...`);
+          if (++attempts >= MAX_ATTEMPTS) {
+              console.warn(`focusOnSatellite: gave up on ${sat.name} after ${MAX_ATTEMPTS} attempts`);
+              return;
+          }
           setTimeout(checkModelLoaded, 500);
           return;
       }
@@ -513,18 +510,9 @@ const focusOnSatellite = useCallback((sat) => {
           return; // ❌ Prevent duplicate marker
       }
 
-      const markerGeometry = new THREE.RingGeometry(0.3, 0.35, 32);
-      const markerMaterial = new THREE.MeshBasicMaterial({
-          color: 0xffff99,
-          side: THREE.DoubleSide,
-          transparent: true,
-          opacity: 0.5,
-      });
-
-      const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+      const marker = makePulseMarker();
       marker.position.copy(satModel.position);
       marker.lookAt(new THREE.Vector3(0, 0, 0));
-
       sceneRef.current.add(marker);
       selectedPointerRef.current = marker;
       selectedPointerRef.current.userData.followingSatellite = sat.norad_number;
@@ -617,36 +605,22 @@ const changePage = async (newPage) => {
     if (!is3DEnabled) return;
     // Scene can be null briefly: is3DEnabled flips before sceneRef is wired up
     // on first mount, and StrictMode unmount nulls the ref between cleanup
-    // and remount. Guarding here prevents a noisy TypeError that could trip
-    // a re-render storm.
+    // and remount.
     if (!sceneRef.current) return;
 
+    // NOTE: geometry + material come from the shared module flyweights now
+    // (`SAT_GEOMETRY` and `SAT_MATERIALS` in lib/satelliteGeometry.js).
+    // Disposing them here would break every subsequent satellite render —
+    // we only remove the mesh from the scene and drop the ref entry.
     Object.keys(satelliteObjectsRef.current).forEach((norad_number) => {
-        const satModel = satelliteObjectsRef.current[norad_number];
-
-        if (satModel && sceneRef.current) {
-            // ✅ Remove from scene
-            sceneRef.current.remove(satModel);
-
-            // ✅ Dispose of geometry & material
-            if (satModel.geometry) satModel.geometry.dispose();
-            if (satModel.material) satModel.material.dispose();
-
-            // ✅ Remove all children from satellite
-            while (satModel.children.length > 0) {
-                const child = satModel.children[0];
-                if (child.geometry) child.geometry.dispose();
-                if (child.material) child.material.dispose();
-                satModel.remove(child);
-            }
-
-            delete satelliteObjectsRef.current[norad_number];
-        }
+      const satModel = satelliteObjectsRef.current[norad_number];
+      if (satModel && sceneRef.current) {
+        sceneRef.current.remove(satModel);
+        delete satelliteObjectsRef.current[norad_number];
+      }
     });
-
-    // ✅ Ensure no lingering references
     satelliteObjectsRef.current = {};
-};
+  };
 
 
 
@@ -1128,15 +1102,11 @@ useEffect(() => {
     };
     window.addEventListener("resize", resizeRenderer);
 
-    // 🌫 Atmosphere Glow
+    // Atmosphere — Fresnel rim-glow shader. Replaces the old flat blue
+    // back-side sphere with a teal halo that brightens at the silhouette.
     const atmosphere = new THREE.Mesh(
-      new THREE.SphereGeometry(6100.5, 64, 64),
-      new THREE.MeshBasicMaterial({
-        color: 0x3399ff,
-        transparent: true,
-        opacity: 0.5,
-        side: THREE.BackSide,
-      })
+      new THREE.SphereGeometry(6500, 48, 48),
+      makeAtmosphereMaterial(0x5eead4)
     );
     atmosphereRef.current = atmosphere;
     scene.add(atmosphere);
@@ -1175,6 +1145,13 @@ useEffect(() => {
         if (followedSat) {
           selectedPointerRef.current.position.copy(followedSat.position);
           selectedPointerRef.current.lookAt(new THREE.Vector3(0, 0, 0));
+          // Pulsing "lock-on" scale — 1.0 → 1.35 over ~1.6s. Uses time so
+          // multiple selections in a row stay phase-aligned.
+          const pulse = 1 + 0.18 * Math.sin(time * 4);
+          selectedPointerRef.current.scale.setScalar(pulse);
+          if (selectedPointerRef.current.material) {
+            selectedPointerRef.current.material.opacity = 0.55 + 0.25 * Math.sin(time * 4);
+          }
         }
       }
 
@@ -1756,17 +1733,52 @@ return (
 
       </div>
 
-      {/* RIGHT-SIDE PANEL — single card, sectioned, modern chrome.
-          Layout: header / search / list (flex-1) / pagination / filters drawer.
-          Drawer collapses to keep the list readable; opens on demand. */}
+      {/* Floating launcher — appears when the sidebar is closed. A glass
+          chip pinned to the right edge with the live total count and a
+          satellite icon, click to slide the panel in. */}
+      {!sidebarOpen ? (
+        <button
+          data-testid="sat-sidebar-launcher"
+          onClick={() => setSidebarOpen(true)}
+          aria-label="Open satellite catalog"
+          className="absolute top-6 right-6 z-[100] inline-flex items-center gap-2
+                     px-3 py-2 rounded-full
+                     bg-gray-900/55 backdrop-blur-md border border-teal-400/30
+                     text-teal-100 text-xs font-medium
+                     hover:bg-gray-900/75 hover:border-teal-400/60
+                     shadow-[0_0_24px_-8px_rgba(94,234,212,0.4)]
+                     transition-colors"
+        >
+          <SatelliteIcon size={16} className="text-teal-300" />
+          <span>Catalog</span>
+          {total > 0 ? (
+            <span className="text-[10px] font-mono text-gray-400 bg-gray-800/80 border border-gray-700/60 rounded-full px-1.5">
+              {total.toLocaleString()}
+            </span>
+          ) : null}
+        </button>
+      ) : null}
+
+      {/* RIGHT-SIDE PANEL — slide-in glass drawer. Lower opacity + heavier
+          backdrop-blur than before so it feels like a pane of glass over
+          the globe rather than a bolted-on rail. Slides off-screen when
+          closed (translate-x), with a bottom-sheet variant on mobile. */}
       <div
         data-testid="sat-sidebar"
+        aria-hidden={!sidebarOpen}
         className={`
-          absolute top-0 right-0 z-[99] flex flex-col h-screen
-          bg-gray-900/85 backdrop-blur-xl border-l border-gray-700/60
-          shadow-2xl
-          transition-[width] duration-300
-          ${isExpanded ? "w-full" : "w-[28rem] max-w-[35vw] min-w-[320px]"}
+          absolute z-[99] flex flex-col
+          bg-gray-950/55 backdrop-blur-2xl border border-gray-700/40
+          shadow-[inset_1px_0_0_rgba(94,234,212,0.18),0_20px_60px_rgba(0,0,0,0.5)]
+          transition-transform duration-300 ease-out
+          /* mobile: bottom-sheet */
+          bottom-0 left-0 right-0 h-[68vh] rounded-t-2xl
+          /* md+: right rail */
+          md:top-0 md:bottom-auto md:left-auto md:right-0 md:h-screen md:rounded-none
+          ${isExpanded ? "md:w-full" : "md:w-[28rem] md:max-w-[36vw] md:min-w-[320px]"}
+          ${sidebarOpen
+            ? "translate-x-0 translate-y-0"
+            : "translate-y-full md:translate-y-0 md:translate-x-full"}
         `}
       >
         {/* HEADER */}
@@ -1782,15 +1794,26 @@ return (
               </span>
             )}
           </div>
-          <button
-            onClick={toggleExpanded}
-            aria-label={isExpanded ? "Collapse panel" : "Expand panel"}
-            title={isExpanded ? "Collapse panel" : "Expand panel"}
-            className="p-1.5 text-gray-300 rounded-md
-                       hover:bg-gray-800 hover:text-white transition-colors"
-          >
-            {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={toggleExpanded}
+              aria-label={isExpanded ? "Collapse panel" : "Expand panel"}
+              title={isExpanded ? "Collapse panel" : "Expand panel"}
+              className="p-1.5 text-gray-300 rounded-md
+                         hover:bg-gray-800 hover:text-white transition-colors"
+            >
+              {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            </button>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              aria-label="Close panel"
+              title="Close panel (ESC)"
+              className="p-1.5 text-gray-300 rounded-md
+                         hover:bg-gray-800 hover:text-white transition-colors"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
         {/* SEARCH + ACTIVE FILTER */}

@@ -17,6 +17,12 @@ async function reachSidebar(page) {
   await visit(page);
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight / 2));
   await page.waitForTimeout(1500);
+  // Sidebar is collapsed by default after the home redesign — click the
+  // floating "Catalog" launcher to slide it in.
+  const launcher = page.locator('[data-testid="sat-sidebar-launcher"]');
+  if (await launcher.isVisible().catch(() => false)) {
+    await launcher.click();
+  }
   await page.locator(SIDEBAR).first().scrollIntoViewIfNeeded({ timeout: 30_000 });
   await expect(page.locator(SIDEBAR).first()).toBeVisible({ timeout: 30_000 });
 }
@@ -45,7 +51,7 @@ test.describe("Sidebar — combined flows", () => {
     // Note: the button shows `filter.label` (display) while the chip shows
     // `filter.name` (internal key). They often differ — don't compare across.
     // Instead, snapshot chip text after each click and assert it changed.
-    const drawerBtns = page.locator('#filters-drawer section button');
+    const drawerBtns = page.locator('#filters-drawer .grid button');
 
     await drawerBtns.nth(0).click();
     await waitForListSettle(page);
@@ -64,7 +70,7 @@ test.describe("Sidebar — combined flows", () => {
     await reachSidebar(page);
     await openFilters(page);
 
-    const firstBtn = page.locator('#filters-drawer section button').first();
+    const firstBtn = page.locator('#filters-drawer .grid button').first();
     await firstBtn.click();
     await waitForListSettle(page);
     await expect(page.locator(CHIP)).toHaveCount(1);
@@ -122,7 +128,13 @@ test.describe("Sidebar — combined flows", () => {
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
 
-    const toggle = page.locator(SIDEBAR).getByRole("button", { name: /panel/i });
+    // Two buttons in the header have "panel" in the aria-label after the
+    // sidebar redesign: the Expand/Collapse toggle and the new Close button
+    // (which dismisses the whole drawer). Match only the expand/collapse
+    // toggle so strict mode doesn't fail.
+    const toggle = page
+      .locator(SIDEBAR)
+      .getByRole("button", { name: /Expand panel|Collapse panel/i });
     await toggle.click(); // expand
     await page.waitForTimeout(400);
     await toggle.click(); // collapse
@@ -143,7 +155,7 @@ test.describe("Sidebar — combined flows", () => {
     await openFilters(page);
 
     // Make sure something is filtered.
-    const firstBtn = page.locator('#filters-drawer section button').first();
+    const firstBtn = page.locator('#filters-drawer .grid button').first();
     await firstBtn.click();
     await waitForListSettle(page);
     await expect(page.locator(CHIP)).toHaveCount(1);
@@ -177,7 +189,7 @@ test.describe("Sidebar — combined flows", () => {
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
 
-    const btns = page.locator('#filters-drawer section button');
+    const btns = page.locator('#filters-drawer .grid button');
     const count = Math.min(await btns.count(), 5);
     for (let i = 0; i < count; i++) {
       await btns.nth(i).click({ force: true });

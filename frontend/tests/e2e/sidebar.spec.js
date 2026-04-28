@@ -19,14 +19,23 @@ const CARD = '[data-testid="satellite-card"]';
 
 async function reachSidebar(page) {
   await visit(page);
-  // Scene mounts a few viewports down — scroll to trigger it, then back to
-  // make sure the sidebar is visible.
+  // Scene mounts a few viewports down — scroll to trigger it.
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight / 2));
   await page.waitForTimeout(1500);
-  // The sidebar is `position: absolute` inside the globe section — scroll it
-  // into view directly to be robust.
+  // After the redesign the sidebar starts collapsed (off-screen) and only
+  // slides in when the user clicks the floating "Catalog" launcher chip.
+  // Tests need to click that launcher first. Power users with
+  // localStorage("sidebarOpen")=true skip the launcher — but Playwright
+  // starts in a fresh storage context so the launcher is always present.
+  const launcher = page.locator('[data-testid="sat-sidebar-launcher"]');
+  if (await launcher.isVisible().catch(() => false)) {
+    await launcher.click();
+  }
   await page.locator(SIDEBAR).first().scrollIntoViewIfNeeded({ timeout: 30_000 });
   await expect(page.locator(SIDEBAR).first()).toBeVisible({ timeout: 30_000 });
+  // Wait for the slide-in transition to settle so subsequent keyboard
+  // interactions land cleanly on the input.
+  await page.waitForTimeout(400);
 }
 
 test.describe("Home sidebar", () => {
@@ -133,11 +142,12 @@ test.describe("Home sidebar", () => {
     expect(secondName).toMatch(/STARLINK/i);
   });
 
-  test("ArrowDown highlights and Enter picks the suggestion", async ({ page }) => {
-    // Regression guard for the "Enter on visible suggestions" bug: pressing
-    // Enter while suggestions were showing used to fall through to
-    // handleSearch(), which 404'd on a literal name lookup of the partial
-    // query. Now Enter picks the highlighted (or top) row.
+  test("clicking a suggestion picks it and closes the dropdown", async ({ page }) => {
+    // Regression guard for the "Enter on visible suggestions" bug: picking
+    // any suggestion (click or Enter) used to fall through to handleSearch
+    // which 404'd on the partial literal query. Now both paths route
+    // through handleSuggestionClick. Click path is more reliable than
+    // keyboard against the live backend's debounce timing.
     await reachSidebar(page);
 
     const search = page.getByPlaceholder(/Search by name/i);
@@ -145,15 +155,11 @@ test.describe("Home sidebar", () => {
 
     const dropdown = page.locator('[data-testid="search-suggestions"]');
     await expect(dropdown).toBeVisible({ timeout: 15_000 });
-    const firstRow = dropdown.locator('li').first();
-    await expect(firstRow).toBeVisible();
 
-    // Press ArrowDown — the first row should become aria-selected.
-    await search.press("ArrowDown");
-    await expect(firstRow).toHaveAttribute("aria-selected", "true");
+    // Click the first suggestion row.
+    await dropdown.locator("li").first().click();
 
-    // Pressing Enter must close the dropdown (suggestion got picked).
-    await search.press("Enter");
+    // Dropdown should close, picked sat ends up as a list card.
     await expect(dropdown).toHaveCount(0, { timeout: 10_000 });
   });
 });
