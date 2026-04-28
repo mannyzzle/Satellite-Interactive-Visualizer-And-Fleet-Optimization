@@ -50,6 +50,9 @@ RATE_LIMIT_PER_DAY = int(os.getenv("LLM_RATE_LIMIT_PER_DAY", "100"))
 DAILY_REQUEST_CAP = int(os.getenv("LLM_DAILY_REQUEST_CAP", "5000"))
 DAILY_OUTPUT_TOKEN_CAP = int(os.getenv("LLM_DAILY_OUTPUT_TOKEN_CAP", "500000"))
 
+# Telemetry: log this fraction of LLM requests to llm_request_log. 0.0–1.0.
+TELEMETRY_SAMPLE_RATE = float(os.getenv("LLM_TELEMETRY_SAMPLE_RATE", "0.1"))
+
 
 class LLMError(Exception):
     """Surfaced to the route layer; route maps to HTTP 4xx/5xx."""
@@ -106,6 +109,45 @@ def check_rate_limit(ip: str) -> None:
             raise LLMError("Rate limit exceeded (per day)", status=429)
         buckets["min"].append(now)
         buckets["day"].append(now)
+
+
+# ---------------------------------------------------------------------------
+# Telemetry: sampled request log (10% by default). Best-effort, fire-and-forget.
+# ---------------------------------------------------------------------------
+import random
+
+
+def log_request(
+    endpoint: str,
+    ip: str | None,
+    cache_hit: bool = False,
+    tool_calls: int = 0,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    latency_ms: int | None = None,
+    status: int = 200,
+) -> None:
+    """Insert a sampled row into llm_request_log. Swallows all errors."""
+    if random.random() > TELEMETRY_SAMPLE_RATE:
+        return
+    try:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO llm_request_log
+                       (endpoint, ip, cache_hit, tool_calls, input_tokens,
+                        output_tokens, latency_ms, status)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (endpoint, ip, cache_hit, tool_calls, input_tokens,
+                     output_tokens, latency_ms, status),
+                )
+                conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        # Telemetry must never break a request.
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -500,6 +542,114 @@ def ask(question: str, history: list | None = None) -> dict:
         "iterations": ASK_MAX_TOOL_ITERATIONS,
     }
     return result
+
+
+def ask_stream(question: str, history: list | None = None):
+    """Generator yielding SSE-shaped dicts as the tool-use loop progresses.
+
+    Event types:
+      - {"type": "tool_call", "name", "input", "summary"}
+      - {"type": "text_delta", "text"}
+      - {"type": "done", "model", "iterations"}
+      - {"type": "error", "message"}
+    """
+    if not question or len(question) > 1000:
+        yield {"type": "error", "message": "Question must be 1–1000 characters"}
+        return
+
+    try:
+        from services import llm_tools
+    except ImportError:
+        from app.services import llm_tools
+
+    try:
+        client = _get_client()
+    except LLMError as exc:
+        yield {"type": "error", "message": str(exc)}
+        return
+
+    messages: list[dict] = list(history or [])
+    messages.append({"role": "user", "content": question.strip()})
+
+    total_input = 0
+    total_output = 0
+
+    for iteration in range(ASK_MAX_TOOL_ITERATIONS):
+        # Use the streaming variant of messages.create. The tool-use loop
+        # is structurally the same; we simply forward text deltas as they
+        # arrive and buffer tool blocks until the iteration completes.
+        try:
+            with client.messages.stream(
+                model=MODEL,
+                max_tokens=MAX_TOKENS_ANALYST,
+                system=[
+                    {"type": "text", "text": _ASK_SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}
+                ],
+                tools=llm_tools.TOOL_SCHEMAS,
+                messages=messages,
+            ) as stream:
+                for event in stream:
+                    if (
+                        getattr(event, "type", None) == "content_block_delta"
+                        and getattr(event.delta, "type", None) == "text_delta"
+                    ):
+                        yield {"type": "text_delta", "text": event.delta.text}
+
+                final_message = stream.get_final_message()
+        except Exception as exc:
+            yield {"type": "error", "message": f"upstream error: {exc}"}
+            return
+
+        total_input += getattr(final_message.usage, "input_tokens", 0)
+        total_output += getattr(final_message.usage, "output_tokens", 0)
+
+        if final_message.stop_reason != "tool_use":
+            try:
+                check_and_record_usage(total_input, total_output)
+            except LLMError as exc:
+                yield {"type": "error", "message": str(exc)}
+                return
+            yield {"type": "done", "model": MODEL, "iterations": iteration + 1}
+            return
+
+        # Append assistant blocks, run tools, queue tool_result back.
+        assistant_blocks = []
+        for b in final_message.content:
+            if b.type == "text":
+                assistant_blocks.append({"type": "text", "text": b.text})
+            elif b.type == "tool_use":
+                assistant_blocks.append(
+                    {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
+                )
+        messages.append({"role": "assistant", "content": assistant_blocks})
+
+        tool_results: list[dict] = []
+        for b in final_message.content:
+            if b.type != "tool_use":
+                continue
+            try:
+                result = llm_tools.call_tool(b.name, b.input)
+                summary = _summarize_tool_result(b.name, result)
+                yield {"type": "tool_call", "name": b.name, "input": b.input, "summary": summary}
+                content = json.dumps(result, default=str)[:8000]
+            except Exception as exc:
+                yield {
+                    "type": "tool_call",
+                    "name": b.name,
+                    "input": b.input,
+                    "summary": f"error: {exc}",
+                }
+                content = json.dumps({"error": str(exc)})
+            tool_results.append({"type": "tool_result", "tool_use_id": b.id, "content": content})
+
+        messages.append({"role": "user", "content": tool_results})
+
+    try:
+        check_and_record_usage(total_input, total_output)
+    except LLMError as exc:
+        yield {"type": "error", "message": str(exc)}
+        return
+    yield {"type": "done", "model": MODEL, "iterations": ASK_MAX_TOOL_ITERATIONS}
 
 
 def _summarize_tool_result(name: str, result: dict) -> str:

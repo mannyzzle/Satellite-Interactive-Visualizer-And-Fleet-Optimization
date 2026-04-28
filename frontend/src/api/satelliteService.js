@@ -132,6 +132,63 @@ export async function searchByNL(query, limit = 200) {
 }
 
 /**
+ * Streaming variant of /ask. Calls onEvent({type, ...}) for every SSE
+ * event from the backend. Resolves when the stream closes.
+ *
+ * Event types: tool_call, text_delta, done, error.
+ */
+export async function askSatTrackStream(question, history = [], onEvent) {
+  const url = `${LLM_API}/ask/stream`;
+  let resp;
+  try {
+    resp = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ question, history }),
+    });
+  } catch (err) {
+    onEvent({ type: "error", message: "Could not reach Mission Control." });
+    return;
+  }
+  if (!resp.ok) {
+    let detail = "Stream failed.";
+    if (resp.status === 429) detail = "Too many questions — try again in a minute.";
+    else if (resp.status === 503) detail = "AI is temporarily over budget. Try again later.";
+    else {
+      try {
+        const data = await resp.json();
+        detail = data?.detail || detail;
+      } catch {}
+    }
+    onEvent({ type: "error", message: detail });
+    return;
+  }
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    // Parse complete SSE events ("data: <json>\n\n")
+    let idx;
+    while ((idx = buffer.indexOf("\n\n")) !== -1) {
+      const raw = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      const line = raw.trim();
+      if (!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      if (!payload) continue;
+      try {
+        onEvent(JSON.parse(payload));
+      } catch (err) {
+        console.warn("SSE parse error:", err, payload);
+      }
+    }
+  }
+}
+
+/**
  * Conversational analyst — POST a question, get back answer + tool calls.
  */
 export async function askSatTrack(question, history = []) {

@@ -4,7 +4,7 @@
 // read-only DB tools.
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Send, X, Loader2, Wrench } from "lucide-react";
-import { askSatTrack } from "../api/satelliteService";
+import { askSatTrackStream } from "../api/satelliteService";
 
 const SAMPLE_PROMPTS = [
   "How many active GPS satellites?",
@@ -30,21 +30,44 @@ export default function AskSatTrack() {
     const q = (text ?? input).trim();
     if (!q || loading) return;
     setInput("");
-    setThread((t) => [...t, { role: "user", content: q }]);
-    setLoading(true);
-    const res = await askSatTrack(q);
-    setLoading(false);
-    if (res?.error) {
-      setThread((t) => [
-        ...t,
-        { role: "assistant", content: res.message || "Something went wrong.", isError: true },
-      ]);
-      return;
-    }
+    // Append user msg + a placeholder assistant msg that we'll grow as
+    // tool_call / text_delta events arrive.
     setThread((t) => [
       ...t,
-      { role: "assistant", content: res.answer, toolCalls: res.tool_calls || [] },
+      { role: "user", content: q },
+      { role: "assistant", content: "", toolCalls: [], streaming: true },
     ]);
+    setLoading(true);
+
+    let assistantIdx = -1; // index into thread we're filling
+    let errored = false;
+
+    await askSatTrackStream(q, [], (ev) => {
+      setThread((t) => {
+        if (assistantIdx < 0) assistantIdx = t.length - 1;
+        const next = [...t];
+        const msg = { ...next[assistantIdx] };
+        if (ev.type === "tool_call") {
+          msg.toolCalls = [
+            ...(msg.toolCalls || []),
+            { name: ev.name, input: ev.input, summary: ev.summary },
+          ];
+        } else if (ev.type === "text_delta") {
+          msg.content = (msg.content || "") + ev.text;
+        } else if (ev.type === "done") {
+          msg.streaming = false;
+        } else if (ev.type === "error") {
+          msg.content = ev.message || "Something went wrong.";
+          msg.isError = true;
+          msg.streaming = false;
+          errored = true;
+        }
+        next[assistantIdx] = msg;
+        return next;
+      });
+    });
+
+    setLoading(false);
   }
 
   function clearThread() {
@@ -143,7 +166,7 @@ export default function AskSatTrack() {
                 <Message key={i} message={m} />
               ))}
 
-              {loading && (
+              {loading && thread[thread.length - 1]?.role === "user" && (
                 <div className="flex items-center gap-2 text-xs text-teal-300">
                   <Loader2 size={12} className="animate-spin" />
                   Thinking...

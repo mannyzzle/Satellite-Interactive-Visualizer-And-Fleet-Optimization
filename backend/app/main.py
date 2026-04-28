@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 import sys
+import time
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
@@ -40,6 +41,42 @@ app.include_router(launches.router, prefix="/api/launches", tags=["Launches"])
 app.include_router(reentry.router, prefix="/api/reentry", tags=["Reentry"])
 app.include_router(space_weather.router, prefix="/api/space-weather", tags=["SpaceWeather"])
 app.include_router(digest.router, prefix="/api/digest", tags=["Digest"])
+
+
+# Sampled telemetry on AI endpoints — feeds llm_request_log for tuning.
+_AI_PATH_PREFIXES = ("/api/llm/", "/api/digest/", "/api/reentry/", "/api/space-weather/")
+
+
+@app.middleware("http")
+async def llm_telemetry_middleware(request: Request, call_next):
+    path = request.url.path
+    if not any(path.startswith(p) for p in _AI_PATH_PREFIXES):
+        return await call_next(request)
+
+    t0 = time.time()
+    status = 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        return response
+    finally:
+        latency_ms = int((time.time() - t0) * 1000)
+        try:
+            try:
+                from services import llm_service
+            except ImportError:
+                from .services import llm_service
+            ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+            if not ip:
+                ip = request.client.host if request.client else "unknown"
+            llm_service.log_request(
+                endpoint=path,
+                ip=ip,
+                latency_ms=latency_ms,
+                status=status,
+            )
+        except Exception:
+            pass
 
 @app.get("/")
 def root():

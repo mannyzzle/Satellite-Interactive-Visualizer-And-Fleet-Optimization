@@ -4,11 +4,13 @@ Both endpoints sit behind a per-IP rate limiter and a DB-backed daily cap.
 See services/llm_service.py for the cost-control rationale.
 """
 
+import json
 import math
 import os
 import sys
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from psycopg2.extras import DictCursor
 from pydantic import BaseModel, Field
 
@@ -199,6 +201,35 @@ def ask(payload: AskRequest, request: Request):
         return llm_service.ask(payload.question, payload.history)
     except llm_service.LLMError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc))
+
+
+@router.post("/ask/stream")
+def ask_stream(payload: AskRequest, request: Request):
+    """SSE-streamed variant of /ask. Each line is `data: <json>\\n\\n`.
+
+    Event types: text_delta, tool_call, done, error.
+    """
+    try:
+        llm_service.check_rate_limit(_client_ip(request))
+    except llm_service.LLMError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc))
+
+    def generate():
+        try:
+            for event in llm_service.ask_stream(payload.question, payload.history):
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as exc:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
