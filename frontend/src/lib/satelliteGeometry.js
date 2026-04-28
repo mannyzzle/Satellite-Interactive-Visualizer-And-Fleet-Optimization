@@ -99,8 +99,8 @@ export function makeAtmosphereMaterial(tint = 0x5eead4) {
   return new THREE.ShaderMaterial({
     uniforms: {
       tint: { value: new THREE.Color(tint) },
-      power: { value: 3.0 },
-      intensity: { value: 1.4 },
+      power: { value: 4.5 },     // sharper falloff, only the rim glows
+      intensity: { value: 0.55 }, // dim — was 1.4 (too punchy on dark bg)
     },
     vertexShader: /* glsl */ `
       varying vec3 vNormal;
