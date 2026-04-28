@@ -1,8 +1,9 @@
-// CDMBriefingCard — collapsible Claude-generated risk explainer for a CDM event.
+// CDMBriefingCard — collapsible AI-generated risk explainer for a CDM event.
 // Lazy-loads on first expand to avoid burning LLM credits on every event click.
 import { useEffect, useState } from "react";
 import { Sparkles, ChevronDown, Loader2 } from "lucide-react";
 import { fetchCDMBriefing } from "../api/satelliteService";
+import RichText from "./RichText";
 
 export default function CDMBriefingCard({ cdmId }) {
   const [open, setOpen] = useState(false);
@@ -71,13 +72,12 @@ export default function CDMBriefingCard({ cdmId }) {
 
           {data && (
             <>
-              <p className="text-sm text-gray-100 leading-relaxed whitespace-pre-line">
-                {data.briefing}
-              </p>
-              <div className="mt-3 pt-2 border-t border-gray-800/60 text-[10px] text-gray-500 flex items-center justify-between">
-                <span>Model: {data.model}</span>
-                <span className="italic">{data.disclaimer}</span>
-              </div>
+              <RichText className="text-sm text-gray-100">{data.briefing}</RichText>
+              {data.disclaimer ? (
+                <div className="mt-3 pt-2 border-t border-gray-800/60 text-[10px] text-gray-500 italic">
+                  {data.disclaimer}
+                </div>
+              ) : null}
             </>
           )}
         </div>

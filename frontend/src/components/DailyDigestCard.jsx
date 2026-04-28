@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Newspaper, ChevronDown, Loader2, Sparkles } from "lucide-react";
 import { fetchDailyDigest } from "../api/satelliteService";
+import RichText from "./RichText";
 
 export default function DailyDigestCard() {
   const [open, setOpen] = useState(false);
@@ -58,12 +59,10 @@ export default function DailyDigestCard() {
           {error && <div className="text-xs text-rose-300">{error}</div>}
           {data && (
             <>
-              <div className="text-sm text-gray-100 leading-relaxed whitespace-pre-line">
-                {data.briefing}
-              </div>
+              <RichText className="text-sm text-gray-100">{data.briefing}</RichText>
               <div className="mt-3 pt-2 border-t border-gray-800/60 text-[10px] text-gray-500 flex items-center justify-between">
                 <span className="flex items-center gap-1">
-                  <Sparkles size={10} /> {data.cached ? "Cached" : "Fresh"} · {data.model}
+                  <Sparkles size={10} /> {data.cached ? "Cached" : "Fresh"}
                 </span>
                 <span>{data.day}</span>
               </div>

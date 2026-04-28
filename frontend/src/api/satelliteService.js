@@ -106,7 +106,7 @@ export async function fetchHistoricalTLEs(noradNumber) {
 
 
 /**
- * Natural-language catalog search via Claude.
+ * Natural-language catalog search.
  * Returns { query, filters, total, satellites } or null on failure.
  */
 export async function searchByNL(query, limit = 200) {
@@ -233,7 +233,7 @@ export async function fetchSatelliteTimeline(norad, windowDays = 365) {
 }
 
 /**
- * Fetch a Claude-generated 3-sentence briefing for a CDM event.
+ * Fetch a 3-sentence AI briefing for a CDM event.
  */
 export async function fetchCDMBriefing(cdmId) {
   const url = `${LLM_API}/cdm/${encodeURIComponent(cdmId)}/briefing`;

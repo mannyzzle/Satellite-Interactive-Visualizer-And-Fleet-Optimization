@@ -1,10 +1,11 @@
 // AskSatTrack — global chat launcher (bottom-right).
-// Opens a drawer with a Claude-powered analyst that can answer questions
-// about the catalog, conjunctions, launches, and space weather by calling
-// read-only DB tools.
+// Opens a drawer with an AI analyst that can answer questions about the
+// catalog, conjunctions, launches, and space weather by calling read-only
+// DB tools.
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Send, X, Loader2, Wrench } from "lucide-react";
 import { askSatTrackStream } from "../api/satelliteService";
+import RichText from "./RichText";
 
 const SAMPLE_PROMPTS = [
   "How many active GPS satellites?",
@@ -112,7 +113,7 @@ export default function AskSatTrack() {
                 <div>
                   <div className="text-sm font-semibold text-white">Mission Control</div>
                   <div className="text-[10px] font-mono text-gray-500 uppercase tracking-wider">
-                    AI analyst · Claude Haiku
+                    AI analyst · live data tools
                   </div>
                 </div>
               </div>
@@ -214,15 +215,18 @@ function Message({ message }) {
   return (
     <div className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}>
       <div
-        className={`max-w-[90%] px-3 py-2 rounded-lg text-sm leading-relaxed whitespace-pre-line ${
+        className={`max-w-[90%] px-3 py-2 rounded-lg text-sm leading-relaxed ${
           isUser
-            ? "bg-teal-500/20 border border-teal-500/30 text-teal-50"
+            ? "whitespace-pre-line bg-teal-500/20 border border-teal-500/30 text-teal-50"
             : message.isError
-            ? "bg-rose-500/10 border border-rose-500/30 text-rose-200"
+            ? "whitespace-pre-line bg-rose-500/10 border border-rose-500/30 text-rose-200"
             : "bg-gray-900/80 border border-gray-800 text-gray-100"
         }`}
       >
-        {message.content}
+        {/* Assistant text uses RichText so **bold**, lists, and `code`
+            render as actual styled spans instead of literal markers. User
+            text stays plain (typed by a human, no formatting expected). */}
+        {isUser || message.isError ? message.content : <RichText>{message.content}</RichText>}
       </div>
       {message.toolCalls && message.toolCalls.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-1">

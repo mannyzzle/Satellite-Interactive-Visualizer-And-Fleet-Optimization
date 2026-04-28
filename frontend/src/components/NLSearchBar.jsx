@@ -1,4 +1,4 @@
-// NLSearchBar — natural-language satellite search powered by Claude.
+// NLSearchBar — natural-language satellite search.
 // On submit, calls /api/llm/search and shows a results panel. Selecting a
 // result fires onSelectSatellite(sat) so the parent decides what "open" means
 // (focus on globe vs navigate to detail page).

@@ -8,6 +8,7 @@ import { SkeletonStyles, ShimmerBar } from "../components/Skeleton";
 import { KpiTile, KpiSkeleton } from "../components/KpiTile";
 import { fetchUpcomingReentries, fetchReentryBriefing } from "../api/satelliteService";
 import { getCountryFlag, getCountryName } from "../lib/countries";
+import RichText from "../components/RichText";
 
 const RISK_PILL = {
   elevated: "bg-rose-500/20 border-rose-500/40 text-rose-200",
@@ -228,9 +229,7 @@ function ReentryBriefingModal({ reentry, onClose }) {
           {error && <div className="text-sm text-rose-300">{error}</div>}
           {briefing && (
             <>
-              <div className="text-sm text-gray-100 leading-relaxed whitespace-pre-line">
-                {briefing.briefing}
-              </div>
+              <RichText className="text-sm text-gray-100">{briefing.briefing}</RichText>
               <div className="mt-4 pt-3 border-t border-gray-800/60 flex items-center justify-between text-[10px] text-gray-500">
                 <span>{briefing.disclaimer}</span>
                 <Link

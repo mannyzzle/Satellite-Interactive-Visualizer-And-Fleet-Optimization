@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Sparkles, Loader2, Activity } from "lucide-react";
 import { fetchSatelliteTimeline } from "../api/satelliteService";
+import RichText from "./RichText";
 
 const CLASSIFICATION_COLORS = {
   "orbit raise": "text-emerald-300 border-emerald-500/30 bg-emerald-500/10",
@@ -76,9 +77,7 @@ export default function ManeuverTimeline({ norad, satelliteName }) {
 
         {data && !error && (
           <>
-            <div className="text-sm text-gray-100 leading-relaxed whitespace-pre-line mb-4">
-              {data.narrative}
-            </div>
+            <RichText className="text-sm text-gray-100 mb-4">{data.narrative}</RichText>
 
             {data.events.length > 0 ? (
               <div className="space-y-2">
@@ -119,9 +118,8 @@ export default function ManeuverTimeline({ norad, satelliteName }) {
               </div>
             )}
 
-            <div className="mt-3 pt-2 border-t border-gray-800/60 text-[10px] text-gray-500 flex items-center justify-between">
-              <span>Detected from {data.snapshots?.length || 0} TLE snapshots</span>
-              <span>Model: {data.model}</span>
+            <div className="mt-3 pt-2 border-t border-gray-800/60 text-[10px] text-gray-500">
+              Detected from {data.snapshots?.length || 0} TLE snapshots
             </div>
           </>
         )}
