@@ -1733,31 +1733,67 @@ return (
 
       </div>
 
-      {/* Floating launcher — appears when the sidebar is closed. A glass
-          chip pinned to the right edge with the live total count and a
-          satellite icon, click to slide the panel in. */}
-      {!sidebarOpen ? (
-        <button
-          data-testid="sat-sidebar-launcher"
-          onClick={() => setSidebarOpen(true)}
-          aria-label="Open satellite catalog"
-          className="absolute top-6 right-6 z-[100] inline-flex items-center gap-2
-                     px-3 py-2 rounded-full
-                     bg-gray-900/55 backdrop-blur-md border border-teal-400/30
-                     text-teal-100 text-xs font-medium
-                     hover:bg-gray-900/75 hover:border-teal-400/60
-                     shadow-[0_0_24px_-8px_rgba(94,234,212,0.4)]
-                     transition-colors"
+      {/* Closed-sidebar pull-tab. Reads as the *handle* of the slid-out
+          catalog drawer rather than a floating chip — anchored flush to
+          the right edge of the viewport, vertically centered, with the
+          label + count rotated 90° so the strip is narrow but readable.
+          Hides on mobile (where the drawer comes in from the bottom).
+          Hidden visually but kept in DOM when sidebar is open so layout
+          / animation stays stable. */}
+      <button
+        data-testid="sat-sidebar-launcher"
+        onClick={() => setSidebarOpen(true)}
+        aria-label="Open satellite catalog"
+        aria-hidden={sidebarOpen}
+        tabIndex={sidebarOpen ? -1 : 0}
+        className={`hidden md:flex absolute z-[100] top-1/2 -translate-y-1/2 right-0
+                    flex-col items-center gap-2 py-5 px-2
+                    bg-gray-950/55 backdrop-blur-md
+                    border border-r-0 border-teal-400/25
+                    rounded-l-xl text-teal-100
+                    shadow-[0_0_24px_-6px_rgba(94,234,212,0.35),inset_1px_0_0_rgba(94,234,212,0.18)]
+                    hover:bg-gray-900/70 hover:border-teal-400/55 hover:pr-3
+                    transition-all duration-300
+                    ${sidebarOpen ? "opacity-0 pointer-events-none translate-x-full" : "opacity-100 translate-x-0"}`}
+      >
+        <SatelliteIcon size={18} className="text-teal-300" />
+        <span
+          className="text-[10px] font-mono uppercase tracking-[0.3em] text-teal-100"
+          style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
         >
-          <SatelliteIcon size={16} className="text-teal-300" />
-          <span>Catalog</span>
-          {total > 0 ? (
-            <span className="text-[10px] font-mono text-gray-400 bg-gray-800/80 border border-gray-700/60 rounded-full px-1.5">
-              {total.toLocaleString()}
-            </span>
-          ) : null}
-        </button>
-      ) : null}
+          Catalog
+        </span>
+        {total > 0 ? (
+          <span className="text-[10px] font-mono text-gray-300 bg-gray-800/80 border border-gray-700/60 rounded-full px-1.5 py-0.5">
+            {total.toLocaleString()}
+          </span>
+        ) : null}
+        <ChevronLeft size={14} className="text-teal-300/80" />
+      </button>
+
+      {/* Mobile launcher — small bottom-edge handle since the drawer
+          slides up from the bottom on small screens. */}
+      <button
+        onClick={() => setSidebarOpen(true)}
+        aria-label="Open satellite catalog"
+        aria-hidden={sidebarOpen}
+        tabIndex={sidebarOpen ? -1 : 0}
+        className={`md:hidden fixed z-[100] bottom-4 left-1/2 -translate-x-1/2
+                    inline-flex items-center gap-2 px-4 py-2 rounded-full
+                    bg-gray-950/70 backdrop-blur-md border border-teal-400/30
+                    text-teal-100 text-xs font-medium
+                    shadow-[0_8px_24px_-6px_rgba(94,234,212,0.4)]
+                    ${sidebarOpen ? "opacity-0 pointer-events-none translate-y-4" : "opacity-100 translate-y-0"}
+                    transition-all duration-300`}
+      >
+        <SatelliteIcon size={14} className="text-teal-300" />
+        Catalog
+        {total > 0 ? (
+          <span className="text-[10px] font-mono text-gray-300 bg-gray-800/80 border border-gray-700/60 rounded-full px-1.5">
+            {total.toLocaleString()}
+          </span>
+        ) : null}
+      </button>
 
       {/* RIGHT-SIDE PANEL — slide-in glass drawer. Lower opacity + heavier
           backdrop-blur than before so it feels like a pane of glass over
