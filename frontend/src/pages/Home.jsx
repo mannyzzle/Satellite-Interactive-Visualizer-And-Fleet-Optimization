@@ -471,28 +471,47 @@ function smoothCameraTransition(targetPosition, satellite) {
   const camera = cameraRef.current;
   const controls = controlsRef.current;
 
-  // Park the camera *next to* the satellite, not 1.5× its distance from
-  // Earth's center. Camera-to-sat distance scales with orbit altitude
-  // so LEO gets ~30 units, GEO ~250 — enough to see the satellite icon
-  // clearly without clipping into Earth. Direction = the satellite's
-  // outward radial, so the camera looks back toward Earth past the
-  // satellite (planet behind, sat in foreground).
+  // Frame the satellite SIDE-ON, not from above.
+  // Camera is offset tangent to the satellite's orbit (mostly) plus a
+  // slight outward bias. Looking back at the satellite, this gives:
+  //   camera → satellite → Earth's curved limb in the background.
+  // Looking down the radial line (the previous version) just put the
+  // camera directly above the satellite, so the view was Earth's
+  // surface filling the screen with the satellite indistinguishable
+  // from the ground texture.
   const satFromOrigin = targetPosition.length();
-  const closeOffset = Math.max(30, satFromOrigin * 0.012);
+  const closeOffset = Math.max(60, satFromOrigin * 0.02);
   const radialDir = targetPosition.clone().normalize();
-  const endCam = targetPosition.clone().add(
-    radialDir.multiplyScalar(closeOffset)
-  );
+  // Pick an "up" perpendicular to the radial. If the satellite is near
+  // the poles, swap the reference axis to avoid a degenerate cross.
+  const refUp =
+    Math.abs(radialDir.y) > 0.95
+      ? new THREE.Vector3(1, 0, 0)
+      : new THREE.Vector3(0, 1, 0);
+  const tangent = new THREE.Vector3()
+    .crossVectors(radialDir, refUp)
+    .normalize();
+  const endCam = targetPosition
+    .clone()
+    .addScaledVector(tangent, closeOffset * 0.85)
+    .addScaledVector(radialDir, closeOffset * 0.3);
 
-  // OrbitControls' minDistance is set to the Earth-orbit floor (6230) for
-  // the unfocused state. Drop it well below `closeOffset` while we're
-  // zoomed in so the user can manually pull even closer if they want.
-  // Restored to DEFAULT_MIN_DISTANCE in resetMarker / ESC handler.
-  controls.minDistance = Math.min(closeOffset * 0.4, 5);
+  // OrbitControls' minDistance is the Earth-orbit floor (6230) for the
+  // unfocused state. Drop it below `closeOffset` while we're zoomed in
+  // so the controls don't yank the camera back out. Restored on
+  // ESC / resetMarker.
+  controls.minDistance = Math.min(closeOffset * 0.3, 5);
 
   const startTarget = controls.target.clone();
-  const endTarget = targetPosition.clone();
   const startCam = camera.position.clone();
+
+  // Critical: the satellite is moving at 7+ km/s. By the time the
+  // ~0.4s lerp completes, it's far from `targetPosition`. Look up the
+  // mesh in the scene each frame so the camera lerp tracks the moving
+  // satellite, not the position it had at click-time. The animation
+  // loop continues to track via followSelectedSatellite() once the
+  // lerp completes.
+  const norad = satellite?.norad_number;
 
   let t = 0;
   const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
@@ -500,14 +519,24 @@ function smoothCameraTransition(targetPosition, satellite) {
   function step() {
     t += 0.04; // ~25 frames @ 60fps ≈ 0.4s
     const eased = easeOutCubic(Math.min(1, t));
-    camera.position.lerpVectors(startCam, endCam, eased);
-    controls.target.lerpVectors(startTarget, endTarget, eased);
+
+    const liveSat = norad ? satelliteObjectsRef.current[norad] : null;
+    const livePos = liveSat?.position
+      ? liveSat.position.clone()
+      : targetPosition.clone();
+    const liveEnd = livePos
+      .clone()
+      .addScaledVector(tangent, closeOffset * 0.85)
+      .addScaledVector(radialDir, closeOffset * 0.3);
+
+    camera.position.lerpVectors(startCam, liveEnd, eased);
+    controls.target.lerpVectors(startTarget, livePos, eased);
     controls.update();
     if (t < 1) {
       requestAnimationFrame(step);
     } else {
-      camera.position.copy(endCam);
-      controls.target.copy(endTarget);
+      camera.position.copy(liveEnd);
+      controls.target.copy(livePos);
       controls.update();
     }
   }
@@ -1198,19 +1227,43 @@ useEffect(() => {
             selectedPointerRef.current.userData.followingSatellite
           ];
         if (followedSat) {
+          // Marker rides along with the satellite.
           selectedPointerRef.current.position.copy(followedSat.position);
           selectedPointerRef.current.lookAt(new THREE.Vector3(0, 0, 0));
-          // Pulsing "lock-on" scale — 1.0 → 1.35 over ~1.6s. Uses time so
-          // multiple selections in a row stay phase-aligned.
+          // Pulsing "lock-on" scale + opacity throb.
           const pulse = 1 + 0.18 * Math.sin(time * 4);
           selectedPointerRef.current.scale.setScalar(pulse);
           if (selectedPointerRef.current.material) {
             selectedPointerRef.current.material.opacity = 0.55 + 0.25 * Math.sin(time * 4);
           }
+
+          // Camera follow: keep the camera at a fixed offset from the
+          // satellite's current position so it stays in frame as the
+          // satellite races through its orbit (~7 km/s in LEO). Without
+          // this, the moment the smoothCameraTransition lerp ends, the
+          // satellite pulls away and the camera looks at empty Earth.
+          // We preserve the user's manual orbit-control offset by
+          // computing the existing camera-to-target vector and
+          // re-applying it to the new sat position each frame.
+          if (controlsRef.current && cameraRef.current) {
+            const offset = cameraRef.current.position
+              .clone()
+              .sub(controlsRef.current.target);
+            controlsRef.current.target.copy(followedSat.position);
+            cameraRef.current.position.copy(followedSat.position).add(offset);
+            controlsRef.current.update();
+          }
         }
       }
 
-      controls.update();
+      // (controls.update is already called above when following; only
+      // call it here when nothing is followed so we don't double-update.)
+      if (
+        !selectedPointerRef.current ||
+        !selectedPointerRef.current.userData?.followingSatellite
+      ) {
+        controls.update();
+      }
       renderer.render(scene, camera);
     };
     animate();
