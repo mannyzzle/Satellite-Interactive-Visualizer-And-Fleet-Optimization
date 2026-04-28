@@ -351,11 +351,27 @@ useEffect(() => {
         orbitColor = 0xFFFF00;  // 🟡 Bright Yellow (Inactive satellites)
     }
 
-    // ✅ Step 3: Create Orbit Path
+    // Build the orbit with per-vertex colors that fade to alpha 0 at the
+    // tail. Reads as a comet trail rather than a flat closed loop —
+    // immediately gives the scene more motion / direction. The "head"
+    // (current sat position, index 0) is full brightness; alpha tapers
+    // to ~0 at the back of the orbit.
     const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
+    const colors = new Float32Array(orbitPoints.length * 3);
+    const c = new THREE.Color(orbitColor);
+    for (let i = 0; i < orbitPoints.length; i++) {
+        // Brightness: 1.0 at the head (i=0), fades to 0.05 at the tail.
+        // Square the falloff so the head reads sharper and the tail dims fast.
+        const t = i / Math.max(1, orbitPoints.length - 1);
+        const b = Math.max(0.05, Math.pow(1 - t, 1.4));
+        colors[i * 3] = c.r * b;
+        colors[i * 3 + 1] = c.g * b;
+        colors[i * 3 + 2] = c.b * b;
+    }
+    orbitGeometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     const orbitMaterial = new THREE.LineBasicMaterial({
-        color: orbitColor,
-        opacity: 0.99,
+        vertexColors: true,
+        opacity: 0.85,
         transparent: true,
     });
 
@@ -1041,9 +1057,15 @@ useEffect(() => {
 
     const initialAltitude = 50000; // LEO default
     const camera = new THREE.PerspectiveCamera(70, width / height, 0.5, 900000);
-    camera.position.set(0, 5, initialAltitude);
+    // Cinematic intro: start the camera further out and let the animation
+    // loop ease it in to the target altitude over ~1.6 seconds.
+    const introTargetZ = initialAltitude;
+    const introStartZ = initialAltitude * 1.55;
+    camera.position.set(0, 5, introStartZ);
     camera.updateProjectionMatrix();
     cameraRef.current = camera;
+    // Capture mount time so the animation loop can ease the camera in.
+    const introStartTime = performance.now();
 
     // ✅ Notice 'alpha: true' to allow a transparent background
     const renderer = new THREE.WebGLRenderer({
@@ -1058,7 +1080,10 @@ useEffect(() => {
 
     mountRef.current.appendChild(renderer.domElement);
 
-    // ✅ OrbitControls
+    // OrbitControls. autoRotate kicks in when no satellite is selected —
+    // a slow sky-screensaver feel that shows off the globe + atmosphere
+    // when the user hasn't asked for anything specific. User input (drag
+    // / zoom) suspends it via the Controls' built-in handlers.
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableZoom = true;
     controls.enablePan = false;
@@ -1067,12 +1092,47 @@ useEffect(() => {
     controls.rotateSpeed = 0.5;
     controls.minDistance = 6230;
     controls.maxDistance = 500000;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.18; // ~3.4 degrees/sec — gentle drift
     controlsRef.current = controls;
 
-    // ✅ Add Light Source
-    const light = new THREE.DirectionalLight(0xffffff, 4.5);
-    light.position.set(200, 50, 0);
-    scene.add(light);
+    // Key sunlight — warm, intense, slightly off-axis so the day/night
+    // terminator on the Earth texture actually reads as a sunlit hemisphere.
+    const sunDirection = new THREE.Vector3(7000, 1500, 2000);
+    const sunLight = new THREE.DirectionalLight(0xfff2d6, 4.5);
+    sunLight.position.copy(sunDirection);
+    scene.add(sunLight);
+
+    // Soft fill so the dark side isn't pitch-black — a deep blue
+    // hemisphere light fakes Earthshine.
+    const fill = new THREE.HemisphereLight(0x223355, 0x000000, 0.55);
+    scene.add(fill);
+
+    // Visible Sun sphere at the directional-light position. Pure
+    // emissive so it's bright at any camera angle. Sits well outside
+    // the orbits so it never collides with anything.
+    const sunMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(1200, 24, 24),
+      new THREE.MeshBasicMaterial({ color: 0xfff2c4 })
+    );
+    sunMesh.position.copy(sunDirection);
+    sunMesh.scale.setScalar(8);
+    scene.add(sunMesh);
+    // Halo around the sun, additive blended for a lens-flare hint.
+    const sunGlow = new THREE.Mesh(
+      new THREE.SphereGeometry(1800, 24, 24),
+      new THREE.MeshBasicMaterial({
+        color: 0xfff2c4,
+        transparent: true,
+        opacity: 0.15,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    sunGlow.position.copy(sunDirection);
+    sunGlow.scale.setScalar(20);
+    scene.add(sunGlow);
+    sunRef.current = sunMesh;
 
     // 🌍 Create Earth
     const globe = new THREE.Mesh(
@@ -1122,6 +1182,27 @@ useEffect(() => {
 
       const time = Date.now() / 1000;
       const timeFactor = 1;
+
+      // Cinematic intro: ease the camera in for ~1.6s on first mount.
+      // Math.cubicOut: 1 - (1 - t)^3 — feels weighty without being slow.
+      const introT = Math.min(1, (performance.now() - introStartTime) / 1600);
+      if (introT < 1) {
+        const eased = 1 - Math.pow(1 - introT, 3);
+        const z = introStartZ + (introTargetZ - introStartZ) * eased;
+        // Only override Z if user hasn't started orbiting yet.
+        if (camera.position.distanceTo(new THREE.Vector3(0, 0, 0)) > introTargetZ * 0.95) {
+          camera.position.setZ(z);
+        }
+      }
+
+      // Suspend autoRotate the moment a satellite is selected; resume
+      // when the user clears the selection.
+      if (controlsRef.current) {
+        const wantAuto = !selectedPointerRef.current;
+        if (controlsRef.current.autoRotate !== wantAuto) {
+          controlsRef.current.autoRotate = wantAuto;
+        }
+      }
 
       // 🛰️ Update satellites’ positions
       Object.values(satelliteObjectsRef.current).forEach((satelliteModel) => {
