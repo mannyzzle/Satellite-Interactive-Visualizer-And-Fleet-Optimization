@@ -140,17 +140,18 @@ export function makeAtmosphereMaterial(tint = 0x5eead4) {
   });
 }
 
-/* ---------- Pulsing selection marker ---------- */
-// A torus that the animation loop scales between [1.0, 1.4] each frame
-// for a "lock-on" pulse. Returned as a fresh mesh per call so each
-// selection has its own animation phase.
+/* ---------- Pulsing selection marker ----------
+   Big ring (relative to the satellite icon, ~0.18) so it reads at
+   close-up framing. Animation loop scales it between 1.0–1.35 each
+   frame for a "lock-on" pulse + opacity throb. */
 export function makePulseMarker() {
-  const geo = new THREE.RingGeometry(0.32, 0.4, 32);
+  const geo = new THREE.RingGeometry(1.6, 2.2, 48);
   const mat = new THREE.MeshBasicMaterial({
     color: 0xfbbf24,
     side: THREE.DoubleSide,
     transparent: true,
-    opacity: 0.65,
+    opacity: 0.7,
+    depthWrite: false,
   });
   return new THREE.Mesh(geo, mat);
 }

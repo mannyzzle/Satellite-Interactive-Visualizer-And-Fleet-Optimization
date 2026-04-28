@@ -172,6 +172,7 @@ const findPageForSatellite = async (sat) => {
         selectedPointerRef.current = null;
         if (controlsRef.current) {
           controlsRef.current.target.set(0, 0, 0);
+          controlsRef.current.minDistance = DEFAULT_MIN_DISTANCE;
           controlsRef.current.update();
         }
         setSelectedSatellite(null);
@@ -401,10 +402,11 @@ useEffect(() => {
       selectedPointerRef.current = null;
     }
     // Snap OrbitControls' anchor back to Earth so auto-rotate drifts
-    // around the planet again. Pass `{ resetTarget: false }` from inside
-    // focusOnSatellite where the next update overrides target anyway.
+    // around the planet again, and restore the Earth-orbit minDistance
+    // floor (smoothCameraTransition lowers it to allow close-up framing).
     if (resetTarget && controlsRef.current) {
       controlsRef.current.target.set(0, 0, 0);
+      controlsRef.current.minDistance = DEFAULT_MIN_DISTANCE;
       controlsRef.current.update();
     }
   };
@@ -458,42 +460,45 @@ const loadSatelliteModel = (satellite) => {
 
 
 // ✅ Smooth Camera Transition Function (Now Fixed)
+// minDistance the OrbitControls reverts to when no satellite is focused
+// (Earth-orbit camera floor). Keep it in sync with the value set in the
+// scene-init useEffect below.
+const DEFAULT_MIN_DISTANCE = 6230;
+
 function smoothCameraTransition(targetPosition, satellite) {
   if (!is3DEnabled || !cameraRef.current || !controlsRef.current) return;
 
   const camera = cameraRef.current;
   const controls = controlsRef.current;
 
-  // Lerp BOTH controls.target and camera.position each frame, then call
-  // controls.update(). The previous version moved camera.position via
-  // camera.lookAt() but never touched controls.target — every
-  // controls.update() snapped the camera back to face origin and the
-  // animation looked broken. Now we drive both, with the eased easing
-  // running until the t hits 1 (no fragile "speedFactor" math).
+  // Park the camera *next to* the satellite, not 1.5× its distance from
+  // Earth's center. Camera-to-sat distance scales with orbit altitude
+  // so LEO gets ~30 units, GEO ~250 — enough to see the satellite icon
+  // clearly without clipping into Earth. Direction = the satellite's
+  // outward radial, so the camera looks back toward Earth past the
+  // satellite (planet behind, sat in foreground).
+  const satFromOrigin = targetPosition.length();
+  const closeOffset = Math.max(30, satFromOrigin * 0.012);
+  const radialDir = targetPosition.clone().normalize();
+  const endCam = targetPosition.clone().add(
+    radialDir.multiplyScalar(closeOffset)
+  );
 
-  let zoomFactor;
-  if (satellite) {
-    const altitude = (satellite.perigee + satellite.apogee) / 2;
-    if (altitude < 2000) zoomFactor = 1.25;
-    else if (altitude < 20000) zoomFactor = 1.5;
-    else if (altitude < 40000) zoomFactor = 2.0;
-    else zoomFactor = 3.0;
-  } else {
-    zoomFactor = 1.5;
-  }
+  // OrbitControls' minDistance is set to the Earth-orbit floor (6230) for
+  // the unfocused state. Drop it well below `closeOffset` while we're
+  // zoomed in so the user can manually pull even closer if they want.
+  // Restored to DEFAULT_MIN_DISTANCE in resetMarker / ESC handler.
+  controls.minDistance = Math.min(closeOffset * 0.4, 5);
 
-  // End camera position: along the same direction as the satellite from
-  // origin, scaled by zoomFactor — gives a "hovering above" feel.
   const startTarget = controls.target.clone();
   const endTarget = targetPosition.clone();
   const startCam = camera.position.clone();
-  const endCam = targetPosition.clone().multiplyScalar(zoomFactor);
 
   let t = 0;
   const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
 
   function step() {
-    t += 0.04;                       // ~25 frames @ 60fps ≈ 0.4s
+    t += 0.04; // ~25 frames @ 60fps ≈ 0.4s
     const eased = easeOutCubic(Math.min(1, t));
     camera.position.lerpVectors(startCam, endCam, eased);
     controls.target.lerpVectors(startTarget, endTarget, eased);
@@ -501,7 +506,6 @@ function smoothCameraTransition(targetPosition, satellite) {
     if (t < 1) {
       requestAnimationFrame(step);
     } else {
-      // Final snap so floating-point drift doesn't leave us short.
       camera.position.copy(endCam);
       controls.target.copy(endTarget);
       controls.update();
