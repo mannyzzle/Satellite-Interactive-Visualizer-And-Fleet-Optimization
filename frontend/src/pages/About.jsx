@@ -38,10 +38,33 @@ import { CDM_API, LAUNCHES_API, SATELLITES_API } from "../config";
    Framer Motion. Renders in <2 KB of GPU work and stays smooth even on
    throttled CPUs. */
 function OrbitWidget() {
+  // padded viewBox so satellite halos don't clip at the edge as they
+  // sweep around. orbit center stays at (100,100); the viewBox extends
+  // out to -10..210 so even halos at radius 5–6 past the orbit's outer
+  // extent never collide with the bounding box.
+  const VB = "-10 -10 220 220";
+
+  // Animation rotation defs (SMIL animateTransform). Using SVG-native
+  // transforms with explicit rotate(angle, cx, cy) avoids the CSS
+  // `transform-origin: 50% 50%` trap, where 50% is the *bounding box*
+  // of the rotated `<g>` (asymmetric — ellipse + satellite-on-rim) and
+  // not the actual orbital center. That's why the previous version
+  // showed the satellites drifting off in slow loops instead of
+  // tracing the ellipses.
+  const Rotate = ({ from, to, dur }) => (
+    <animateTransform
+      attributeName="transform"
+      type="rotate"
+      from={`${from} 100 100`}
+      to={`${to} 100 100`}
+      dur={dur}
+      repeatCount="indefinite"
+    />
+  );
+
   return (
     <div className="relative w-full max-w-md aspect-square mx-auto">
       <style>{`
-        @keyframes ow-spin   { to { transform: rotate(360deg); } }
         @keyframes ow-pulse  {
           0%   { transform: scale(0.9); opacity: 0.6; }
           70%  { transform: scale(1.6); opacity: 0; }
@@ -51,15 +74,19 @@ function OrbitWidget() {
           0%, 100% { opacity: 0.45; }
           50%      { opacity: 1; }
         }
-        .ow-orbit-a { animation: ow-spin 18s linear infinite; transform-origin: 50% 50%; }
-        .ow-orbit-b { animation: ow-spin 26s linear infinite reverse; transform-origin: 50% 50%; }
-        .ow-orbit-c { animation: ow-spin 9s  linear infinite; transform-origin: 50% 50%; }
-        .ow-pulse-1 { animation: ow-pulse 4s ease-out infinite; transform-origin: 50% 50%; }
-        .ow-pulse-2 { animation: ow-pulse 4s ease-out infinite 1.3s; transform-origin: 50% 50%; }
+        /* transform-origin in absolute SVG user units, matching cx/cy.
+           Use unitless values (NOT 100px) — SVG CSS transforms accept
+           bare numbers in user units. */
+        .ow-pulse-1 { animation: ow-pulse 4s ease-out infinite;
+                      transform-origin: 100px 100px;
+                      transform-box: fill-box; }
+        .ow-pulse-2 { animation: ow-pulse 4s ease-out infinite 1.3s;
+                      transform-origin: 100px 100px;
+                      transform-box: fill-box; }
         .ow-twinkle { animation: ow-twinkle 3s ease-in-out infinite; }
       `}</style>
       <svg
-        viewBox="0 0 200 200"
+        viewBox={VB}
         className="w-full h-full"
         role="img"
         aria-label="Stylized Earth with three satellites in orbit"
@@ -86,58 +113,38 @@ function OrbitWidget() {
 
         {/* Pulsing detection rings — radio sweeping out */}
         <circle
-          cx="100"
-          cy="100"
-          r="22"
-          fill="none"
-          stroke="#5EEAD4"
-          strokeWidth="0.6"
-          opacity="0.6"
+          cx="100" cy="100" r="22"
+          fill="none" stroke="#5EEAD4" strokeWidth="0.6" opacity="0.6"
           className="ow-pulse-1"
-          style={{ transformOrigin: "100px 100px" }}
         />
         <circle
-          cx="100"
-          cy="100"
-          r="22"
-          fill="none"
-          stroke="#86EED8"
-          strokeWidth="0.6"
-          opacity="0.4"
+          cx="100" cy="100" r="22"
+          fill="none" stroke="#86EED8" strokeWidth="0.6" opacity="0.4"
           className="ow-pulse-2"
-          style={{ transformOrigin: "100px 100px" }}
         />
 
-        {/* Orbit A — large outer ellipse + satellite */}
-        <g className="ow-orbit-a">
+        {/* Orbit A — large outer ellipse, CCW spin */}
+        <g>
+          <Rotate from="0" to="360" dur="22s" />
           <ellipse
-            cx="100"
-            cy="100"
-            rx="78"
-            ry="44"
-            fill="none"
-            stroke="url(#ow-orbit-grad)"
-            strokeWidth="1.2"
-            strokeDasharray="2 4"
+            cx="100" cy="100" rx="78" ry="44"
+            fill="none" stroke="url(#ow-orbit-grad)"
+            strokeWidth="1.2" strokeDasharray="2 4"
           />
-          {/* satellite at the rightmost point (rotated by the parent g) */}
           <g transform="translate(178 100)">
             <circle cx="0" cy="0" r="2.8" fill="#86EED8" />
             <circle cx="0" cy="0" r="5.5" fill="#86EED8" opacity="0.25" />
           </g>
         </g>
 
-        {/* Orbit B — tilted middle ellipse, opposite direction */}
-        <g className="ow-orbit-b" transform="rotate(38 100 100)">
+        {/* Orbit B — tilted middle ellipse, CW spin. Combine the static
+            tilt (38°) into the animation by sweeping from 38° → -322°. */}
+        <g>
+          <Rotate from="38" to="-322" dur="28s" />
           <ellipse
-            cx="100"
-            cy="100"
-            rx="56"
-            ry="34"
-            fill="none"
-            stroke="url(#ow-orbit-grad)"
-            strokeWidth="1"
-            strokeDasharray="1 3"
+            cx="100" cy="100" rx="56" ry="34"
+            fill="none" stroke="url(#ow-orbit-grad)"
+            strokeWidth="1" strokeDasharray="1 3"
           />
           <g transform="translate(156 100)">
             <circle cx="0" cy="0" r="2.2" fill="#FFD166" />
@@ -145,18 +152,13 @@ function OrbitWidget() {
           </g>
         </g>
 
-        {/* Orbit C — fast inner small loop */}
-        <g className="ow-orbit-c" transform="rotate(-15 100 100)">
+        {/* Orbit C — fast inner small loop, slight tilt */}
+        <g>
+          <Rotate from="-15" to="345" dur="11s" />
           <ellipse
-            cx="100"
-            cy="100"
-            rx="36"
-            ry="22"
-            fill="none"
-            stroke="#577BC1"
-            strokeWidth="0.6"
-            strokeDasharray="1 2"
-            opacity="0.55"
+            cx="100" cy="100" rx="36" ry="22"
+            fill="none" stroke="#577BC1"
+            strokeWidth="0.6" strokeDasharray="1 2" opacity="0.55"
           />
           <g transform="translate(136 100)">
             <circle cx="0" cy="0" r="1.6" fill="#9BD0FF" />
@@ -166,13 +168,9 @@ function OrbitWidget() {
 
         {/* Earth */}
         <circle
-          cx="100"
-          cy="100"
-          r="22"
+          cx="100" cy="100" r="22"
           fill="url(#ow-earth)"
-          stroke="#5EEAD4"
-          strokeOpacity="0.5"
-          strokeWidth="0.5"
+          stroke="#5EEAD4" strokeOpacity="0.5" strokeWidth="0.5"
         />
 
         {/* Surface highlights — scattered tiny dots = "stations / beacons" */}
