@@ -18,10 +18,12 @@ try:
     from database import get_db_connection
     from services.filter_schema import build_sql_from_structured
     from services import llm_service
+    from services.maneuver_detector import detect_events, parse_tle_history
 except ImportError:
     from app.database import get_db_connection
     from app.services.filter_schema import build_sql_from_structured
     from app.services import llm_service
+    from app.services.maneuver_detector import detect_events, parse_tle_history
 
 
 router = APIRouter()
@@ -180,3 +182,151 @@ def _fetch_sat(cursor, norad: int):
         (norad,),
     )
     return cursor.fetchone()
+
+
+# ---------------------------------------------------------------------------
+# A1: POST /api/llm/ask — conversational analyst
+# ---------------------------------------------------------------------------
+class AskRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=1000)
+    history: list = Field(default_factory=list)
+
+
+@router.post("/ask")
+def ask(payload: AskRequest, request: Request):
+    try:
+        llm_service.check_rate_limit(_client_ip(request))
+        return llm_service.ask(payload.question, payload.history)
+    except llm_service.LLMError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# A2: GET /api/llm/satellite/{norad}/timeline — maneuver detection + AI narrative
+# ---------------------------------------------------------------------------
+@router.get("/satellite/{norad}/timeline")
+def satellite_timeline(norad: int, window_days: int = 365, request: Request = None):
+    if request is not None:
+        try:
+            llm_service.check_rate_limit(_client_ip(request))
+        except llm_service.LLMError as exc:
+            raise HTTPException(status_code=exc.status, detail=str(exc))
+
+    window_days = max(7, min(int(window_days), 730))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=DictCursor)
+    try:
+        cursor.execute(
+            "SELECT name FROM satellites WHERE norad_number = %s LIMIT 1",
+            (norad,),
+        )
+        sat = cursor.fetchone()
+        if not sat:
+            raise HTTPException(status_code=404, detail="Satellite not found")
+
+        cursor.execute(
+            """SELECT epoch, tle_line1, tle_line2, inserted_at
+               FROM satellite_tle_history
+               WHERE norad_number = %s
+                 AND epoch > NOW() - (%s || ' days')::interval
+               ORDER BY epoch ASC""",
+            (norad, window_days),
+        )
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    snapshots = parse_tle_history(rows)
+    events = [e.to_dict() for e in detect_events(snapshots)]
+
+    try:
+        narrative = llm_service.timeline_narrative(sat["name"], norad, events)
+    except llm_service.LLMError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc))
+
+    return {
+        "norad": norad,
+        "name": sat["name"],
+        "window_days": window_days,
+        "snapshots": [s.to_dict() for s in snapshots],
+        "events": events,
+        "narrative": narrative,
+        "model": llm_service.MODEL,
+    }
+
+
+# ---------------------------------------------------------------------------
+# B1: GET /api/llm/reentry/{norad}/briefing
+# ---------------------------------------------------------------------------
+@router.get("/reentry/{norad}/briefing")
+def reentry_briefing(norad: int, request: Request):
+    try:
+        llm_service.check_rate_limit(_client_ip(request))
+    except llm_service.LLMError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc))
+
+    # Fetch the satellite + decay metadata directly here (no separate /api/reentry/{norad} route).
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=DictCursor)
+    try:
+        cursor.execute(
+            """SELECT name, norad_number, country, purpose, object_type,
+                      perigee, apogee, inclination, bstar, rcs,
+                      launch_date, decay_date, active_status
+               FROM satellites WHERE norad_number = %s LIMIT 1""",
+            (norad,),
+        )
+        sat = cursor.fetchone()
+    finally:
+        cursor.close()
+        conn.close()
+
+    if not sat:
+        raise HTTPException(status_code=404, detail="Satellite not found")
+    if sat["perigee"] is None or sat["bstar"] is None:
+        raise HTTPException(status_code=400, detail="Insufficient orbital data for reentry briefing")
+
+    payload = {k: (str(v) if hasattr(v, "isoformat") else v) for k, v in dict(sat).items()}
+    try:
+        text = llm_service.reentry_briefing(payload)
+    except llm_service.LLMError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc))
+
+    return {
+        "norad": norad,
+        "briefing": text,
+        "model": llm_service.MODEL,
+        "disclaimer": "AI-generated. Verify against official decay predictions before operational use.",
+    }
+
+
+# ---------------------------------------------------------------------------
+# B2: GET /api/llm/space-weather/briefing
+# ---------------------------------------------------------------------------
+@router.get("/space-weather/briefing")
+def space_weather_briefing(request: Request):
+    try:
+        llm_service.check_rate_limit(_client_ip(request))
+    except llm_service.LLMError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc))
+
+    try:
+        from api.space_weather import current_space_weather
+    except ImportError:
+        from app.api.space_weather import current_space_weather
+
+    weather = current_space_weather()
+    exposed = weather.get("most_exposed_leo", [])
+
+    try:
+        text = llm_service.space_weather_briefing(weather, exposed)
+    except llm_service.LLMError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc))
+
+    return {
+        "briefing": text,
+        "weather": weather,
+        "model": llm_service.MODEL,
+    }

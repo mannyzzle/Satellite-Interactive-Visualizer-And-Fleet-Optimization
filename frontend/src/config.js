@@ -15,3 +15,6 @@ export const CDM_API = `${API_BASE_URL}/api/cdm`;
 export const OLD_TLES_API = `${API_BASE_URL}/api/old_tles`;
 export const LAUNCHES_API = `${API_BASE_URL}/api/launches`;
 export const LLM_API = `${API_BASE_URL}/api/llm`;
+export const REENTRY_API = `${API_BASE_URL}/api/reentry`;
+export const SPACE_WEATHER_API = `${API_BASE_URL}/api/space-weather`;
+export const DIGEST_API = `${API_BASE_URL}/api/digest`;

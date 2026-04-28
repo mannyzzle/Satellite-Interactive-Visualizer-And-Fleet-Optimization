@@ -40,6 +40,7 @@ import { StarField } from "../components/StarField";
 import { KpiSkeleton } from "../components/KpiTile";
 import { ShimmerBar, SkeletonStyles } from "../components/Skeleton";
 import { getCountryFlag, getCountryName } from "../lib/countries";
+import ManeuverTimeline from "../components/ManeuverTimeline";
 
 /* ---------- Custom dark Recharts tooltip (shared) ---------- */
 function ChartTooltip({ active, payload, label, unit, accentColor }) {
@@ -781,6 +782,13 @@ export default function SatelliteDetail() {
         {!loadingSat ? (
           <div className="mb-6">
             <ChartPanel data={chartData} />
+          </div>
+        ) : null}
+
+        {/* AI maneuver timeline */}
+        {!loadingSat && sat ? (
+          <div className="mb-6">
+            <ManeuverTimeline norad={sat.norad_number} satelliteName={sat.name} />
           </div>
         ) : null}
 

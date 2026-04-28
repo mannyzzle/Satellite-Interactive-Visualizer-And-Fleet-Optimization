@@ -3,6 +3,8 @@ import { useState, lazy, Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
+import AskSatTrack from "./components/AskSatTrack";
+import SpaceWeatherBanner from "./components/SpaceWeatherBanner";
 import Home from "./pages/Home";
 
 // Non-landing routes are lazy-loaded so the initial / chunk doesn't drag in
@@ -13,6 +15,7 @@ const SatelliteDetails = lazy(() => import("./pages/SatelliteDetail"));
 const About = lazy(() => import("./pages/About"));
 const Launches = lazy(() => import("./pages/Launches"));
 const Tracking = lazy(() => import("./pages/Tracking"));
+const Reentry = lazy(() => import("./pages/Reentry"));
 
 function PageFallback() {
   return (
@@ -29,6 +32,9 @@ function App() {
 
   return (
     <>
+      <div className="fixed top-0 inset-x-0 z-[55]">
+        <SpaceWeatherBanner />
+      </div>
       <Navbar
         onSearch={setSearchQuery}
         toggleLiveTracking={() => setIsLiveTracking((prev) => !prev)}
@@ -42,9 +48,11 @@ function App() {
           <Route path="/about" element={<About />} />
           <Route path="/launches" element={<Launches />} />
           <Route path="/tracking" element={<Tracking />} />
+          <Route path="/reentry" element={<Reentry />} />
         </Routes>
       </Suspense>
       <Footer />
+      <AskSatTrack />
     </>
   );
 }

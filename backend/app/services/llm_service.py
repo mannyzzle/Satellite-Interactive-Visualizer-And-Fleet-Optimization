@@ -40,6 +40,9 @@ load_dotenv()
 MODEL = "claude-haiku-4-5-20251001"
 MAX_TOKENS_FILTER = 400
 MAX_TOKENS_BRIEFING = 350
+MAX_TOKENS_ANALYST = 800
+MAX_TOKENS_TIMELINE = 600
+ASK_MAX_TOOL_ITERATIONS = 4
 
 # Cost guard knobs — tune via env var if traffic spikes.
 RATE_LIMIT_PER_MINUTE = int(os.getenv("LLM_RATE_LIMIT_PER_MINUTE", "10"))
@@ -362,6 +365,325 @@ def _shape_sat(sat: dict | None, event: dict, side: int) -> dict:
         "launch_date": str(sat.get("launch_date")) if sat.get("launch_date") else None,
         "active_status": sat.get("active_status"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase A1: Conversational analyst with tool use
+# ---------------------------------------------------------------------------
+_ASK_SYSTEM_PROMPT = (
+    "You are the Sat-Track Mission Control analyst. You answer questions "
+    "about the public satellite catalog, conjunction events (CDMs), launches, "
+    "space weather, and TLE history by calling the provided read-only tools.\n\n"
+    "Rules:\n"
+    "- Always call a tool before answering with numbers or lists; never invent data.\n"
+    "- Prefer aggregates (count, group_by) for high-level questions.\n"
+    "- Cite specific NORAD numbers, names, dates, and metric values from tool results.\n"
+    "- If the question can't be answered with the available tools, say so plainly.\n"
+    "- Keep final answers under 150 words. Use bullet points for lists of >3 items.\n"
+    "- The current date is determined by the system; use 'NOW()' semantics — do not "
+    "  assume a hardcoded year.\n"
+)
+
+
+def ask(question: str, history: list | None = None) -> dict:
+    """Run the tool-use loop for a single user question.
+
+    Returns:
+      {
+        "answer": str,
+        "tool_calls": [{"name": ..., "input": ..., "result_summary": ...}, ...],
+        "model": str,
+        "iterations": int,
+      }
+
+    Caches the full response for 5 minutes per question (no history).
+    """
+    if not question or len(question) > 1000:
+        raise LLMError("Question must be 1–1000 characters", status=400)
+
+    try:
+        from services import llm_tools
+    except ImportError:
+        from app.services import llm_tools
+
+    cache_key = _hash_input({"q": question.strip().lower(), "h": history or []})
+    cached = cache_get("ask", cache_key)
+    if cached is not None:
+        return cached
+
+    client = _get_client()
+    messages: list[dict] = list(history or [])
+    messages.append({"role": "user", "content": question.strip()})
+
+    tool_calls_log: list[dict] = []
+    total_input = 0
+    total_output = 0
+
+    for iteration in range(ASK_MAX_TOOL_ITERATIONS):
+        resp = client.messages.create(
+            model=MODEL,
+            max_tokens=MAX_TOKENS_ANALYST,
+            system=[
+                {
+                    "type": "text",
+                    "text": _ASK_SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            tools=llm_tools.TOOL_SCHEMAS,
+            messages=messages,
+        )
+
+        total_input += getattr(resp.usage, "input_tokens", 0)
+        total_output += getattr(resp.usage, "output_tokens", 0)
+
+        if resp.stop_reason != "tool_use":
+            text = "".join(
+                b.text for b in resp.content if getattr(b, "type", None) == "text"
+            ).strip()
+            if not text:
+                text = "I couldn't produce an answer for that. Try rephrasing or asking something more specific."
+            check_and_record_usage(total_input, total_output)
+            result = {
+                "answer": text,
+                "tool_calls": tool_calls_log,
+                "model": MODEL,
+                "iterations": iteration + 1,
+            }
+            cache_put("ask", cache_key, result, ttl_seconds=300)
+            return result
+
+        # Append assistant message exactly as returned, then run tools.
+        assistant_blocks = [
+            {"type": b.type, **({"text": b.text} if b.type == "text" else {})}
+            if b.type == "text"
+            else {
+                "type": "tool_use",
+                "id": b.id,
+                "name": b.name,
+                "input": b.input,
+            }
+            for b in resp.content
+        ]
+        messages.append({"role": "assistant", "content": assistant_blocks})
+
+        tool_results: list[dict] = []
+        for block in resp.content:
+            if getattr(block, "type", None) != "tool_use":
+                continue
+            try:
+                result = llm_tools.call_tool(block.name, block.input)
+                summary = _summarize_tool_result(block.name, result)
+                content = json.dumps(result, default=str)[:8000]  # safety cap on context bloat
+                tool_calls_log.append(
+                    {"name": block.name, "input": block.input, "summary": summary}
+                )
+            except Exception as exc:
+                content = json.dumps({"error": str(exc)})
+                tool_calls_log.append(
+                    {"name": block.name, "input": block.input, "summary": f"error: {exc}"}
+                )
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": content,
+            })
+
+        messages.append({"role": "user", "content": tool_results})
+
+    # Hit the iteration cap without producing a final answer.
+    check_and_record_usage(total_input, total_output)
+    result = {
+        "answer": "I made several tool calls but couldn't converge on an answer. Try a more specific question.",
+        "tool_calls": tool_calls_log,
+        "model": MODEL,
+        "iterations": ASK_MAX_TOOL_ITERATIONS,
+    }
+    return result
+
+
+def _summarize_tool_result(name: str, result: dict) -> str:
+    if "count" in result:
+        return f"{name} → count={result['count']}"
+    if "buckets" in result:
+        return f"{name} → {len(result['buckets'])} buckets"
+    if "rows" in result:
+        return f"{name} → {len(result['rows'])} rows"
+    if "value" in result:
+        return f"{name} → value={result['value']}"
+    return name
+
+
+# ---------------------------------------------------------------------------
+# Phase A2: Per-satellite maneuver-timeline narrative
+# ---------------------------------------------------------------------------
+_TIMELINE_SYSTEM_PROMPT = (
+    "You are an orbital analyst. Given a satellite's name and a chronological "
+    "list of detected maneuver events (each with classification, deltas in km, "
+    "and before/after orbit), write a 2-paragraph narrative for a public dashboard.\n\n"
+    "Paragraph 1: characterize the operational pattern (frequent station-keeping, "
+    "drag decay, orbit-shaping campaign, anomalous gap, etc.) and quantify the "
+    "cumulative orbit changes over the window.\n"
+    "Paragraph 2: call out the most notable single event with date and Δ values, "
+    "and flag anything unusual relative to the pattern.\n\n"
+    "Be precise with numbers from the events. Do not invent operator decisions "
+    "or commercial context. Do not hedge with 'I cannot determine'."
+)
+
+
+def timeline_narrative(name: str, norad: int, events: list[dict]) -> str:
+    """Generate the 2-paragraph narrative for a satellite's maneuver timeline."""
+    if not events:
+        return (
+            f"No significant maneuvers were detected in {name}'s recent TLE history. "
+            "Either the satellite is purely drag-driven, or it hasn't been observed long "
+            "enough to capture a maneuver. Check back in a few weeks."
+        )
+
+    cache_key = _hash_input({"norad": norad, "n_events": len(events), "last": events[-1].get("end")})
+    cached = cache_get("timeline_narrative", cache_key)
+    if cached and "narrative" in cached:
+        return cached["narrative"]
+
+    client = _get_client()
+    payload = {"satellite": name, "norad": norad, "events": events[-20:]}  # last 20 max
+    resp = client.messages.create(
+        model=MODEL,
+        max_tokens=MAX_TOKENS_TIMELINE,
+        system=[
+            {"type": "text", "text": _TIMELINE_SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}
+        ],
+        messages=[{"role": "user", "content": json.dumps(payload, default=str)}],
+    )
+    check_and_record_usage(
+        getattr(resp.usage, "input_tokens", 0),
+        getattr(resp.usage, "output_tokens", 0),
+    )
+    text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+    if not text:
+        raise LLMError("Empty timeline narrative", status=502)
+    cache_put("timeline_narrative", cache_key, {"narrative": text}, ttl_seconds=12 * 3600)
+    return text
+
+
+# ---------------------------------------------------------------------------
+# Phase B1: Reentry briefing
+# ---------------------------------------------------------------------------
+_REENTRY_SYSTEM_PROMPT = (
+    "You are an orbital safety analyst. Given a low-perigee LEO satellite "
+    "exposed to atmospheric drag, write a 3-sentence briefing:\n"
+    "  1. Identify the object (what it is, when launched, country/operator if known).\n"
+    "  2. Describe its current orbit (perigee in km, apogee, inclination) "
+    "and what the inclination implies for ground-track latitude band.\n"
+    "  3. Comment on imminence and fragment risk: low perigee + high bstar "
+    "means short remaining lifetime (weeks to months); large RCS means "
+    "more debris survives reentry. Be honest if data is sparse.\n"
+    "Use only data in the input. No invented operator details. Don't claim "
+    "a specific decay date — we don't have one."
+)
+
+
+def reentry_briefing(reentry: dict) -> str:
+    norad = reentry.get("norad_number")
+    cache_key = _hash_input({"norad": norad, "decay": reentry.get("decay_date")})
+    cached = cache_get("reentry_briefing", cache_key)
+    if cached and "briefing" in cached:
+        return cached["briefing"]
+
+    client = _get_client()
+    resp = client.messages.create(
+        model=MODEL,
+        max_tokens=MAX_TOKENS_BRIEFING,
+        system=[{"type": "text", "text": _REENTRY_SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+        messages=[{"role": "user", "content": json.dumps(reentry, default=str)}],
+    )
+    check_and_record_usage(
+        getattr(resp.usage, "input_tokens", 0),
+        getattr(resp.usage, "output_tokens", 0),
+    )
+    text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+    if not text:
+        raise LLMError("Empty reentry briefing", status=502)
+    cache_put("reentry_briefing", cache_key, {"briefing": text}, ttl_seconds=6 * 3600)
+    return text
+
+
+# ---------------------------------------------------------------------------
+# Phase B2: Space-weather impact briefing
+# ---------------------------------------------------------------------------
+_SPACEWX_SYSTEM_PROMPT = (
+    "You are a space-weather analyst. Given current Kp/Dst/F10.7 readings "
+    "and a list of LEO satellites most exposed to drag (lowest perigee × "
+    "highest bstar), write a 3-sentence briefing for a public dashboard:\n"
+    "  1. State the storm severity in plain language ('quiet', 'unsettled', "
+    "'minor storm', 'major storm') and tie it to the Kp/Dst values.\n"
+    "  2. Explain what this means for LEO satellites — increased atmospheric "
+    "density, higher drag, accelerated decay for the most-exposed objects.\n"
+    "  3. Name 2-3 of the most-exposed satellites by name from the input.\n"
+    "Be precise with the numbers. Don't speculate beyond the input data."
+)
+
+
+def space_weather_briefing(weather: dict, exposed_sats: list[dict]) -> str:
+    cache_key = _hash_input({"kp": weather.get("kp"), "dst": weather.get("dst"), "n": len(exposed_sats)})
+    cached = cache_get("space_weather_briefing", cache_key)
+    if cached and "briefing" in cached:
+        return cached["briefing"]
+
+    client = _get_client()
+    payload = {"weather": weather, "most_exposed_leo": exposed_sats[:5]}
+    resp = client.messages.create(
+        model=MODEL,
+        max_tokens=MAX_TOKENS_BRIEFING,
+        system=[{"type": "text", "text": _SPACEWX_SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+        messages=[{"role": "user", "content": json.dumps(payload, default=str)}],
+    )
+    check_and_record_usage(
+        getattr(resp.usage, "input_tokens", 0),
+        getattr(resp.usage, "output_tokens", 0),
+    )
+    text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+    if not text:
+        raise LLMError("Empty weather briefing", status=502)
+    cache_put("space_weather_briefing", cache_key, {"briefing": text}, ttl_seconds=1800)
+    return text
+
+
+# ---------------------------------------------------------------------------
+# Phase B3: Daily digest
+# ---------------------------------------------------------------------------
+_DIGEST_SYSTEM_PROMPT = (
+    "You are the editor of a daily space-tracking briefing. Given a JSON "
+    "summary of the past 24 hours' notable conjunctions, launches, decays, "
+    "and space weather, write a 5-paragraph briefing:\n"
+    "  P1: Headline of the day — the single most newsworthy item.\n"
+    "  P2: Conjunctions — top 1-2 collision risks and their parties.\n"
+    "  P3: Launches — what flew, what did it deploy, success/failure.\n"
+    "  P4: Decays — what just came down or is about to.\n"
+    "  P5: Space weather context.\n"
+    "Be specific with numbers, dates, and NORAD IDs. Don't hedge with "
+    "'I cannot determine'. If a section has no data, say 'Quiet day for X'."
+)
+
+
+def daily_digest(summary: dict) -> str:
+    """Generate the 5-paragraph daily digest. Caller is expected to cache
+    in `llm_daily_briefings` (one row per day)."""
+    client = _get_client()
+    resp = client.messages.create(
+        model=MODEL,
+        max_tokens=900,
+        system=[{"type": "text", "text": _DIGEST_SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+        messages=[{"role": "user", "content": json.dumps(summary, default=str)}],
+    )
+    check_and_record_usage(
+        getattr(resp.usage, "input_tokens", 0),
+        getattr(resp.usage, "output_tokens", 0),
+    )
+    text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+    if not text:
+        raise LLMError("Empty digest", status=502)
+    return text
 
 
 def _ttl_until_tca(tca: Any) -> int:

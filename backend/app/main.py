@@ -7,9 +7,9 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from api import satellites, cdm, old_tles, launches, llm  # Absolute import for Docker
+    from api import satellites, cdm, old_tles, launches, llm, reentry, space_weather, digest  # Absolute import for Docker
 except ImportError:
-    from .api import satellites, cdm, old_tles, launches, llm  # Relative import for local
+    from .api import satellites, cdm, old_tles, launches, llm, reentry, space_weather, digest  # Relative import for local
 
    
 from sqlalchemy import create_engine
@@ -37,6 +37,9 @@ app.include_router(llm.router, prefix="/api/llm", tags=["LLM"])
 app.include_router(cdm.router, prefix="/api/cdm", tags=["CDM"])
 app.include_router(old_tles.router, prefix="/api/old_tles", tags=["Old TLEs"])
 app.include_router(launches.router, prefix="/api/launches", tags=["Launches"])
+app.include_router(reentry.router, prefix="/api/reentry", tags=["Reentry"])
+app.include_router(space_weather.router, prefix="/api/space-weather", tags=["SpaceWeather"])
+app.include_router(digest.router, prefix="/api/digest", tags=["Digest"])
 
 @app.get("/")
 def root():

@@ -41,6 +41,7 @@ import {
   makePulseMarker,
 } from "../lib/satelliteGeometry";
 import NLSearchBar from "../components/NLSearchBar";
+import DailyDigestCard from "../components/DailyDigestCard";
 
 // Wrap the case-insensitive substring of `query` inside `text` with a
 // highlighted span. Returns the original string when there is no match or no
@@ -2247,6 +2248,11 @@ return (
         </div>
       </div>
     </div>
+
+{/* Daily AI digest — pull-tab card */}
+<div className="max-w-screen-2xl mx-auto w-full px-6 sm:px-12 lg:px-20 pt-8">
+  <DailyDigestCard />
+</div>
 
  {/* Infographics Section */}
 <Infographics

@@ -73,6 +73,7 @@ export default function Navbar() {
           <Link to="/satellites" className="hover:text-teal-300 transition-colors duration-200">Satellites</Link>
           <Link to="/launches" className="hover:text-teal-300 transition-colors duration-200">Launches</Link>
           <Link to="/tracking" className="hover:text-teal-300 transition-colors duration-200">Tracking</Link>
+          <Link to="/reentry" className="hover:text-teal-300 transition-colors duration-200">Reentry</Link>
           <Link to="/about" className="hover:text-teal-300 transition-colors duration-200">About</Link>
 
           {/* Resources Dropdown (Desktop) */}
@@ -130,6 +131,7 @@ export default function Navbar() {
           <Link to="/satellites" className="block px-6 py-2 hover:bg-gray-700 transition-colors duration-200">Satellites</Link>
           <Link to="/launches" className="block px-6 py-2 hover:bg-gray-700 transition-colors duration-200">Launches</Link>
           <Link to="/tracking" className="block px-6 py-2 hover:bg-gray-700 transition-colors duration-200">Tracking</Link>
+          <Link to="/reentry" className="block px-6 py-2 hover:bg-gray-700 transition-colors duration-200">Reentry</Link>
           <Link to="/about" className="block px-6 py-2 hover:bg-gray-700 transition-colors duration-200">About</Link>
           <button
             onClick={() => setIsResourcesOpen((prev) => !prev)}

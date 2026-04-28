@@ -1,7 +1,7 @@
 // src/api/satelliteService.js
 
 import axios from "axios";
-import { SATELLITES_API, CDM_API, OLD_TLES_API, LLM_API } from "../config";
+import { SATELLITES_API, CDM_API, OLD_TLES_API, LLM_API, REENTRY_API, SPACE_WEATHER_API, DIGEST_API } from "../config";
 
 const API_BASE_URL = `${SATELLITES_API}/`;
 const CDM_BASE_URL = `${CDM_API}/`;
@@ -132,6 +132,50 @@ export async function searchByNL(query, limit = 200) {
 }
 
 /**
+ * Conversational analyst — POST a question, get back answer + tool calls.
+ */
+export async function askSatTrack(question, history = []) {
+  const url = `${LLM_API}/ask`;
+  try {
+    const response = await axios.post(
+      url,
+      { question, history },
+      { validateStatus: (s) => s < 600, timeout: 60000 }
+    );
+    if (response.status === 429) {
+      return { error: "rate_limit", message: "Too many questions — try again in a minute." };
+    }
+    if (response.status === 503) {
+      return { error: "unavailable", message: "AI is temporarily over budget. Try again later." };
+    }
+    if (response.status >= 400) {
+      return { error: response.status, message: response.data?.detail || "Ask failed." };
+    }
+    return response.data;
+  } catch (err) {
+    console.error("askSatTrack error:", err);
+    return { error: "network", message: "Could not reach Mission Control." };
+  }
+}
+
+/**
+ * Get a satellite's maneuver timeline + AI narrative.
+ */
+export async function fetchSatelliteTimeline(norad, windowDays = 365) {
+  const url = `${LLM_API}/satellite/${encodeURIComponent(norad)}/timeline?window_days=${windowDays}`;
+  try {
+    const response = await axios.get(url, { validateStatus: (s) => s < 600, timeout: 60000 });
+    if (response.status >= 400) {
+      return { error: response.status, message: response.data?.detail || "Timeline unavailable." };
+    }
+    return response.data;
+  } catch (err) {
+    console.error("fetchSatelliteTimeline error:", err);
+    return { error: "network", message: "Could not reach timeline service." };
+  }
+}
+
+/**
  * Fetch a Claude-generated 3-sentence briefing for a CDM event.
  */
 export async function fetchCDMBriefing(cdmId) {
@@ -151,6 +195,61 @@ export async function fetchCDMBriefing(cdmId) {
   } catch (err) {
     console.error("fetchCDMBriefing error:", err);
     return { error: "network", message: "Could not reach briefing service." };
+  }
+}
+
+/**
+ * Top imminent reentries (lowest perigee × highest bstar).
+ */
+export async function fetchUpcomingReentries(limit = 20) {
+  try {
+    const r = await axios.get(`${REENTRY_API}/upcoming?limit=${limit}`);
+    return r.data;
+  } catch (err) {
+    console.error("fetchUpcomingReentries error:", err);
+    return { count: 0, reentries: [] };
+  }
+}
+
+export async function fetchReentryBriefing(norad) {
+  const url = `${LLM_API}/reentry/${encodeURIComponent(norad)}/briefing`;
+  try {
+    const r = await axios.get(url, { validateStatus: (s) => s < 600 });
+    if (r.status >= 400) return { error: r.status, message: r.data?.detail || "Briefing unavailable." };
+    return r.data;
+  } catch (err) {
+    return { error: "network", message: "Could not reach briefing service." };
+  }
+}
+
+export async function fetchSpaceWeather() {
+  try {
+    const r = await axios.get(`${SPACE_WEATHER_API}/current`);
+    return r.data;
+  } catch (err) {
+    console.error("fetchSpaceWeather error:", err);
+    return null;
+  }
+}
+
+export async function fetchSpaceWeatherBriefing() {
+  const url = `${LLM_API}/space-weather/briefing`;
+  try {
+    const r = await axios.get(url, { validateStatus: (s) => s < 600 });
+    if (r.status >= 400) return { error: r.status, message: r.data?.detail || "Briefing unavailable." };
+    return r.data;
+  } catch (err) {
+    return { error: "network", message: "Could not reach briefing service." };
+  }
+}
+
+export async function fetchDailyDigest() {
+  try {
+    const r = await axios.get(`${DIGEST_API}/today`, { timeout: 60000 });
+    return r.data;
+  } catch (err) {
+    console.error("fetchDailyDigest error:", err);
+    return null;
   }
 }
 
