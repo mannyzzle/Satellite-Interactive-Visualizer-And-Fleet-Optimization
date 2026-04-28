@@ -96,11 +96,18 @@ export const ORBIT_COLOR_HEX = COLORS;
    silhouette glows when viewed against the dark starfield. Replaces the
    old flat blue back-side sphere. Single draw call, no perf cost. */
 export function makeAtmosphereMaterial(tint = 0x5eead4) {
+  // Render the atmosphere on the FRONT side of a slightly-larger sphere.
+  // Standard fresnel: bright at the silhouette (where the surface normal
+  // is perpendicular to the view direction) and dark at face-center
+  // (where the normal points straight at the camera). Combined with
+  // additive blending + depthWrite off, the result is a clean halo
+  // that only kisses Earth's silhouette — not the green-disc-over-half-
+  // the-globe look the BackSide version produced.
   return new THREE.ShaderMaterial({
     uniforms: {
       tint: { value: new THREE.Color(tint) },
-      power: { value: 4.5 },     // sharper falloff, only the rim glows
-      intensity: { value: 0.55 }, // dim — was 1.4 (too punchy on dark bg)
+      power: { value: 4.0 },      // higher = thinner rim
+      intensity: { value: 0.85 },
     },
     vertexShader: /* glsl */ `
       varying vec3 vNormal;
@@ -119,13 +126,14 @@ export function makeAtmosphereMaterial(tint = 0x5eead4) {
       varying vec3 vNormal;
       varying vec3 vViewDir;
       void main() {
-        // BackSide is rendered, so the normal effectively points outward
-        // from the camera POV. dot(N, V) is small near the silhouette.
-        float fresnel = pow(1.0 - max(dot(vNormal, vViewDir), 0.0), power);
-        gl_FragColor = vec4(tint * intensity, fresnel);
+        // FrontSide: dot is ~1 at face-center, ~0 at silhouette.
+        // 1 - dot is therefore ~0 at face-center, ~1 at silhouette.
+        float ndotv = max(dot(normalize(vNormal), normalize(vViewDir)), 0.0);
+        float fresnel = pow(1.0 - ndotv, power);
+        gl_FragColor = vec4(tint * intensity * fresnel, fresnel);
       }
     `,
-    side: THREE.BackSide,
+    side: THREE.FrontSide,
     blending: THREE.AdditiveBlending,
     transparent: true,
     depthWrite: false,

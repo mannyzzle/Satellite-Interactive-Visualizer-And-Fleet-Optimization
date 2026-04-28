@@ -459,59 +459,56 @@ const loadSatelliteModel = (satellite) => {
 
 // ✅ Smooth Camera Transition Function (Now Fixed)
 function smoothCameraTransition(targetPosition, satellite) {
-  if (!is3DEnabled || !cameraRef.current) return;
+  if (!is3DEnabled || !cameraRef.current || !controlsRef.current) return;
 
-  const startPos = cameraRef.current.position.clone();
-  const targetDistance = startPos.distanceTo(targetPosition);
+  const camera = cameraRef.current;
+  const controls = controlsRef.current;
 
-  // ✅ Fix Zoom Factor (Logarithmic Scaling)
+  // Lerp BOTH controls.target and camera.position each frame, then call
+  // controls.update(). The previous version moved camera.position via
+  // camera.lookAt() but never touched controls.target — every
+  // controls.update() snapped the camera back to face origin and the
+  // animation looked broken. Now we drive both, with the eased easing
+  // running until the t hits 1 (no fragile "speedFactor" math).
+
   let zoomFactor;
   if (satellite) {
-    const altitude = (satellite.perigee + satellite.apogee) / 2; // Compute average altitude
-
-    if (altitude < 2000) {
-      zoomFactor = 1.2;  // LEO - Small Adjustment (Closer View)
-    } else if (altitude < 20000) {
-      zoomFactor = 1.5;  // MEO - Mid Adjustment
-    } else if (altitude < 40000) {
-      zoomFactor = 2.0;  // GEO - Slightly More Distance
-    } else {
-      zoomFactor = 3.0;  // HEO - Prevent Extreme Zoom-In
-    }
+    const altitude = (satellite.perigee + satellite.apogee) / 2;
+    if (altitude < 2000) zoomFactor = 1.25;
+    else if (altitude < 20000) zoomFactor = 1.5;
+    else if (altitude < 40000) zoomFactor = 2.0;
+    else zoomFactor = 3.0;
   } else {
-    zoomFactor = 1.5; // Default zoom for unknown altitudes
+    zoomFactor = 1.5;
   }
 
-  // ✅ Fix Target Position Calculation (Don't Over-Divide)
-  const targetPos = targetPosition.clone().multiplyScalar(zoomFactor);
+  // End camera position: along the same direction as the satellite from
+  // origin, scaled by zoomFactor — gives a "hovering above" feel.
+  const startTarget = controls.target.clone();
+  const endTarget = targetPosition.clone();
+  const startCam = camera.position.clone();
+  const endCam = targetPosition.clone().multiplyScalar(zoomFactor);
 
   let t = 0;
+  const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
 
-  function moveCamera() {
-    t += 0.03; // ✅ Lower speed for smooth transitions
-
-    const speedFactor = Math.log(targetDistance) * 0.05; // ✅ Dynamic Speed Scaling
-    cameraRef.current.position.lerpVectors(startPos, targetPos, t * speedFactor);
-    cameraRef.current.lookAt(targetPosition);
-
+  function step() {
+    t += 0.04;                       // ~25 frames @ 60fps ≈ 0.4s
+    const eased = easeOutCubic(Math.min(1, t));
+    camera.position.lerpVectors(startCam, endCam, eased);
+    controls.target.lerpVectors(startTarget, endTarget, eased);
+    controls.update();
     if (t < 1) {
-      requestAnimationFrame(moveCamera);
+      requestAnimationFrame(step);
     } else {
-      cameraRef.current.position.copy(targetPos);
-      cameraRef.current.lookAt(targetPosition);
-      // Critical: OrbitControls reads its orientation from the
-      // controls.target, NOT from camera.lookAt. Without this update
-      // the camera "looks at" the satellite for one frame, then
-      // OrbitControls' next .update() snaps it back to face the
-      // origin (controls.target default). Sync them.
-      if (controlsRef.current) {
-        controlsRef.current.target.copy(targetPosition);
-        controlsRef.current.update();
-      }
+      // Final snap so floating-point drift doesn't leave us short.
+      camera.position.copy(endCam);
+      controls.target.copy(endTarget);
+      controls.update();
     }
   }
 
-  moveCamera();
+  step();
 }
 
 
