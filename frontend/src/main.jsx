@@ -6,7 +6,7 @@ import App from './App.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <BrowserRouter basename="/Satellite-Interactive-Visualizer-And-Fleet-Optimization/"> 
+    <BrowserRouter>
       <App />
     </BrowserRouter>
   </StrictMode>,
