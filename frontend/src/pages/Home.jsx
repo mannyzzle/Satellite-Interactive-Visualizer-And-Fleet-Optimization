@@ -66,8 +66,14 @@ function highlightMatch(text, query) {
 // component file.
 export { StarField };
 const basePath = import.meta.env.BASE_URL;  // ✅ Dynamically fetch the base URL
-const dayTexture = `${basePath}earth_day.jpg`;
-const nightTexture = `${basePath}earth_night.jpg`;
+// Pick smaller (~2K) Earth textures on phones/tablets — 16 MB → ~430 KB combined.
+// Decision is made once at module init; rotating between portrait/landscape on the
+// same device doesn't change the bucket, and a true desktop→mobile change implies
+// a reload anyway.
+const IS_MOBILE = typeof window !== "undefined" &&
+  window.matchMedia && window.matchMedia("(max-width: 1024px)").matches;
+const dayTexture = `${basePath}earth_day${IS_MOBILE ? "_2k" : ""}.jpg`;
+const nightTexture = `${basePath}earth_night${IS_MOBILE ? "_2k" : ""}.jpg`;
 // 🔍 Autocomplete endpoint
 const SUGGEST_URL = `${SATELLITES_API}/suggest`;
 
@@ -111,7 +117,7 @@ export default function Home() {
   const [loadingComplete, setLoadingComplete] = useState(false);
   const [page, setPage] = useState(1); // 🚀 Current page of satellites
   const [satellites, setSatellites] = useState([]);
-  const [limit, setLimit] = useState(500);
+  const [limit, setLimit] = useState(IS_MOBILE ? 100 : 500);
 
 const [searchQuery, setSearchQuery] = useState(""); // 🔍 For filtering satellites
 const [suggestions, setSuggestions] = useState([]);
@@ -132,13 +138,28 @@ const dropdownRef = useRef(null);
 const findPageForSatellite = async (sat) => {
   const filt = activeFilters.length ? activeFilters.join(",") : null;
   const MAX_PAGES = 5;
-  for (let p = 1; p <= MAX_PAGES; p++) {
-    const data = await fetchSatellites(p, limit, filt);
-    if (data?.satellites?.some((s) => s.norad_number === sat.norad_number)) {
-      return { page: p, sats: data.satellites };
+  // First page tells us `total`, which decides how many more pages are worth
+  // fetching. Then fan out the remaining pages in parallel instead of walking
+  // them serially (was ~5× round-trip latency worst case).
+  const firstHit = sat.norad_number;
+  const first = await fetchSatellites(1, limit, filt);
+  if (first?.satellites?.some((s) => s.norad_number === firstHit)) {
+    return { page: 1, sats: first.satellites };
+  }
+  const total = first?.total ?? 0;
+  const maxPage = Math.min(MAX_PAGES, Math.max(1, Math.ceil(total / limit)));
+  if (maxPage <= 1) return null;
+  // Degrade gracefully: a single bad page shouldn't tank the whole lookup.
+  const rest = await Promise.all(
+    Array.from({ length: maxPage - 1 }, (_, i) =>
+      fetchSatellites(i + 2, limit, filt).catch(() => null)
+    )
+  );
+  for (let i = 0; i < rest.length; i++) {
+    const data = rest[i];
+    if (data?.satellites?.some((s) => s.norad_number === firstHit)) {
+      return { page: i + 2, sats: data.satellites };
     }
-    // Bail early if we've already seen all pages: total may be small.
-    if (data?.total && p * limit >= data.total) break;
   }
   return null; // not found within the search window
 };
@@ -341,7 +362,7 @@ useEffect(() => {
   function createOrbitPath(satellite) {
     if (!satellite || !satellite.period) return null; // ❌ Prevents crash if no period
 
-    const numPoints = 500;
+    const numPoints = IS_MOBILE ? 150 : 500;
     const orbitPoints = [];
 
     // ✅ Step 1: Generate Orbit Positions
@@ -1152,7 +1173,7 @@ useEffect(() => {
 
     // 🌍 Create Earth
     const globe = new THREE.Mesh(
-      new THREE.SphereGeometry(6000, 64, 64),
+      new THREE.SphereGeometry(6000, IS_MOBILE ? 32 : 64, IS_MOBILE ? 32 : 64),
       new THREE.MeshStandardMaterial({
         map: dayMap,
         emissiveMap: nightMap,
@@ -1180,7 +1201,7 @@ useEffect(() => {
     // Atmosphere — Fresnel rim-glow shader. Replaces the old flat blue
     // back-side sphere with a teal halo that brightens at the silhouette.
     const atmosphere = new THREE.Mesh(
-      new THREE.SphereGeometry(6500, 48, 48),
+      new THREE.SphereGeometry(6500, IS_MOBILE ? 24 : 48, IS_MOBILE ? 24 : 48),
       makeAtmosphereMaterial(0x5eead4)
     );
     atmosphereRef.current = atmosphere;
@@ -1191,8 +1212,14 @@ useEffect(() => {
     // scene.add(stars)...
 
     // 🔄 Animation Loop
-    const animate = () => {
+    // Cap at 30 fps on mobile/tablet — full SGP4 propagation across N satellites every
+    // frame is the dominant cost. Desktop stays uncapped (browser default ~60 fps).
+    const FRAME_BUDGET_MS = IS_MOBILE ? 1000 / 30 : 0;
+    let lastFrameTs = 0;
+    const animate = (ts) => {
       requestAnimationFrame(animate);
+      if (FRAME_BUDGET_MS && ts && ts - lastFrameTs < FRAME_BUDGET_MS) return;
+      lastFrameTs = ts || 0;
 
       if (globeRef.current) globeRef.current.rotation.y += 0.000727; // Earth's rotation
 
