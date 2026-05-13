@@ -88,16 +88,16 @@ const SatelliteCounter = () => {
     }));
 
   return (
-    <div className="relative w-screen h-screen flex items-center justify-center bg-[rgba(3, 0, 8, 0.85)]  overflow-hidden">
+    <div className="relative w-screen min-h-screen pt-20 lg:pt-0 flex items-center justify-center bg-[rgba(3, 0, 8, 0.85)] overflow-hidden">
         {/* 🌌 Starfield (Randomly Placed Stars) */}
   <div className="absolute w-full h-full overflow-hidden pointer-events-none">
     {stars}
   </div>
 
-  
+
       {/* 🌍 Fully Contained Box */}
       <motion.div
-        className="w-full h-full p-10 flex flex-col lg:flex-row items-center text-center lg:text-left"
+        className="w-full h-full px-4 py-6 sm:p-10 flex flex-col lg:flex-row items-center text-center lg:text-left"
         initial={{ opacity: 0, y: 5 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 1.2, delay: 0.5 }}
@@ -145,9 +145,9 @@ const SatelliteCounter = () => {
             Concentric rings — one per object type, brightest = largest share.
             Total count anchored in the center. No re-fired animations on
             parent re-render. */}
-        <div className="relative w-full lg:w-1/2 h-full flex justify-center items-center">
+        <div className="relative w-full lg:w-1/2 h-[min(80vw,420px)] lg:h-full flex justify-center items-center mt-6 mb-12 lg:mt-0 lg:mb-0 overflow-visible">
           <motion.div
-            className="relative w-full h-full"
+            className="relative w-full h-full overflow-visible"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 1.6, ease: "easeOut" }}
@@ -156,7 +156,7 @@ const SatelliteCounter = () => {
               <RadialBarChart
                 cx="50%"
                 cy="50%"
-                innerRadius="36%"
+                innerRadius="48%"
                 outerRadius="92%"
                 barSize={14}
                 data={chartData}
@@ -247,14 +247,14 @@ const SatelliteCounter = () => {
                   separator=","
                 />
               </div>
-              <div className="text-xs sm:text-sm md:text-base text-gray-400 uppercase tracking-[0.25em] mt-1">
+              <div className="text-[10px] sm:text-sm md:text-base text-gray-400 uppercase tracking-[0.15em] sm:tracking-[0.25em] mt-1 whitespace-nowrap">
                 Objects Tracked
               </div>
             </div>
 
             {/* Legend along the bottom — replaces Recharts' built-in labels
                 so we can style them and they don't fight the chart layout. */}
-            <div className="absolute left-0 right-0 bottom-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs sm:text-sm pointer-events-none">
+            <div className="absolute left-0 right-0 top-full mt-3 sm:top-auto sm:mt-0 sm:bottom-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-[11px] sm:text-sm pointer-events-none px-2">
               {chartData.map((d) => (
                 <div key={d.name} className="flex items-center gap-2">
                   <span
