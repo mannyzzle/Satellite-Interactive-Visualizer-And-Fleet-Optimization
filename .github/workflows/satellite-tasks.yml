@@ -18,43 +18,15 @@ env:
   SPACETRACK_PASS: ${{ secrets.SPACETRACK_PASS }}
 
 jobs:
-  build_image:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Build Docker Image
-        run: |
-          docker build -t satellite_tasks_image -f backend/Updater.Dockerfile .
-
-      - name: Save Docker Image as Artifact
-        run: |
-          docker save -o /tmp/satellite_tasks_image.tar satellite_tasks_image
-
-      - name: Upload Docker Image Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: satellite_tasks_image
-          path: /tmp/satellite_tasks_image.tar
-          retention-days: 1
-
   tle_processor:
-    needs: build_image
     runs-on: ubuntu-latest
     if: github.event.schedule == '15 */6 * * *' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download Docker Image
-        uses: actions/download-artifact@v4
-        with:
-          name: satellite_tasks_image
-          path: /tmp
-
-      - name: Load Docker Image
-        run: docker load -i /tmp/satellite_tasks_image.tar
+      - name: Build Docker Image
+        run: docker build -t satellite_tasks_image -f backend/Updater.Dockerfile .
 
       - name: Run TLE Processor
         run: |
@@ -73,23 +45,17 @@ jobs:
         with:
           name: tle_logs
           path: backend/app/logs/tle_log.txt
+          retention-days: 7
 
   cdm:
-    needs: build_image
     runs-on: ubuntu-latest
     if: github.event.schedule == '45 */8 * * *' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download Docker Image
-        uses: actions/download-artifact@v4
-        with:
-          name: satellite_tasks_image
-          path: /tmp
-
-      - name: Load Docker Image
-        run: docker load -i /tmp/satellite_tasks_image.tar
+      - name: Build Docker Image
+        run: docker build -t satellite_tasks_image -f backend/Updater.Dockerfile .
 
       - name: Run CDM Processor
         run: |
@@ -108,23 +74,17 @@ jobs:
         with:
           name: cdm_logs
           path: backend/app/logs/cdm_log.txt
+          retention-days: 7
 
   fetch_all:
-    needs: build_image
     runs-on: ubuntu-latest
     if: github.event.schedule == '0 * * * *' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download Docker Image
-        uses: actions/download-artifact@v4
-        with:
-          name: satellite_tasks_image
-          path: /tmp
-
-      - name: Load Docker Image
-        run: docker load -i /tmp/satellite_tasks_image.tar
+      - name: Build Docker Image
+        run: docker build -t satellite_tasks_image -f backend/Updater.Dockerfile .
 
       - name: Run Fetch All
         run: |
@@ -138,31 +98,22 @@ jobs:
             -e SPACETRACK_PASS=${{ secrets.SPACETRACK_PASS }} \
             satellite_tasks_image python3 app/omni_low.py fetch_all
 
-
       - name: Upload Logs
         uses: actions/upload-artifact@v4
         with:
           name: fetch_all_logs
           path: backend/app/logs/fetch_all_log.txt
-
-
+          retention-days: 7
 
   fetch_launches:
-    needs: build_image
     runs-on: ubuntu-latest
     if: github.event.schedule == '30 * * * *' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download Docker Image
-        uses: actions/download-artifact@v4
-        with:
-          name: satellite_tasks_image
-          path: /tmp
-
-      - name: Load Docker Image
-        run: docker load -i /tmp/satellite_tasks_image.tar
+      - name: Build Docker Image
+        run: docker build -t satellite_tasks_image -f backend/Updater.Dockerfile .
 
       - name: Run Fetch Launches
         run: |
