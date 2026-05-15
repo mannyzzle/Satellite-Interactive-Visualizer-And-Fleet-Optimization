@@ -40,13 +40,6 @@ jobs:
             -e SPACETRACK_PASS=${{ secrets.SPACETRACK_PASS }} \
             satellite_tasks_image python3 app/tle_processor.py
 
-      - name: Upload Logs
-        uses: actions/upload-artifact@v4
-        with:
-          name: tle_logs
-          path: backend/app/logs/tle_log.txt
-          retention-days: 7
-
   cdm:
     runs-on: ubuntu-latest
     if: github.event.schedule == '45 */8 * * *' || github.event_name == 'workflow_dispatch'
@@ -69,13 +62,6 @@ jobs:
             -e SPACETRACK_PASS=${{ secrets.SPACETRACK_PASS }} \
             satellite_tasks_image python3 app/cdm.py
 
-      - name: Upload Logs
-        uses: actions/upload-artifact@v4
-        with:
-          name: cdm_logs
-          path: backend/app/logs/cdm_log.txt
-          retention-days: 7
-
   fetch_all:
     runs-on: ubuntu-latest
     if: github.event.schedule == '0 * * * *' || github.event_name == 'workflow_dispatch'
@@ -97,13 +83,6 @@ jobs:
             -e SPACETRACK_USER=${{ secrets.SPACETRACK_USER }} \
             -e SPACETRACK_PASS=${{ secrets.SPACETRACK_PASS }} \
             satellite_tasks_image python3 app/omni_low.py fetch_all
-
-      - name: Upload Logs
-        uses: actions/upload-artifact@v4
-        with:
-          name: fetch_all_logs
-          path: backend/app/logs/fetch_all_log.txt
-          retention-days: 7
 
   fetch_launches:
     runs-on: ubuntu-latest
